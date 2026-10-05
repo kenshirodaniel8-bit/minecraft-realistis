@@ -209,6 +209,7 @@ export class Game {
         if (Number.isInteger(p.selected)) this.selected = Math.max(0, Math.min(8, p.selected));
       } else {
         this._placePlayer(this.spawn.x, this.spawn.y, this.spawn.z, 0, 0);
+        this.safeSpawnPending = true;
       }
       if (!this.slots.some((s) => s) && this.gameMode === 'creative') this._defaultHotbar();
     } else if (this.mode === 'multi') {
@@ -219,6 +220,7 @@ export class Game {
       this.spawn = w.spawn || this.spawn;
       this.gameMode = w.gameMode === 'survival' ? 'survival' : 'creative';
       this._placePlayer(this.spawn.x, this.spawn.y, this.spawn.z, 0, 0);
+      this.safeSpawnPending = true;
       this._defaultHotbar();
       for (const p of w.players || []) this._addRemote(p);
       this._setupNetwork();
@@ -384,6 +386,11 @@ export class Game {
       if (progress >= 1 && below) {
         this.ready = true;
         if (!this.demo) {
+          if (this.safeSpawnPending) {
+            this.safeSpawnPending = false;
+            const spot = this._findSafeSpot(p.x, p.z);
+            if (spot) { p.x = spot.x; p.y = spot.y; p.z = spot.z; }
+          }
           p.unstuck();
           p.vx = p.vy = p.vz = 0;
           p.fallDistance = 0;
@@ -504,6 +511,8 @@ export class Game {
       }
     }
 
+    this._autoTune(dt, active);
+
     // Autosave
     if (this.mode === 'single') {
       this.saveTimer += dt;
@@ -511,6 +520,68 @@ export class Game {
     }
 
     this._updateHud();
+  }
+
+  // Nearest column (spiralling out from x,z) whose surface is natural ground with
+  // room to stand, so players never spawn on treetops or inside trunks.
+  _findSafeSpot(x0, z0) {
+    const w = this.world;
+    const bx = Math.floor(x0), bz = Math.floor(z0);
+    const bad = new Set([B.OAK_LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES,
+      B.OAK_LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.CACTUS, B.WATER, B.ICE]);
+    for (let r = 0; r <= 12; r++) {
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const x = bx + dx, z = bz + dz;
+          let y = WORLD_HEIGHT - 1;
+          while (y > 0) {
+            const id = w.getBlock(x, y, z);
+            if (id < 0) break;
+            if (id === B.WATER || IS_SOLID[id]) break;
+            y--;
+          }
+          const ground = w.getBlock(x, y, z);
+          if (ground <= 0 || bad.has(ground) || !IS_SOLID[ground]) continue;
+          const a1 = w.getBlock(x, y + 1, z), a2 = w.getBlock(x, y + 2, z);
+          if (a1 < 0 || a2 < 0 || IS_SOLID[a1] || IS_SOLID[a2] || a1 === B.WATER) continue;
+          return { x: x + 0.5, y: y + 1, z: z + 0.5 };
+        }
+      }
+    }
+    return null;
+  }
+
+  // First-run performance check: step graphics down while the game runs slowly.
+  _autoTune(dt, active) {
+    if (this.settings.autoTuned || !this.opts.onAutoTune) return;
+    if (!active) { this._tuneTime = 0; this._tuneFrames = 0; return; }
+    this._tuneTime = (this._tuneTime || 0) + dt;
+    this._tuneFrames = (this._tuneFrames || 0) + 1;
+    if (this._tuneTime < 6) return;
+    const fps = this._tuneFrames / this._tuneTime;
+    this._tuneTime = 0;
+    this._tuneFrames = 0;
+    if (fps >= 28) {
+      this.settings.autoTuned = true;
+      this.opts.onAutoTune({ autoTuned: true });
+      return;
+    }
+    if (fps >= 22) return; // borderline: keep measuring
+    const order = ['low', 'medium', 'high', 'ultra'];
+    const qi = order.indexOf(this.settings.quality);
+    let changes;
+    if (qi > 0) {
+      changes = { quality: order[qi - 1] };
+      this.hud.toast(`Graphics lowered to ${order[qi - 1]} for smoother play (see Settings)`);
+    } else if (this.settings.renderDistance > 4) {
+      changes = { renderDistance: Math.max(4, this.settings.renderDistance - 2) };
+      this.hud.toast(`Render distance lowered to ${changes.renderDistance} for smoother play`);
+    } else {
+      changes = { autoTuned: true };
+    }
+    this.applySettings(Object.assign({}, this.settings, changes));
+    this.opts.onAutoTune(changes);
   }
 
   _cameraUnderwater() {
@@ -660,8 +731,9 @@ export class Game {
     this.health = MAX_HEALTH;
     this.air = MAX_AIR;
     this._placePlayer(this.spawn.x, this.spawn.y, this.spawn.z, 0, 0);
-    this.player.unstuck();
     this.player.fallDistance = 0;
+    this.safeSpawnPending = true;
+    this.ready = false; // show the loading screen until the spawn area is ready
     this.hud.showDeath(false);
     this.hud.setHealth(this.health, MAX_HEALTH, this.gameMode === 'survival');
     this.input.requestLock();
@@ -1140,7 +1212,8 @@ export class Game {
       }
       case 'spawn':
         this._placePlayer(this.spawn.x, this.spawn.y, this.spawn.z, p.yaw, p.pitch);
-        this.ready = false; // wait for chunks, then unstuck
+        this.safeSpawnPending = true;
+        this.ready = false; // wait for chunks, then find clear ground
         break;
       case 'seed':
         hud.addChat(`Seed: ${this.seed}`, 'system');

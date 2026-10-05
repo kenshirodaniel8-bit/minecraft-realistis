@@ -90,8 +90,9 @@ Slim (3-pixel arm) skins are detected automatically. Other players see your skin
 
 ## Graphics settings
 
-If the game runs slowly, open **Settings** and choose a lower **Graphics quality** or reduce
-the **Render distance**:
+The first time you play, the game checks your frame rate and lowers the graphics by itself if
+your computer struggles. You can always change it: open **Settings** and choose a
+**Graphics quality** or **Render distance**:
 
 - **Low** – no shadows or post-processing (fastest; good for laptops)
 - **Medium** – sun shadows + bloom

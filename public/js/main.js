@@ -145,6 +145,10 @@ async function startGame(extra) {
     renderer: S.renderer, pool: S.pool, hud: S.hud, sound: S.sound, settings: S.settings, profile: S.profile,
     skinCanvas: S.skinCanvas, slim: S.profile.slim, texData: S.tex,
     onExit: (reason) => onGameExit(reason, extra.mode),
+    onAutoTune: (changes) => {
+      Object.assign(S.settings, changes);
+      saveSettings(S.settings);
+    },
   }, extra));
   S.game = game;
   try {
@@ -527,6 +531,8 @@ async function applySkinChange() {
 function bindSettings() {
   const upd = (key, value) => {
     S.settings[key] = value;
+    // A manual graphics choice switches the automatic tuning off.
+    if (key === 'quality' || key === 'renderDistance') S.settings.autoTuned = true;
     saveSettings(S.settings);
     const target = S.game || S.demo;
     if (target) target.applySettings(S.settings);

@@ -118,6 +118,7 @@ export const DEFAULT_SETTINGS = {
   autoJump: true,
   fancyLeaves: true,
   showFps: false,
+  autoTuned: false, // set once the automatic quality check has finished (or the user picked a quality)
 };
 
 export function loadSettings() {
