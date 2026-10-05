@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="RealisCraft – a realistic Minecraft-style voxel sandbox in your browser with singleplayer, multiplayer and custom skins.">
+  <title>RealisCraft</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23795232'/%3E%3Crect width='16' height='5' fill='%2356a83a'/%3E%3Crect y='5' width='16' height='1' fill='%23417f2c'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./lib/three/build/three.module.js",
+        "three/addons/": "./lib/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="game" tabindex="0"></canvas>
+
+  <!-- In-game HUD -->
+  <div id="hud" hidden>
+    <div id="crosshair"></div>
+    <pre id="debug" hidden></pre>
+    <div id="chat">
+      <div id="chat-log"></div>
+      <form id="chat-form" hidden autocomplete="off">
+        <input id="chat-input" maxlength="200" spellcheck="false" placeholder="Type a message or /help">
+      </form>
+    </div>
+    <div id="toast" hidden></div>
+    <div id="bottom">
+      <div id="held-name"></div>
+      <div id="bars">
+        <div id="hearts" hidden></div>
+        <div id="air" hidden></div>
+      </div>
+      <div id="hotbar"></div>
+    </div>
+  </div>
+
+  <div id="click-to-play" class="overlay" hidden>
+    <div class="panel small">
+      <h2>Click to play</h2>
+      <p class="muted">Move: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> · Look: mouse · Pause: <kbd>Esc</kbd></p>
+    </div>
+  </div>
+
+  <div id="loading" class="overlay solid" hidden>
+    <div class="panel small">
+      <h2 id="loading-text">Loading…</h2>
+      <div class="bar"><div id="loading-bar"></div></div>
+    </div>
+  </div>
+
+  <div id="pause" class="overlay" hidden>
+    <div class="panel">
+      <h2>Game Paused</h2>
+      <button data-act="resume" class="primary">Back to Game</button>
+      <button data-act="settings">Settings</button>
+      <button data-act="controls">Controls</button>
+      <button data-act="quit">Save &amp; Quit to Title</button>
+    </div>
+  </div>
+
+  <div id="death" class="overlay death" hidden>
+    <div class="panel">
+      <h2>You died!</h2>
+      <button data-act="respawn" class="primary">Respawn</button>
+      <button data-act="quit">Title Screen</button>
+    </div>
+  </div>
+
+  <div id="inventory" class="overlay" hidden>
+    <div id="inventory-panel" class="panel inv"></div>
+  </div>
+  <div id="cursor-item" hidden></div>
+
+  <!-- Menus -->
+  <div id="menu" hidden>
+    <section id="screen-main" class="screen" hidden>
+      <h1 class="logo">REALIS<span>CRAFT</span></h1>
+      <p class="tagline">A realistic voxel sandbox</p>
+      <div class="buttons">
+        <button data-go="single" class="primary">Singleplayer</button>
+        <button data-go="multi">Multiplayer</button>
+        <button data-go="skin">Skin &amp; Profile</button>
+        <div class="row">
+          <button data-go="settings">Settings</button>
+          <button data-go="controls">Controls</button>
+        </div>
+      </div>
+      <footer>RealisCraft · A fan-made game, not affiliated with Mojang or Microsoft</footer>
+    </section>
+
+    <section id="screen-single" class="screen" hidden>
+      <div class="panel wide">
+        <h2>Select World</h2>
+        <div id="world-list" class="list"></div>
+        <p id="storage-warning" class="warn" hidden>Your browser blocks saving (private mode?). Worlds will be lost when you close the tab.</p>
+        <div class="row">
+          <button id="btn-play-world" class="primary" disabled>Play Selected World</button>
+          <button data-go="create">Create New World</button>
+        </div>
+        <div class="row">
+          <button id="btn-delete-world" disabled>Delete</button>
+          <button data-go="main">Back</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-create" class="screen" hidden>
+      <div class="panel">
+        <h2>Create New World</h2>
+        <label>World name <input id="new-world-name" maxlength="32" value="New World"></label>
+        <label>Seed (leave empty for random) <input id="new-world-seed" maxlength="40" placeholder="e.g. jungle123"></label>
+        <label>Game mode
+          <select id="new-world-mode">
+            <option value="creative">Creative – unlimited blocks, flying</option>
+            <option value="survival">Survival – health, mining, crafting</option>
+          </select>
+        </label>
+        <div class="row">
+          <button id="btn-create-world" class="primary">Create World</button>
+          <button data-go="single">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-multi" class="screen" hidden>
+      <div class="panel">
+        <h2>Multiplayer</h2>
+        <label>Your name <input id="mp-name" maxlength="16"></label>
+        <label>Server address <input id="mp-server" placeholder="e.g. 192.168.1.20:3000"></label>
+        <p class="muted small">Start a server with <code>npm start</code>. Friends on your network open the game at <code>http://YOUR-IP:3000</code> or enter your address here. Leave empty to join the server this page came from.</p>
+        <p id="mp-status" class="status"></p>
+        <div class="row">
+          <button id="btn-connect" class="primary">Join Server</button>
+          <button data-go="main">Back</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-skin" class="screen" hidden>
+      <div class="panel wide skin-panel">
+        <h2>Skin &amp; Profile</h2>
+        <div class="skin-layout">
+          <div class="skin-preview-wrap">
+            <canvas id="skin-preview" width="320" height="400"></canvas>
+            <p class="muted small">Drag to rotate</p>
+          </div>
+          <div class="skin-controls">
+            <label>Player name <input id="profile-name" maxlength="16"></label>
+            <label class="file-btn">
+              <input id="skin-file" type="file" accept="image/png">
+              <span>Upload skin (.png)</span>
+            </label>
+            <p class="muted small">Use any Minecraft-format skin: 64×64, classic 64×32 or HD (128/256/512).</p>
+            <label class="check"><input id="skin-slim" type="checkbox"> Slim arms (3px)</label>
+            <div class="muted small">Or choose a default:</div>
+            <div class="row presets" id="skin-presets"></div>
+            <p id="skin-status" class="status"></p>
+            <div class="row">
+              <button id="btn-skin-save" class="primary">Done</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-settings" class="screen" hidden>
+      <div class="panel wide">
+        <h2>Settings</h2>
+        <div class="settings-grid">
+          <label>Graphics quality
+            <select id="set-quality">
+              <option value="low">Low – fastest</option>
+              <option value="medium">Medium – shadows</option>
+              <option value="high">High – shadows + god rays</option>
+              <option value="ultra">Ultra – 4K shadows, full resolution</option>
+            </select>
+          </label>
+          <label>Render distance: <b id="set-rd-v"></b> chunks <input id="set-rd" type="range" min="3" max="16" step="1"></label>
+          <label>Field of view: <b id="set-fov-v"></b>° <input id="set-fov" type="range" min="50" max="110" step="1"></label>
+          <label>Mouse sensitivity: <b id="set-sens-v"></b> <input id="set-sens" type="range" min="0.2" max="3" step="0.05"></label>
+          <label>Volume: <b id="set-vol-v"></b> <input id="set-vol" type="range" min="0" max="1" step="0.05"></label>
+          <div class="checks">
+            <label class="check"><input id="set-bob" type="checkbox"> View bobbing</label>
+            <label class="check"><input id="set-autojump" type="checkbox"> Auto-jump</label>
+            <label class="check"><input id="set-leaves" type="checkbox"> Fancy leaves</label>
+            <label class="check"><input id="set-invert" type="checkbox"> Invert mouse Y</label>
+            <label class="check"><input id="set-fps" type="checkbox"> Show FPS</label>
+          </div>
+        </div>
+        <div class="row">
+          <button id="btn-settings-done" class="primary">Done</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-controls" class="screen" hidden>
+      <div class="panel wide">
+        <h2>Controls</h2>
+        <table class="controls">
+          <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></td><td>Move</td></tr>
+          <tr><td>Mouse</td><td>Look around</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>Jump / swim up · double-tap to fly (creative)</td></tr>
+          <tr><td><kbd>Shift</kbd></td><td>Sneak (won't fall off edges) / fly down</td></tr>
+          <tr><td><kbd>R</kbd> or double-tap <kbd>W</kbd></td><td>Sprint</td></tr>
+          <tr><td>Left click</td><td>Break block (hold in survival)</td></tr>
+          <tr><td>Right click</td><td>Place block</td></tr>
+          <tr><td>Middle click</td><td>Pick block</td></tr>
+          <tr><td><kbd>1</kbd>–<kbd>9</kbd> / mouse wheel</td><td>Select hotbar slot</td></tr>
+          <tr><td><kbd>E</kbd></td><td>Inventory (creative block picker / survival crafting)</td></tr>
+          <tr><td><kbd>T</kbd> / <kbd>Enter</kbd> / <kbd>/</kbd></td><td>Chat &amp; commands (type /help)</td></tr>
+          <tr><td><kbd>F5</kbd> or <kbd>V</kbd></td><td>Switch first / third person view</td></tr>
+          <tr><td><kbd>F1</kbd> · <kbd>F2</kbd> · <kbd>F3</kbd></td><td>Hide HUD · Screenshot · Debug info</td></tr>
+          <tr><td><kbd>Q</kbd></td><td>Drop one item (survival)</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Pause menu</td></tr>
+        </table>
+        <div class="row"><button id="btn-controls-done" class="primary">Done</button></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="boot" class="overlay solid">
+    <div class="panel small">
+      <h1 class="logo small">REALIS<span>CRAFT</span></h1>
+      <p id="boot-text">Loading…</p>
+      <div class="bar"><div id="boot-bar"></div></div>
+    </div>
+  </div>
+
+  <div id="fatal" class="overlay solid" hidden>
+    <div class="panel">
+      <h2>Something went wrong</h2>
+      <p id="fatal-text"></p>
+      <button onclick="location.reload()" class="primary">Reload</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
