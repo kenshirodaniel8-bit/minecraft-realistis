@@ -1241,7 +1241,7 @@ export class Game {
       let meshed = 0;
       for (const c of this.world.chunks.values()) if (c.meshedVersion >= 0) meshed++;
       this.hud.setDebug([
-        `RealisCraft  ${this.fps} fps  (${this.settings.quality})`,
+        `Realistis  ${this.fps} fps  (${this.settings.quality})`,
         `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}`,
         `Chunk: ${Math.floor(p.x / CHUNK_SIZE)} ${Math.floor(p.z / CHUNK_SIZE)}   Facing: ${facing}`,
         `Biome: ${BIOME_NAMES[col.biome]}   Light: sky ${l.sky} block ${l.block}`,
@@ -1261,7 +1261,7 @@ export class Game {
       const url = this.r.canvas.toDataURL('image/png');
       const a = document.createElement('a');
       a.href = url;
-      a.download = `realiscraft-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+      a.download = `realistis-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
       a.click();
       this.hud.toast('Screenshot saved');
     } catch (e) {

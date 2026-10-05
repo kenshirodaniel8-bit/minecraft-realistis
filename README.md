@@ -1,4 +1,4 @@
-# RealisCraft – realistic Minecraft-style game in your browser
+# Realistis – realistic Minecraft-style game in your browser
 
 A block-building sandbox with **realistic graphics**: real-time sun shadows, god rays through
 the trees, animated water that mirrors the world around it, waving grass and leaves, a day/night cycle with sunsets,
@@ -126,4 +126,4 @@ tests/             unit and integration tests (node --test)
   the world seed, so only player edits are saved and sent over the network.
 - All textures and sounds are generated in code, so there are no asset files to download.
 
-RealisCraft is a fan-made project and is not affiliated with Mojang or Microsoft.
+Realistis is a fan-made project and is not affiliated with Mojang or Microsoft.

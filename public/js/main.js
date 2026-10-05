@@ -65,7 +65,7 @@ function hasWebGL2() {
 
 async function boot() {
   try {
-    if (!hasWebGL2()) throw new Error('Your browser or graphics card does not support WebGL 2, which RealisCraft needs. Try the latest Chrome, Edge or Firefox.');
+    if (!hasWebGL2()) throw new Error('Your browser or graphics card does not support WebGL 2, which Realistis needs. Try the latest Chrome, Edge or Firefox.');
     if (location.protocol === 'file:') throw new Error('Please run the game through a web server: open a terminal in the project folder and run "npm install" then "npm start", then visit http://localhost:3000');
 
     S.settings = loadSettings();
@@ -567,7 +567,7 @@ function loadSettingsUI() {
 }
 
 // Handle for debugging from the browser console (and automated tests).
-window.realiscraft = {
+window.realistis = {
   get game() { return S.game; },
   get demo() { return S.demo; },
   get state() { return S; },

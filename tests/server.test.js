@@ -12,7 +12,7 @@ let tmpDir;
 const sockets = [];
 
 before(async () => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'realiscraft-'));
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'realistis-'));
   srv = await createServer({ port: 0, host: '127.0.0.1', seed: 'test-seed', worldFile: path.join(tmpDir, 'world.json'), quiet: true });
 });
 
@@ -54,7 +54,7 @@ test('serves the game page and three.js, blocks path traversal', async () => {
   const base = `http://127.0.0.1:${srv.port}`;
   const index = await fetch(base + '/');
   assert.equal(index.status, 200);
-  assert.match(await index.text(), /RealisCraft/);
+  assert.match(await index.text(), /Realistis/);
   assert.equal((await fetch(base + '/lib/three/build/three.module.js')).status, 200);
   assert.equal((await fetch(base + '/js/engine/worker.js')).status, 200);
   assert.equal((await fetch(base + '/lib/three/package.json')).status, 404);

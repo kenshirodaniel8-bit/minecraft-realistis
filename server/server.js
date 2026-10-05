@@ -1,4 +1,4 @@
-// RealisCraft server: serves the game and hosts a shared multiplayer world.
+// Realistis server: serves the game and hosts a shared multiplayer world.
 //
 //   npm start                 -> http://localhost:3000
 //   PORT=8080 npm start       -> different port
@@ -414,7 +414,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   }
   createServer().then((s) => {
     console.log('');
-    console.log('  RealisCraft server is running!');
+    console.log('  Realistis server is running!');
     console.log(`  Play here:        http://localhost:${s.port}`);
     for (const ip of lanAddresses()) console.log(`  Friends (LAN):    http://${ip}:${s.port}`);
     console.log('');

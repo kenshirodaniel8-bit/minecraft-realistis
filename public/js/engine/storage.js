@@ -1,7 +1,7 @@
 // Persistence: worlds in IndexedDB, profile + settings in localStorage.
 // Everything degrades gracefully (in-memory) when storage is unavailable.
 
-const DB_NAME = 'realiscraft';
+const DB_NAME = 'realistis';
 const DB_VERSION = 1;
 const STORE = 'worlds';
 
