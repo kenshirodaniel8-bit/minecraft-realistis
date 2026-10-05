@@ -348,6 +348,10 @@ export class World {
     c.light = null;
   }
 
+  * waterMeshes() {
+    for (const c of this.chunks.values()) if (c.meshes.water) yield c.meshes.water;
+  }
+
   // Counts meshed chunks within `radius` chunks of a position (for loading screens).
   readiness(px, pz, radius) {
     const pcx = Math.floor(px / CHUNK_SIZE), pcz = Math.floor(pz / CHUNK_SIZE);

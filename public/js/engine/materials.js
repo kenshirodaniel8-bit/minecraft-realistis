@@ -25,7 +25,13 @@ export const U = {
   uAlbedoArr: { value: null },
   uNormalArr: { value: null },
   uRain: { value: 0 },
+  uReflTex: { value: null },
+  uReflMatrix: { value: new THREE.Matrix4() },
+  uReflEnabled: { value: 0 },
 };
+
+// Height of the water surface at sea level (water tops sit at 14/16 of a block).
+export const WATER_SURFACE_Y = 62 + 14 / 16;
 
 export const SKY_GLSL = /* glsl */`
 uniform vec3 uSunDir;
@@ -339,6 +345,9 @@ export function createWaterMaterial() {
       uniform vec3 uSunColor;
       uniform float uSunIntensity;
       uniform vec3 uTorchColor;
+      uniform sampler2D uReflTex;
+      uniform mat4 uReflMatrix;
+      uniform float uReflEnabled;
       varying vec3 vWorldPos;
       varying vec3 vNormalW;
       varying vec2 vLightV;
@@ -387,6 +396,14 @@ export function createWaterMaterial() {
         float skyL = vLightV.x;
         float skyAmb = 0.08 + 0.92 * skyL * skyL;
         vec3 refl = skyColor(normalize(R)) * skyAmb;
+        // Planar reflection of the world (sea-level water only).
+        if (uReflEnabled > 0.5 && !below && vNormalW.y > 0.5 && abs(vWorldPos.y - ${WATER_SURFACE_Y.toFixed(4)}) < 0.25) {
+          vec4 rc = uReflMatrix * vec4(vWorldPos.x, ${WATER_SURFACE_Y.toFixed(4)}, vWorldPos.z, 1.0);
+          vec2 ruv = rc.xy / rc.w + N.xz * 0.035;
+          ruv = clamp(ruv, vec2(0.001), vec2(0.999));
+          vec3 world = texture2D(uReflTex, ruv).rgb;
+          refl = mix(refl, world * (0.35 + 0.65 * skyAmb), 0.92);
+        }
         float sunUp = smoothstep(-0.02, 0.1, uSunDir.y);
         float spec = pow(max(dot(R, uSunDir), 0.0), 420.0) * 22.0 + pow(max(dot(R, uSunDir), 0.0), 40.0) * 0.6;
         vec3 deep = vec3(0.01, 0.07, 0.1);

@@ -9,15 +9,15 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FXAAPass } from 'three/addons/postprocessing/FXAAPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import {
-  U, createTerrainMaterial, createTerrainDepthMaterial, createWaterMaterial,
+  U, WATER_SURFACE_Y, createTerrainMaterial, createTerrainDepthMaterial, createWaterMaterial,
   createSkyMaterial, createCloudMaterial,
 } from './materials.js';
 
 export const QUALITY_PRESETS = {
-  low: { pixelRatio: 0.75, shadows: 0, shadowDist: 0, bloom: false, rays: false, fxaa: false, clouds: true },
-  medium: { pixelRatio: 1, shadows: 1024, shadowDist: 44, bloom: true, rays: false, fxaa: true, clouds: true },
-  high: { pixelRatio: 1.25, shadows: 2048, shadowDist: 72, bloom: true, rays: true, fxaa: true, clouds: true },
-  ultra: { pixelRatio: 2, shadows: 4096, shadowDist: 100, bloom: true, rays: true, fxaa: true, clouds: true },
+  low: { pixelRatio: 0.75, shadows: 0, shadowDist: 0, bloom: false, rays: false, fxaa: false, clouds: true, reflections: 0 },
+  medium: { pixelRatio: 1, shadows: 1024, shadowDist: 44, bloom: true, rays: false, fxaa: true, clouds: true, reflections: 0 },
+  high: { pixelRatio: 1.25, shadows: 2048, shadowDist: 72, bloom: true, rays: true, fxaa: true, clouds: true, reflections: 0.5 },
+  ultra: { pixelRatio: 2, shadows: 4096, shadowDist: 100, bloom: true, rays: true, fxaa: true, clouds: true, reflections: 0.75 },
 };
 
 class AtmospherePass extends Pass {
@@ -158,6 +158,21 @@ export class Renderer {
     this.clouds.frustumCulled = false;
     this.scene.add(this.clouds);
 
+    // Planar water reflections (rendered from a camera mirrored below sea level).
+    this.reflect = {
+      rt: null,
+      scale: 0,
+      camera: new THREE.PerspectiveCamera(),
+      plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), -(WATER_SURFACE_Y - 0.08)),
+      bias: new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1),
+      frustum: new THREE.Frustum(),
+      projView: new THREE.Matrix4(),
+      fwd: new THREE.Vector3(),
+      up: new THREE.Vector3(),
+      target: new THREE.Vector3(),
+      rot: new THREE.Matrix4(),
+    };
+
     // Post-processing
     this.composer = null;
     this.timeOfDay = 0.1;
@@ -199,6 +214,12 @@ export class Renderer {
       s.camera.updateProjectionMatrix();
     }
     this.clouds.visible = q.clouds;
+    this.reflect.scale = q.reflections || 0;
+    if (!this.reflect.scale && this.reflect.rt) {
+      this.reflect.rt.dispose();
+      this.reflect.rt = null;
+    }
+    U.uReflEnabled.value = 0;
     this.camera.fov = this.settings.fov || 75;
     this.camera.updateProjectionMatrix();
     this._buildComposer();
@@ -370,11 +391,83 @@ export class Renderer {
     U.uHaze.value = 0.55 / Math.max(far * 2.2, 64);
   }
 
-  render() {
+  // waterMeshes: iterable of the world's water meshes (used to skip the
+  // reflection pass when no water is on screen).
+  render(waterMeshes) {
+    this._renderReflection(waterMeshes);
     this.composer.render();
   }
 
+  _renderReflection(waterMeshes) {
+    const R = this.reflect;
+    U.uReflEnabled.value = 0;
+    if (!R.scale || !waterMeshes) return;
+    const cam = this.camera;
+    if (cam.position.y < WATER_SURFACE_Y + 0.05) return;
+    // The shadow map is (re)created by the main pass; until it exists, shadowed
+    // materials would sample an empty texture, so wait one frame.
+    if (this.renderer.shadowMap.enabled && this.sun.castShadow && !this.sun.shadow.map) return;
+
+    // Is any sea-level water visible?
+    R.projView.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    R.frustum.setFromProjectionMatrix(R.projView);
+    let visible = false;
+    for (const m of waterMeshes) {
+      if (!m.geometry.boundingSphere) continue;
+      const sphere = this._sphere || (this._sphere = new THREE.Sphere());
+      sphere.copy(m.geometry.boundingSphere).applyMatrix4(m.matrixWorld);
+      if (R.frustum.intersectsSphere(sphere)) { visible = true; break; }
+    }
+    if (!visible) return;
+
+    const size = this.renderer.getDrawingBufferSize(this._tmpSize || (this._tmpSize = new THREE.Vector2()));
+    const w = Math.max(1, Math.round(size.x * R.scale)), h = Math.max(1, Math.round(size.y * R.scale));
+    if (!R.rt) {
+      R.rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthBuffer: true });
+      R.rt.texture.name = 'water-reflection';
+    } else if (R.rt.width !== w || R.rt.height !== h) {
+      R.rt.setSize(w, h);
+    }
+
+    // Mirror the camera across the water plane.
+    const mc = R.camera;
+    const H = WATER_SURFACE_Y;
+    mc.fov = cam.fov; mc.aspect = cam.aspect; mc.near = cam.near; mc.far = cam.far;
+    mc.updateProjectionMatrix();
+    mc.position.set(cam.position.x, 2 * H - cam.position.y, cam.position.z);
+    R.rot.extractRotation(cam.matrixWorld);
+    R.fwd.set(0, 0, -1).applyMatrix4(R.rot);
+    R.fwd.y = -R.fwd.y;
+    R.up.set(0, 1, 0).applyMatrix4(R.rot);
+    R.up.y = -R.up.y;
+    mc.up.copy(R.up);
+    R.target.copy(mc.position).add(R.fwd);
+    mc.lookAt(R.target);
+    mc.updateMatrixWorld();
+    U.uReflMatrix.value.copy(R.bias).multiply(mc.projectionMatrix).multiply(mc.matrixWorldInverse);
+
+    // Render everything above the water (no water itself, no shadow update).
+    const r = this.renderer;
+    const prevTarget = r.getRenderTarget();
+    const prevAuto = r.shadowMap.autoUpdate;
+    const prevClip = r.clippingPlanes;
+    this.materials.water.visible = false;
+    r.shadowMap.autoUpdate = false;
+    r.shadowMap.needsUpdate = false;
+    r.clippingPlanes = [R.plane];
+    r.setRenderTarget(R.rt);
+    r.clear();
+    r.render(this.scene, mc);
+    r.setRenderTarget(prevTarget);
+    r.clippingPlanes = prevClip;
+    r.shadowMap.autoUpdate = prevAuto;
+    this.materials.water.visible = true;
+    U.uReflTex.value = R.rt.texture;
+    U.uReflEnabled.value = 1;
+  }
+
   dispose() {
+    this.reflect.rt?.dispose();
     this.composer?.dispose();
     this.renderer.dispose();
   }

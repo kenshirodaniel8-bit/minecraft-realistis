@@ -1,7 +1,7 @@
 # RealisCraft – realistic Minecraft-style game in your browser
 
 A block-building sandbox with **realistic graphics**: real-time sun shadows, god rays through
-the trees, reflective animated water, waving grass and leaves, a day/night cycle with sunsets,
+the trees, animated water that mirrors the world around it, waving grass and leaves, a day/night cycle with sunsets,
 stars and moonlight, warm torch lighting in caves, and high-resolution (64×64) textures with
 normal maps.
 
@@ -95,8 +95,8 @@ the **Render distance**:
 
 - **Low** – no shadows or post-processing (fastest; good for laptops)
 - **Medium** – sun shadows + bloom
-- **High** – shadows, god rays, bloom (default)
-- **Ultra** – 4K shadow maps, full resolution
+- **High** – shadows, god rays, water reflections, bloom (default)
+- **Ultra** – 4K shadow maps, sharper reflections, full resolution
 
 The game needs a browser with WebGL 2 (all current versions of Chrome, Edge, Firefox and Safari).
 

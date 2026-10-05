@@ -432,7 +432,7 @@ export class Game {
       this.sound.updateAmbience(dt, { day: U.uDay.value, skyLight: el.sky, height: p.y, underwater });
     }
 
-    this.r.render();
+    this.r.render(this.world.waterMeshes());
     if (this.screenshotRequested) {
       this.screenshotRequested = false;
       this._saveScreenshot();
