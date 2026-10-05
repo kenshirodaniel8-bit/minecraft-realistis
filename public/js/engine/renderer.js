@@ -164,6 +164,13 @@ export class Renderer {
     this.settings = Object.assign({}, settings);
     this._tmpV = new THREE.Vector3();
     this._sunScreen = new THREE.Vector3();
+    // Scratch objects reused every frame (avoids garbage-collection stutter).
+    this._t = {
+      sunColor: new THREE.Color(), moonColor: new THREE.Color(0.6, 0.7, 1.0),
+      skyTop: new THREE.Color(), nightTop: new THREE.Color(0.05, 0.07, 0.14), duskTop: new THREE.Color(0.9, 0.55, 0.4),
+      moonDir: new THREE.Vector3(), up: new THREE.Vector3(), x: new THREE.Vector3(), y: new THREE.Vector3(),
+      snapped: new THREE.Vector3(), camDir: new THREE.Vector3(),
+    };
     this.applySettings(settings);
     this.resize();
   }
@@ -277,20 +284,21 @@ export class Renderer {
 
     // Sun / moon light.
     const warm = smoothstep(-0.02, 0.4, elev);
-    const sunColor = new THREE.Color().setRGB(1.0, 0.5 + 0.45 * warm, 0.22 + 0.68 * warm);
+    const T = this._t;
+    const sunColor = T.sunColor.setRGB(1.0, 0.5 + 0.45 * warm, 0.22 + 0.68 * warm);
     const sunInt = 3.2 * smoothstep(-0.03, 0.12, elev) * (1 - rain * 0.75);
-    const moonDir = sunDir.clone().negate();
+    const moonDir = T.moonDir.copy(sunDir).negate();
     const moonInt = 0.32 * smoothstep(-0.03, 0.15, moonDir.y) * (1 - rain * 0.7);
     const useSun = elev > -0.02;
     const lightDir = useSun ? sunDir : moonDir;
-    this.sun.color.copy(useSun ? sunColor : new THREE.Color(0.6, 0.7, 1.0));
+    this.sun.color.copy(useSun ? sunColor : T.moonColor);
     this.sun.intensity = useSun ? sunInt : moonInt;
     U.uSunColor.value.copy(sunColor);
     U.uSunIntensity.value = sunInt;
 
     // Ambient sky light.
-    const skyTop = new THREE.Color().setRGB(0.32, 0.5, 0.85).lerp(new THREE.Color(0.05, 0.07, 0.14), 1 - day);
-    skyTop.lerp(new THREE.Color(0.9, 0.55, 0.4), sunset * 0.35);
+    const skyTop = T.skyTop.setRGB(0.32, 0.5, 0.85).lerp(T.nightTop, 1 - day);
+    skyTop.lerp(T.duskTop, sunset * 0.35);
     this.hemi.color.copy(skyTop);
     this.hemi.groundColor.setRGB(0.28, 0.24, 0.18).multiplyScalar(0.25 + 0.75 * day);
     this.hemi.intensity = (0.1 + 1.05 * day) * (1 - rain * 0.3);
@@ -302,11 +310,11 @@ export class Renderer {
       const d = this.preset.shadowDist;
       const texel = (2 * d) / s.mapSize.width;
       const z = lightDir;
-      const up = Math.abs(z.y) > 0.99 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-      const x = new THREE.Vector3().crossVectors(up, z).normalize();
-      const y = new THREE.Vector3().crossVectors(z, x).normalize();
+      const up = Math.abs(z.y) > 0.99 ? T.up.set(1, 0, 0) : T.up.set(0, 1, 0);
+      const x = T.x.crossVectors(up, z).normalize();
+      const y = T.y.crossVectors(z, x).normalize();
       const cx = center.dot(x), cy = center.dot(y);
-      const snapped = center.clone()
+      const snapped = T.snapped.copy(center)
         .addScaledVector(x, Math.round(cx / texel) * texel - cx)
         .addScaledVector(y, Math.round(cy / texel) * texel - cy);
       this.sun.target.position.copy(snapped);
@@ -340,7 +348,7 @@ export class Renderer {
       au.uAspect.value = this.width / this.height;
       let rays = 0;
       if (this.preset.rays && useSun && !opts.underwater) {
-        const camDir = new THREE.Vector3();
+        const camDir = T.camDir;
         this.camera.getWorldDirection(camDir);
         const facing = camDir.dot(sunDir);
         if (facing > 0) {

@@ -11,7 +11,7 @@ export const MAX_SKIN_BYTES = 400 * 1024;
 
 const PRESETS = {
   explorer: {
-    skin: [198, 142, 104], hair: [74, 46, 26], eyes: [60, 110, 70], shirt: [46, 128, 96], shirt2: [34, 98, 74],
+    skin: [198, 142, 104], hair: [102, 66, 38], eyes: [60, 110, 70], shirt: [46, 128, 96], shirt2: [34, 98, 74],
     pants: [44, 62, 120], boots: [86, 58, 36], belt: [58, 40, 24],
   },
   ranger: {

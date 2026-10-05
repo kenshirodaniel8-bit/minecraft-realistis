@@ -140,6 +140,12 @@ export class Game {
     this.bob = 0;
     this.screenshotRequested = false;
     this.lastSentFlags = -1;
+    this._center = new THREE.Vector3();
+    this._eye = new THREE.Vector3();
+    this._dir = new THREE.Vector3();
+    this._euler = new THREE.Euler(0, 0, 0, 'YXZ');
+    this._ambient = new THREE.Color();
+    this._sunCol = new THREE.Color();
 
     // Scene objects owned by the session.
     this.particles = new Particles(this.scene);
@@ -408,7 +414,7 @@ export class Game {
     const underwater = this._cameraUnderwater();
     this.damageFlash = Math.max(0, this.damageFlash - dt * 1.5);
     this.r.updateEnvironment(this.dayTime, this.clock, {
-      center: new THREE.Vector3(p.x, p.y, p.z),
+      center: this._center.set(p.x, p.y, p.z),
       underwater,
       playerLight: el,
       damage: this.damageFlash,
@@ -540,13 +546,13 @@ export class Game {
       bx = Math.cos(this.bob) * 0.035 * amt;
       by = -Math.abs(Math.sin(this.bob)) * 0.055 * amt;
     }
-    const right = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
-    const eye = new THREE.Vector3(ix + right.x * bx, eyeY + by, iz + right.z * bx);
+    const rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
+    const eye = this._eye.set(ix + rx * bx, eyeY + by, iz + rz * bx);
 
     if (this.thirdPerson === 0) {
       cam.position.copy(eye);
     } else {
-      const dir = new THREE.Vector3();
+      const dir = this._dir;
       cam.getWorldDirection(dir);
       if (this.thirdPerson === 2) {
         dir.negate();
@@ -607,8 +613,8 @@ export class Game {
     const sky = (light.sky / 15) ** 2;
     const blk = (light.block / 15) ** 3;
     const hemi = this.r.hemi;
-    const amb = hemi.color.clone().multiplyScalar(hemi.intensity * (0.04 + 0.96 * sky) * 0.38);
-    const sun = this.r.sun.color.clone().multiplyScalar(this.r.sun.intensity * 0.22 * smoothstep(0.45, 0.9, light.sky / 15));
+    const amb = this._ambient.copy(hemi.color).multiplyScalar(hemi.intensity * (0.04 + 0.96 * sky) * 0.38);
+    const sun = this._sunCol.copy(this.r.sun.color).multiplyScalar(this.r.sun.intensity * 0.22 * smoothstep(0.45, 0.9, light.sky / 15));
     const held = this.slots[this.selected];
     this.hand.setItem(held ? held.id : 0);
     this.hand.update(dt, {
@@ -705,7 +711,7 @@ export class Game {
   _target() {
     const cam = this.camera;
     const p = this.player;
-    const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(p.pitch, p.yaw, 0, 'YXZ'));
+    const dir = this._dir.set(0, 0, -1).applyEuler(this._euler.set(p.pitch, p.yaw, 0, 'YXZ'));
     const eye = { x: this.interp.x, y: this.eyeSmooth, z: this.interp.z };
     const reach = this.gameMode === 'creative' ? MAX_REACH : 4.6;
     return this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, reach);
