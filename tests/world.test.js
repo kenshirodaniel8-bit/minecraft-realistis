@@ -4,7 +4,7 @@ import { TerrainGenerator } from '../public/js/engine/terrain.js';
 import { computeLight, buildChunkMesh, paddedIndex, extractChunkLight } from '../public/js/engine/mesher.js';
 import { generateTextures } from '../public/js/engine/textures.js';
 import { normalizeSeed, SimplexNoise } from '../public/js/engine/noise.js';
-import { B, BLOCKS, TEXTURE_NAMES, CREATIVE_ORDER, RECIPES, isValidBlockId } from '../public/js/engine/blocks.js';
+import { B, BLOCKS, TEXTURE_NAMES, CREATIVE_ORDER, isValidBlockId } from '../public/js/engine/blocks.js';
 import { CHUNK_VOLUME, WORLD_HEIGHT, PADDED_SIZE, MESH_PAD, SEA_LEVEL, blockIndex } from '../public/js/engine/constants.js';
 
 test('seeds: text and numbers map to stable uint32 values', () => {
@@ -32,10 +32,6 @@ test('block registry is consistent', () => {
     if (b.id !== 0) for (const k of ['top', 'bottom', 'side']) assert.ok(b.tex[k] >= 0 && b.tex[k] < TEXTURE_NAMES.length);
   }
   for (const id of CREATIVE_ORDER) assert.ok(isValidBlockId(id) && id !== 0);
-  for (const r of RECIPES) {
-    assert.ok(isValidBlockId(r.out[0]));
-    for (const [id, n] of r.in) assert.ok(isValidBlockId(id) && n > 0);
-  }
   assert.equal(isValidBlockId(-1), false);
   assert.equal(isValidBlockId(9999), false);
   assert.equal(isValidBlockId(1.5), false);

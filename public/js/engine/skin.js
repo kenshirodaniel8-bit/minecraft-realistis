@@ -24,7 +24,12 @@ const PRESETS = {
   },
 };
 
-export const DEFAULT_SKIN_NAMES = Object.keys(PRESETS);
+PRESETS.zombie = {
+  skin: [92, 140, 78], hair: [64, 104, 56], eyes: [12, 12, 12], sclera: [34, 46, 30], shirt: [40, 106, 116], shirt2: [30, 84, 92],
+  pants: [70, 60, 134], boots: [54, 46, 104], belt: [58, 50, 112],
+};
+
+export const DEFAULT_SKIN_NAMES = ['explorer', 'ranger', 'scout'];
 
 function rng(seed) {
   let s = seed >>> 0;
@@ -85,7 +90,7 @@ export function createDefaultSkinCanvas(name = 'explorer') {
     if (y === 2 && (x === 0 || x === 7 || x === 3)) return [p.hair, 0.9];
     if (y === 3 && (x === 1 || x === 2 || x === 5 || x === 6)) return [p.hair, 0.75]; // brows
     if (y === 4) {
-      if (x === 1 || x === 6) return [[245, 245, 245], 1];
+      if (x === 1 || x === 6) return [p.sclera || [245, 245, 245], 1];
       if (x === 2 || x === 5) return [p.eyes, 1];
     }
     if (y === 5 && (x === 3 || x === 4)) return [p.skin, 0.82]; // nose shadow

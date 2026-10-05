@@ -1,6 +1,7 @@
 // DOM heads-up display: hotbar, health, air, chat, inventory and overlays.
 
-import { BLOCKS } from '../engine/blocks.js';
+import { itemName, getTool } from '../engine/items.js';
+import { GROUPS, GROUP_NAMES, STATION_NAMES } from '../engine/survival.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -19,6 +20,7 @@ export class Hud {
     this.heldName = $('held-name');
     this.hearts = $('hearts');
     this.airEl = $('air');
+    this.hungerEl = $('hunger');
     this.debug = $('debug');
     this.chatLog = $('chat-log');
     this.chatForm = $('chat-form');
@@ -43,6 +45,7 @@ export class Hud {
     this._lastHotbarKey = '';
     this._lastHealth = -1;
     this._lastAir = -1;
+    this._lastHunger = -1;
     this._debugText = null;
 
     this.hotbarSlots = [];
@@ -50,6 +53,10 @@ export class Hud {
       const s = el('div', 'slot');
       s.appendChild(el('img'));
       s.appendChild(el('span', 'count'));
+      const dur = el('span', 'dur');
+      dur.appendChild(el('i'));
+      s.appendChild(dur);
+      s.dataset.index = String(i);
       this.hotbar.appendChild(s);
       this.hotbarSlots.push(s);
     }
@@ -93,26 +100,54 @@ export class Hud {
   _icon(id) { return this.icons[id] || ''; }
 
   setHotbar(slots, selected, mode) {
-    const key = slots.map((s) => (s ? s.id + ':' + s.count : '-')).join(',') + '|' + selected + '|' + mode;
+    const key = slots.map((s) => (s ? s.id + ':' + s.count + ':' + (s.dmg || 0) : '-')).join(',') + '|' + selected + '|' + mode;
     if (key === this._lastHotbarKey) return;
     this._lastHotbarKey = key;
     for (let i = 0; i < 9; i++) {
       const s = slots[i];
       const d = this.hotbarSlots[i];
       d.classList.toggle('selected', i === selected);
-      const img = d.firstChild;
-      const cnt = d.lastChild;
+      const img = d.children[0];
+      const cnt = d.children[1];
+      const dur = d.children[2];
       if (s) {
         const src = this._icon(s.id);
         if (img.getAttribute('src') !== src) img.setAttribute('src', src);
         img.hidden = false;
-        img.alt = BLOCKS[s.id].name;
+        img.alt = itemName(s.id);
         cnt.textContent = mode === 'survival' && s.count > 1 ? String(s.count) : '';
       } else {
         img.hidden = true;
         img.removeAttribute('src');
         cnt.textContent = '';
       }
+      this._setDurability(dur, s, mode);
+    }
+  }
+
+  _setDurability(dur, s, mode) {
+    const tool = s && getTool(s.id);
+    if (!tool || mode !== 'survival' || !s.dmg) { dur.hidden = true; return; }
+    const left = 1 - s.dmg / tool.durability;
+    dur.hidden = false;
+    const bar = dur.firstChild;
+    bar.style.width = Math.round(left * 100) + '%';
+    bar.style.background = `hsl(${Math.round(left * 120)}, 85%, 50%)`;
+  }
+
+  setHunger(food, max, visible) {
+    this.hungerEl.hidden = !visible;
+    if (!visible) { this._lastHunger = -1; return; }
+    const key = Math.round(food);
+    if (key === this._lastHunger) return;
+    this._lastHunger = key;
+    this.hungerEl.textContent = '';
+    // Drawn right-to-left like Minecraft.
+    for (let i = max / 2 - 1; i >= 0; i--) {
+      const v = food - i * 2;
+      const span = el('span', 'food ' + (v >= 2 ? 'is-full' : v >= 1 ? 'is-half' : 'is-empty'));
+      span.style.backgroundImage = `url(${this.foodIcon || ''})`;
+      this.hungerEl.appendChild(span);
     }
   }
 
@@ -132,7 +167,7 @@ export class Hud {
     this.hearts.textContent = '';
     for (let i = 0; i < max / 2; i++) {
       const v = hp - i * 2;
-      this.hearts.appendChild(el('span', 'heart ' + (v >= 2 ? 'full' : v >= 1 ? 'half' : 'empty')));
+      this.hearts.appendChild(el('span', 'heart ' + (v >= 2 ? 'is-full' : v >= 1 ? 'is-half' : 'is-empty')));
     }
   }
 
@@ -216,6 +251,22 @@ export class Hud {
     this.clickToPlay.hidden = !visible;
   }
 
+  // Explains the controls when the mouse can't be captured (touch screens,
+  // embedded pages): drag to look instead of pointer lock.
+  setFreeLook(free, touch) {
+    const title = document.getElementById('ctp-title');
+    const help = document.getElementById('ctp-help');
+    if (!title || !help) return;
+    this.touch = !!touch;
+    if (touch) {
+      title.textContent = 'Tap to play';
+      help.textContent = 'Left thumb: move · Drag anywhere else: look · Right buttons: break, place / eat, jump, sneak';
+    } else if (free) {
+      title.textContent = 'Click to play';
+      help.innerHTML = 'Move: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows · Look: drag with the mouse · Break: click · Place: right click · Pause: <kbd>Esc</kbd>';
+    }
+  }
+
   // ---------------------------------------------------------------- inventory
 
   openInventory(callbacks) {
@@ -239,10 +290,14 @@ export class Hud {
     if (slot) {
       const img = el('img');
       img.src = this._icon(slot.id);
-      img.alt = BLOCKS[slot.id].name;
-      d.title = BLOCKS[slot.id].name;
+      img.alt = itemName(slot.id);
+      d.title = itemName(slot.id);
       d.appendChild(img);
       if (mode === 'survival' && slot.count > 1) d.appendChild(el('span', 'count', String(slot.count)));
+      const dur = el('span', 'dur');
+      dur.appendChild(el('i'));
+      d.appendChild(dur);
+      this._setDurability(dur, slot, mode);
     }
     d.addEventListener('mousedown', (e) => {
       e.preventDefault();
@@ -257,6 +312,12 @@ export class Hud {
     const panel = this.invPanel;
     const focusSearch = document.activeElement && document.activeElement.classList.contains('inv-search');
     panel.textContent = '';
+    const close = el('button', 'inv-close', '✕');
+    close.type = 'button';
+    close.title = 'Close (E)';
+    close.setAttribute('aria-label', 'Close inventory');
+    close.addEventListener('click', (e) => { e.preventDefault(); if (this.invCallbacks) this.invCallbacks.onClose(); });
+    panel.appendChild(close);
     if (m.mode === 'creative') {
       panel.appendChild(el('h2', '', 'Creative Inventory'));
       const search = el('input', 'inv-search');
@@ -270,13 +331,13 @@ export class Hud {
       panel.appendChild(search);
       const palette = el('div', 'inv-grid palette');
       for (const id of m.creativeBlocks) {
-        const b = BLOCKS[id];
+        const name = itemName(id);
         const d = el('div', 'slot');
-        d.title = b.name;
-        d.dataset.name = b.name.toLowerCase();
+        d.title = name;
+        d.dataset.name = name.toLowerCase();
         const img = el('img');
         img.src = this._icon(id);
-        img.alt = b.name;
+        img.alt = name;
         d.appendChild(img);
         d.addEventListener('mousedown', (e) => {
           e.preventDefault();
@@ -301,29 +362,43 @@ export class Hud {
       const hb = el('div', 'inv-grid hotbar-row');
       for (let i = 0; i < 9; i++) hb.appendChild(this._slotEl(m.slots[i], i, m.mode, m.selected));
       left.appendChild(hb);
-      left.appendChild(el('div', 'inv-label', 'Left click: move stack · Right click: split / place one'));
+      left.appendChild(el('div', 'inv-label', this.touch ? 'Tap a slot to pick up or put down a stack' : 'Left click: move stack · Right click: split / place one'));
       cols.appendChild(left);
 
       const right = el('div', 'crafting');
       right.appendChild(el('h2', '', 'Crafting'));
+      const st = m.stations || {};
+      right.appendChild(el('div', 'inv-label', `Nearby: ${st.table ? '✔' : '✘'} Crafting Table   ${st.furnace ? '✔' : '✘'} Furnace`));
+      let cat = null;
       for (const { index, r, ok } of m.recipes) {
+        if (r.cat !== cat) {
+          cat = r.cat;
+          right.appendChild(el('div', 'recipe-cat', cat));
+        }
         const row = el('button', 'recipe' + (ok ? '' : ' disabled'));
         row.disabled = !ok;
         for (const [id, n] of r.in) {
           const ing = el('span', 'ing');
-          const img = el('img'); img.src = this._icon(id); img.alt = BLOCKS[id].name;
+          const iconId = typeof id === 'string' ? GROUPS[id][0] : id;
+          const label = typeof id === 'string' ? GROUP_NAMES[id] : itemName(id);
+          const img = el('img'); img.src = this._icon(iconId); img.alt = label;
           ing.appendChild(img);
           ing.appendChild(el('span', 'n', '×' + n));
-          ing.title = BLOCKS[id].name;
+          ing.title = label;
           row.appendChild(ing);
         }
         row.appendChild(el('span', 'arrow', '→'));
         const out = el('span', 'ing out');
-        const oimg = el('img'); oimg.src = this._icon(r.out[0]); oimg.alt = BLOCKS[r.out[0]].name;
+        const oimg = el('img'); oimg.src = this._icon(r.out[0]); oimg.alt = itemName(r.out[0]);
         out.appendChild(oimg);
         out.appendChild(el('span', 'n', '×' + r.out[1]));
-        out.title = BLOCKS[r.out[0]].name;
+        out.title = itemName(r.out[0]);
         row.appendChild(out);
+        if (r.station) {
+          const need = el('span', 'station' + (st[r.station] ? ' ok' : ''), STATION_NAMES[r.station]);
+          row.appendChild(need);
+        }
+        row.title = itemName(r.out[0]) + (r.station ? ` (needs a ${STATION_NAMES[r.station]} nearby)` : '');
         row.addEventListener('mousedown', (e) => { e.preventDefault(); if (ok && this.invCallbacks) this.invCallbacks.onCraft(index); });
         right.appendChild(row);
       }

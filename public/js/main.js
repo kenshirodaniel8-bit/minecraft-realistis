@@ -2,9 +2,11 @@
 
 import * as THREE from 'three';
 import { Renderer } from './engine/renderer.js';
-import { WorkerPool } from './engine/workerpool.js';
+import { createPool } from './engine/workerpool.js';
 import { createTextureArrays } from './engine/materials.js';
 import { buildBlockIcons } from './ui/icons.js';
+import { buildItemIcons } from './ui/itemicons.js';
+import { I } from './engine/items.js';
 import { Hud } from './ui/hud.js';
 import { SoundSystem } from './engine/audio.js';
 import { Game } from './engine/game.js';
@@ -22,6 +24,10 @@ const DEMO_SEED = 77;
 
 const $ = (id) => document.getElementById(id);
 
+// 'server' when the page comes from `npm start`; static builds set a meta tag
+// ('static' = any web host, 'embedded' = a sandboxed page that can't open sockets).
+const BUILD = document.querySelector('meta[name="realistis-build"]')?.content || 'server';
+
 const S = {
   renderer: null,
   pool: null,
@@ -37,6 +43,8 @@ const S = {
   screen: null,
   overGame: false, // menu screen shown on top of a running game (from pause)
   selectedWorld: null,
+  modeFilter: null, // 'survival' | 'creative' | null (all worlds)
+  itemCanvases: {},
   busy: false,
 };
 
@@ -79,14 +87,18 @@ async function boot() {
     });
 
     const workers = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
-    S.pool = new WorkerPool(new URL('./engine/worker.js', import.meta.url), workers);
+    S.pool = await createPool(new URL('./engine/worker.js', import.meta.url), workers);
 
     bootStatus('Painting realistic textures…', 0.3);
     S.tex = await S.pool.run('textures');
     createTextureArrays(S.tex, S.renderer.renderer);
     bootStatus('Preparing blocks…', 0.6);
     S.icons = buildBlockIcons(S.tex);
+    const items = buildItemIcons();
+    Object.assign(S.icons, items.icons);
+    S.itemCanvases = items.canvases;
     S.hud = new Hud(S.icons);
+    S.hud.foodIcon = S.icons[I.COOKED_MEAT];
     S.hud.onAction = onHudAction;
     S.sound = new SoundSystem();
     S.sound.setVolume(S.settings.volume);
@@ -143,7 +155,7 @@ async function startGame(extra) {
   S.sound.unlock();
   const game = new Game(Object.assign({
     renderer: S.renderer, pool: S.pool, hud: S.hud, sound: S.sound, settings: S.settings, profile: S.profile,
-    skinCanvas: S.skinCanvas, slim: S.profile.slim, texData: S.tex,
+    skinCanvas: S.skinCanvas, slim: S.profile.slim, texData: S.tex, itemCanvases: S.itemCanvases,
     onExit: (reason) => onGameExit(reason, extra.mode),
     onAutoTune: (changes) => {
       Object.assign(S.settings, changes);
@@ -204,12 +216,26 @@ function showScreen(name) {
   if (name === 'multi') {
     $('mp-name').value = S.profile.name;
     $('mp-server').value = S.profile.server || '';
+    if (BUILD === 'embedded') {
+      setStatus('mp-status', 'Multiplayer needs the full game: download it, run "npm start" and open the address it prints. Singleplayer works right here.', 'err');
+      $('btn-connect').disabled = true;
+    } else if (BUILD === 'static') {
+      $('mp-server').placeholder = 'Server address (required), e.g. 192.168.1.20:3000';
+    }
   }
   if (name === 'skin') openSkinScreen(); else closeSkinScreen();
   if (name === 'create') {
-    $('new-world-name').value = 'New World';
+    const mode = S.modeFilter || 'survival';
+    $('new-world-mode').value = mode;
+    $('new-world-name').value = mode === 'survival' ? 'Survival World' : 'Creative World';
     $('new-world-seed').value = '';
+    $('new-world-peaceful').checked = false;
+    $('peaceful-row').hidden = mode !== 'survival';
     setTimeout(() => $('new-world-name').select(), 0);
+  }
+  if (name === 'multi') {
+    const m = S.profile.mpMode === 'creative' ? 'creative' : 'survival';
+    for (const r of document.querySelectorAll('input[name="mp-mode"]')) r.checked = r.value === m;
   }
 }
 
@@ -245,6 +271,7 @@ function setupMenus() {
     if (go) {
       S.sound.unlock();
       S.sound.click();
+      if (go.dataset.filter !== undefined) S.modeFilter = go.dataset.filter || null;
       showScreen(go.dataset.go);
     }
   });
@@ -255,6 +282,25 @@ function setupMenus() {
       S.sound.unlock();
       g.input.requestLock();
     }
+  });
+
+  // 1. Survival / 2. Creative on the title screen
+  for (const card of document.querySelectorAll('.mode-card')) {
+    card.addEventListener('click', () => {
+      S.sound.unlock();
+      S.sound.click();
+      chooseMode(card.dataset.mode);
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (S.screen !== 'main' || $('menu').hidden || S.game) return;
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+    if (e.code === 'Digit1' || e.code === 'Numpad1') { S.sound.unlock(); chooseMode('survival'); }
+    if (e.code === 'Digit2' || e.code === 'Numpad2') { S.sound.unlock(); chooseMode('creative'); }
+  });
+  $('btn-create-cancel').addEventListener('click', () => showScreen('single'));
+  $('new-world-mode').addEventListener('change', () => {
+    $('peaceful-row').hidden = $('new-world-mode').value !== 'survival';
   });
 
   // Singleplayer
@@ -269,7 +315,7 @@ function setupMenus() {
     S.selectedWorld = null;
     refreshWorldList();
   });
-  $('btn-create-world').addEventListener('click', createWorld);
+  $('btn-create-world').addEventListener('click', () => createWorld());
   for (const id of ['new-world-name', 'new-world-seed']) {
     $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') createWorld(); });
   }
@@ -340,9 +386,25 @@ function sanitizeName(v) {
 
 // ------------------------------------------------------------------ worlds
 
+// Title screen choice: jump straight into a world of that mode.
+async function chooseMode(mode) {
+  if (S.busy) return;
+  S.modeFilter = mode;
+  const worlds = (await listWorlds()).filter((w) => (w.mode === 'survival' ? 'survival' : 'creative') === mode);
+  if (worlds.length === 0) {
+    // First time: make a world right away.
+    await createWorld({ mode, name: mode === 'survival' ? 'Survival World' : 'Creative World', seed: '' });
+  } else {
+    showScreen('single');
+  }
+}
+
 async function refreshWorldList() {
   const list = $('world-list');
-  const worlds = await listWorlds();
+  const filter = S.modeFilter;
+  const worlds = (await listWorlds()).filter((w) => !filter || (w.mode === 'survival' ? 'survival' : 'creative') === filter);
+  $('worlds-title').textContent = filter === 'survival' ? 'Survival Worlds' : filter === 'creative' ? 'Creative Worlds' : 'Select World';
+  $('btn-new-world').textContent = filter === 'survival' ? 'New Survival World' : filter === 'creative' ? 'New Creative World' : 'Create New World';
   list.textContent = '';
   $('storage-warning').hidden = isPersistent();
   if (!worlds.some((w) => w.id === S.selectedWorld)) S.selectedWorld = worlds[0] ? worlds[0].id : null;
@@ -361,7 +423,7 @@ async function refreshWorldList() {
     const m = document.createElement('div');
     m.className = 'meta';
     const when = w.lastPlayed ? new Date(w.lastPlayed).toLocaleString() : 'never';
-    m.textContent = `${w.mode === 'survival' ? 'Survival' : 'Creative'} · Seed ${w.seed} · Last played ${when}`;
+    m.textContent = `${w.mode === 'survival' ? 'Survival' : 'Creative'}${w.peaceful ? ' (peaceful)' : ''} · Seed ${w.seed} · Last played ${when}`;
     d.append(n, m);
     d.addEventListener('click', () => { S.selectedWorld = w.id; refreshWorldList(); });
     d.addEventListener('dblclick', () => playWorld(w.id));
@@ -371,18 +433,27 @@ async function refreshWorldList() {
   $('btn-delete-world').disabled = !S.selectedWorld;
 }
 
-async function createWorld() {
+// opts (optional): { mode, name, seed, peaceful } instead of the form values.
+async function createWorld(opts) {
   if (S.busy) return;
   S.busy = true;
   try {
-    const name = ($('new-world-name').value || '').trim().slice(0, 32) || 'New World';
-    const seedText = $('new-world-seed').value;
-    const seed = normalizeSeed(seedText);
+    const fromForm = !opts || opts instanceof Event;
+    const o = fromForm ? {
+      mode: $('new-world-mode').value,
+      name: $('new-world-name').value,
+      seed: $('new-world-seed').value,
+      peaceful: $('new-world-peaceful').checked,
+    } : opts;
+    const mode = o.mode === 'survival' ? 'survival' : 'creative';
+    const name = String(o.name || '').trim().slice(0, 32) || 'New World';
+    const seed = normalizeSeed(o.seed);
     const id = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
     const rec = {
-      id, name, seed, mode: $('new-world-mode').value === 'survival' ? 'survival' : 'creative',
+      id, name, seed, mode, peaceful: mode === 'survival' && !!o.peaceful,
       created: Date.now(), lastPlayed: Date.now(), edits: {}, time: 0.04,
     };
+    S.modeFilter = mode;
     await saveWorld(rec);
     S.selectedWorld = id;
     await playWorld(id);
@@ -403,6 +474,11 @@ async function connectMultiplayer() {
   if (S.busy) return;
   const name = sanitizeName($('mp-name').value);
   if (!name) { setStatus('mp-status', 'Please enter a name (letters, numbers, _ or -).', 'err'); return; }
+  if (BUILD === 'embedded') return;
+  if (BUILD === 'static' && !$('mp-server').value.trim()) {
+    setStatus('mp-status', 'This page has no game server behind it. Enter the address of a computer running "npm start".', 'err');
+    return;
+  }
   let url;
   try { url = normalizeServerUrl($('mp-server').value); } catch (e) { setStatus('mp-status', e.message, 'err'); return; }
   S.profile.name = name;
@@ -414,9 +490,13 @@ async function connectMultiplayer() {
   const net = new NetworkClient(url);
   try {
     const skin = S.profile.skin || S.skinCanvas.toDataURL('image/png');
+    const picked = document.querySelector('input[name="mp-mode"]:checked');
+    const gameMode = picked && picked.value === 'creative' ? 'creative' : 'survival';
+    S.profile.mpMode = gameMode;
+    saveProfile(S.profile);
     const welcome = await net.connect({ name, skin, slim: S.profile.slim });
     setStatus('mp-status', 'Connected!', 'ok');
-    await startGame({ mode: 'multi', net, welcome });
+    await startGame({ mode: 'multi', net, welcome, gameMode });
   } catch (e) {
     net.close();
     setStatus('mp-status', e.message, 'err');

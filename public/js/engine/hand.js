@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { BLOCKS } from './blocks.js';
+import { isItemId, getTool } from './items.js';
 import { U } from './materials.js';
 import { FirstPersonArm } from './skin.js';
 
@@ -94,8 +95,11 @@ function flatGeometry(block) {
 }
 
 export class HandView {
-  constructor(handScene, skinCanvas, slim) {
+  constructor(handScene, skinCanvas, slim, itemCanvases = {}) {
     this.scene = handScene;
+    this.itemCanvases = itemCanvases;
+    this.spriteGeo = new THREE.PlaneGeometry(1, 1);
+    this.spriteMats = new Map();
     this.root = new THREE.Group();
     this.scene.add(this.root);
     this.arm = new FirstPersonArm(skinCanvas, slim);
@@ -122,9 +126,25 @@ export class HandView {
 
   dispose() {
     this.scene.remove(this.root);
-    if (this.item) this.item.geometry.dispose();
+    if (this.item && this.item.geometry !== this.spriteGeo) this.item.geometry.dispose();
     this.itemMat.dispose();
+    this.spriteGeo.dispose();
+    for (const m of this.spriteMats.values()) { m.map.dispose(); m.dispose(); }
     this.arm.dispose();
+  }
+
+  _spriteMaterial(id) {
+    let m = this.spriteMats.get(id);
+    if (!m) {
+      const tex = new THREE.CanvasTexture(this.itemCanvases[id]);
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      tex.generateMipmaps = false;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      m = new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide });
+      this.spriteMats.set(id, m);
+    }
+    return m;
   }
 
   setItem(id) {
@@ -133,8 +153,17 @@ export class HandView {
     this.equip = 1;
     if (this.item) {
       this.root.remove(this.item);
-      this.item.geometry.dispose();
+      if (this.item.geometry !== this.spriteGeo) this.item.geometry.dispose();
       this.item = null;
+    }
+    this.emissive = false;
+    if (isItemId(id)) {
+      if (!this.itemCanvases[id]) return;
+      this.item = new THREE.Mesh(this.spriteGeo, this._spriteMaterial(id));
+      this.item.userData.sprite = true;
+      this.item.userData.tool = !!getTool(id);
+      this.root.add(this.item);
+      return;
     }
     const b = BLOCKS[id];
     if (!b || !b.tex || id === 0) return;
@@ -183,10 +212,26 @@ export class HandView {
       this.uniforms.uTorch.value = 0.6;
     }
 
+    // Eating: bring the food up to the mouth and bob it.
+    const eat = state.eating ? 1 : 0;
+    this.eatBlend = (this.eatBlend || 0) + (eat - (this.eatBlend || 0)) * Math.min(1, dt * 10);
+    const eb = this.eatBlend;
+    const munch = Math.abs(Math.sin(performance.now() / 70)) * 0.03 * eb;
+
     if (this.item) {
       this.arm.group.visible = false;
       const it = this.item;
-      if (it.userData.flat) {
+      if (it.userData.sprite) {
+        it.scale.setScalar(it.userData.tool ? 0.46 : 0.34);
+        if (it.userData.tool) {
+          // Tools are held by the handle, head up and pointing forward.
+          it.position.set(0.42 + bx - sw2 * 0.14, -0.25 + by - drop + sw * 0.08, -0.62 - sw * 0.14);
+          it.rotation.set(-0.2 - sw * 1.1, -1.25 + sw2 * 0.3, 0.12, 'YXZ');
+        } else {
+          it.position.set(0.38 + bx - eb * 0.3, -0.3 + by - drop + eb * 0.12 - munch, -0.62 + eb * 0.12 - sw * 0.1);
+          it.rotation.set(-sw * 0.6, -0.5 - sw2 * 0.3 + eb * 0.4, 0.05);
+        }
+      } else if (it.userData.flat) {
         it.scale.setScalar(0.42);
         it.position.set(0.36 + bx - sw2 * 0.12, -0.3 + by - drop + sw * 0.05, -0.6 - sw * 0.1);
         it.rotation.set(-sw * 0.6, -0.35 - sw2 * 0.3, 0.1);

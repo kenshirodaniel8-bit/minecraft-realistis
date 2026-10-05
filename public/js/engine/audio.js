@@ -128,6 +128,51 @@ export class SoundSystem {
     o.stop(t + 0.25);
   }
 
+  _tone(type, f0, f1, dur, vol, filterFreq) {
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    let node = o.connect(g);
+    if (filterFreq) {
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = filterFreq;
+      g.connect(f);
+      node = f;
+    }
+    node.connect(this.master);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+
+  // Creature voices. hurt = the creature was hit.
+  mob(type, volume = 1, hurt = false) {
+    if (!this.ctx || this.volume <= 0) return;
+    const v = Math.max(0, Math.min(1, volume));
+    const p = 0.9 + Math.random() * 0.2;
+    if (type === 'zombie') {
+      this._tone('sawtooth', (hurt ? 180 : 110) * p, (hurt ? 90 : 70) * p, hurt ? 0.35 : 0.9, 0.12 * v, 500);
+    } else if (type === 'pig') {
+      this._tone('square', 520 * p, (hurt ? 900 : 380) * p, hurt ? 0.25 : 0.18, 0.05 * v, 1800);
+      if (!hurt) setTimeout(() => this.ctx && this._tone('square', 480 * p, 360 * p, 0.14, 0.04 * v, 1600), 160);
+    } else if (type === 'cow') {
+      this._tone('sawtooth', (hurt ? 220 : 150) * p, (hurt ? 130 : 105) * p, hurt ? 0.4 : 1.1, 0.1 * v, 700);
+    }
+  }
+
+  eat() { this.play('gravel', { volume: 0.45, duration: 0.5, pitch: 1.4 }); }
+
+  pop() {
+    if (!this.ctx) return;
+    this._tone('sine', 700, 1200, 0.08, 0.06);
+  }
+
   click() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

@@ -40,6 +40,10 @@ export class PlayerPhysics {
     this.lastJumpTap = -1;
     this.onLand = null; // callback(fallDistance)
     this.walkDist = 0;
+    this.speedScale = 1; // mobs walk slower than players
+    this.jumps = 0; // counts jumps (used for hunger)
+    this.sprintDist = 0;
+    this.swimDist = 0;
   }
 
   get eyeHeight() { return this.sneaking && !this.flying ? 1.32 : 1.62; }
@@ -194,8 +198,11 @@ export class PlayerPhysics {
 
     // Wish direction from yaw (yaw = 0 looks towards -Z).
     let fx = 0, fz = 0;
-    const f = (c.forward ? 1 : 0) - (c.back ? 1 : 0);
-    const s = (c.right ? 1 : 0) - (c.left ? 1 : 0);
+    let f = (c.forward ? 1 : 0) - (c.back ? 1 : 0);
+    let s = (c.right ? 1 : 0) - (c.left ? 1 : 0);
+    // Analog stick (touch joystick) overrides the keys when used.
+    if ((c.moveX || c.moveZ) && !f && !s) { f = c.moveZ; s = c.moveX; }
+    const mag = Math.min(1, Math.hypot(f, s));
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
     fx = -sin * f + cos * s;
     fz = -cos * f - sin * s;
@@ -212,8 +219,9 @@ export class PlayerPhysics {
     else if (this.sneaking) speed = SPEEDS.sneak;
     else if (this.sprinting) speed = SPEEDS.sprint;
     else speed = SPEEDS.walk;
+    speed *= this.speedScale;
 
-    const tx = fx * speed, tz = fz * speed;
+    const tx = fx * speed * mag, tz = fz * speed * mag;
     let accel;
     if (this.flying) accel = 9;
     else if (this.inWater) accel = 6;
@@ -239,6 +247,7 @@ export class PlayerPhysics {
       if (c.jump && this.onGround) {
         this.vy = JUMP_VELOCITY;
         this.onGround = false;
+        this.jumps++;
       }
       this.vy -= GRAVITY * dt;
       if (this.vy < -TERMINAL) this.vy = -TERMINAL;
@@ -255,6 +264,7 @@ export class PlayerPhysics {
           !this.isSolidAt(Math.floor(this.x), footY + 2, Math.floor(this.z))) {
         this.vy = JUMP_VELOCITY;
         this.onGround = false;
+        this.jumps++;
       }
     }
 
@@ -309,9 +319,10 @@ export class PlayerPhysics {
       this.fallDistance = 0;
     }
 
-    if (this.onGround && !this.flying) {
-      this.walkDist += Math.hypot(this.vx, this.vz) * dt;
-    }
+    const moved = Math.hypot(this.vx, this.vz) * dt;
+    if (this.onGround && !this.flying) this.walkDist += moved;
+    if (this.sprinting && !this.flying) this.sprintDist += moved;
+    if (this.inWater && !this.flying) this.swimDist += moved;
 
     // Keep inside the world vertically.
     if (this.y < -64) {

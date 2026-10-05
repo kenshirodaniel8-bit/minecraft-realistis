@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { TerrainGenerator } from '../public/js/engine/terrain.js';
 import { isValidBlockId } from '../public/js/engine/blocks.js';
+import { isValidItemId } from '../public/js/engine/items.js';
 import { WORLD_HEIGHT, DAY_LENGTH_SECONDS } from '../public/js/engine/constants.js';
 import { normalizeSeed } from '../public/js/engine/noise.js';
 
@@ -283,7 +284,7 @@ export async function createServer(opts = {}) {
           player.yaw = yaw;
           player.pitch = Math.max(-1.6, Math.min(1.6, pitch));
           player.f = isInt(msg.f) ? msg.f & 7 : 0;
-          player.h = isInt(msg.h) && isValidBlockId(msg.h) ? msg.h : 0;
+          player.h = isInt(msg.h) && isValidItemId(msg.h) ? msg.h : 0;
           player.moved = true;
           break;
         }

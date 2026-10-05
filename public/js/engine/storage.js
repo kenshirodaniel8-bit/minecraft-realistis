@@ -121,8 +121,20 @@ export const DEFAULT_SETTINGS = {
   autoTuned: false, // set once the automatic quality check has finished (or the user picked a quality)
 };
 
+function isPhoneOrTablet() {
+  try {
+    return window.matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0;
+  } catch (e) {
+    return false;
+  }
+}
+
 export function loadSettings() {
-  const s = Object.assign({}, DEFAULT_SETTINGS, readJSON('rc.settings', {}));
+  const saved = readJSON('rc.settings', null);
+  const base = Object.assign({}, DEFAULT_SETTINGS);
+  // Phones and tablets start with lighter graphics; the auto check can still adjust.
+  if (!saved && isPhoneOrTablet()) { base.quality = 'medium'; base.renderDistance = 6; }
+  const s = Object.assign(base, saved || {});
   if (!['low', 'medium', 'high', 'ultra'].includes(s.quality)) s.quality = 'high';
   s.renderDistance = Math.max(2, Math.min(16, Number(s.renderDistance) || 8));
   s.fov = Math.max(50, Math.min(110, Number(s.fov) || 75));
@@ -142,6 +154,7 @@ export function loadProfile() {
     slim: !!p.slim,
     preset: typeof p.preset === 'string' ? p.preset : 'explorer',
     server: typeof p.server === 'string' ? p.server : '',
+    mpMode: p.mpMode === 'creative' ? 'creative' : 'survival',
   };
 }
 

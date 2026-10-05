@@ -25,6 +25,7 @@ export const TEXTURE_NAMES = [
   'wool_white', 'wool_red', 'wool_blue', 'wool_green', 'wool_yellow', 'wool_black',
   'bookshelf', 'obsidian', 'granite', 'diorite', 'andesite',
   'podzol_top', 'podzol_side', 'moss_block', 'ice',
+  'crafting_table_top', 'crafting_table_side', 'furnace_front', 'furnace_top',
 ];
 
 export const TEX = {};
@@ -128,8 +129,33 @@ export const B = {
   BIRCH_PLANKS: def(53, 'birch_planks', 'Birch Planks', 'birch_planks', { hardness: 2, sound: 'wood' }),
   JUNGLE_PLANKS: def(54, 'jungle_planks', 'Jungle Planks', 'jungle_planks', { hardness: 2, sound: 'wood' }),
   CLAY: def(55, 'clay', 'Clay', 'clay', { hardness: 0.6, sound: 'gravel' }),
-  ICE: def(56, 'ice', 'Ice', 'ice', { hardness: 0.5, sound: 'glass' }),
+  ICE: def(56, 'ice', 'Ice', 'ice', { hardness: 0.5, sound: 'glass', drop: 0 }),
+  CRAFTING_TABLE: def(57, 'crafting_table', 'Crafting Table', { top: 'crafting_table_top', bottom: 'oak_planks', side: 'crafting_table_side' }, { hardness: 2.5, sound: 'wood' }),
+  FURNACE: def(58, 'furnace', 'Furnace', { top: 'furnace_top', bottom: 'furnace_top', side: 'furnace_front' }, { hardness: 3.5 }),
 };
+
+// Which tool mines a block fastest, and whether a pickaxe of a minimum tier is
+// needed to get anything from it (tiers: 0 wood, 1 stone, 2 iron, 3 diamond).
+const HARVEST = {
+  pickaxe: {
+    0: ['stone', 'cobblestone', 'coal_ore', 'sandstone', 'bricks', 'stone_bricks', 'mossy_cobblestone',
+      'granite', 'diorite', 'andesite', 'furnace', 'bedrock'],
+    1: ['iron_ore'],
+    2: ['gold_ore', 'diamond_ore'],
+    3: ['obsidian'],
+  },
+  pickaxeOptional: ['ice', 'glowstone'],
+  axe: ['oak_log', 'birch_log', 'spruce_log', 'jungle_log', 'oak_planks', 'birch_planks', 'spruce_planks',
+    'jungle_planks', 'bookshelf', 'crafting_table'],
+  shovel: ['grass', 'dirt', 'sand', 'gravel', 'clay', 'snow', 'snowy_grass', 'podzol', 'moss_block'],
+};
+for (const b of BLOCKS) { b.tool = null; b.requiresTool = false; b.tier = 0; }
+for (const [tier, keys] of Object.entries(HARVEST.pickaxe)) {
+  for (const k of keys) Object.assign(BLOCK_BY_NAME[k], { tool: 'pickaxe', requiresTool: true, tier: Number(tier) });
+}
+for (const k of HARVEST.pickaxeOptional) BLOCK_BY_NAME[k].tool = 'pickaxe';
+for (const k of HARVEST.axe) BLOCK_BY_NAME[k].tool = 'axe';
+for (const k of HARVEST.shovel) BLOCK_BY_NAME[k].tool = 'shovel';
 
 export const BLOCK_COUNT = BLOCKS.length;
 
@@ -165,25 +191,9 @@ export const CREATIVE_ORDER = [
   'oak_planks', 'birch_planks', 'spruce_planks', 'jungle_planks', 'bookshelf',
   'oak_leaves', 'birch_leaves', 'spruce_leaves', 'jungle_leaves',
   'glass', 'ice', 'snow', 'snowy_grass', 'podzol', 'moss_block',
-  'torch', 'glowstone', 'obsidian', 'bedrock',
+  'torch', 'glowstone', 'obsidian', 'bedrock', 'crafting_table', 'furnace',
   'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore',
   'white_wool', 'red_wool', 'blue_wool', 'green_wool', 'yellow_wool', 'black_wool',
   'tall_grass', 'fern', 'poppy', 'dandelion', 'cornflower', 'dead_bush', 'vines', 'cactus',
   'water',
 ].map((k) => BLOCK_BY_NAME[k].id);
-
-// Simple survival crafting recipes (ingredients -> result).
-export const RECIPES = [
-  { in: [[B.OAK_LOG, 1]], out: [B.OAK_PLANKS, 4] },
-  { in: [[B.BIRCH_LOG, 1]], out: [B.BIRCH_PLANKS, 4] },
-  { in: [[B.SPRUCE_LOG, 1]], out: [B.SPRUCE_PLANKS, 4] },
-  { in: [[B.JUNGLE_LOG, 1]], out: [B.JUNGLE_PLANKS, 4] },
-  { in: [[B.OAK_PLANKS, 1], [B.COAL_ORE, 1]], out: [B.TORCH, 4] },
-  { in: [[B.SAND, 4]], out: [B.SANDSTONE, 1] },
-  { in: [[B.SAND, 1], [B.COAL_ORE, 1]], out: [B.GLASS, 2] },
-  { in: [[B.COBBLESTONE, 1], [B.COAL_ORE, 1]], out: [B.STONE, 4] },
-  { in: [[B.STONE, 4]], out: [B.STONE_BRICKS, 4] },
-  { in: [[B.CLAY, 2], [B.COAL_ORE, 1]], out: [B.BRICKS, 2] },
-  { in: [[B.OAK_PLANKS, 6]], out: [B.BOOKSHELF, 1] },
-  { in: [[B.GOLD_ORE, 1], [B.SANDSTONE, 1]], out: [B.GLOWSTONE, 1] },
-];

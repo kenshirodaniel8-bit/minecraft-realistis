@@ -832,6 +832,62 @@ function sandstoneSide(T) {
   T.normalStrength = 2;
 }
 
+function craftingTableTop(T) {
+  planks(T, [168, 130, 82]);
+  // Dark frame + 3x3 work grid
+  T.each((x, y) => {
+    const edge = x < 4 || y < 4 || x > S - 5 || y > S - 5;
+    const grid = (x > 6 && x < S - 7 && y > 6 && y < S - 7) && ((x - 7) % 17 < 2 || (y - 7) % 17 < 2);
+    if (edge) { T.set(x, y, shade([104, 74, 44], 0.85 + T.rand() * 0.2)); T.H(x, y, 0.75); }
+    else if (grid) { T.set(x, y, shade([70, 50, 30], 0.9 + T.rand() * 0.15)); T.H(x, y, 0.3); }
+  });
+}
+
+function craftingTableSide(T) {
+  planks(T, [150, 112, 70]);
+  T.each((x, y) => {
+    if (y < 10) { T.set(x, y, shade([110, 80, 48], 0.85 + T.rand() * 0.2)); T.H(x, y, 0.75); }
+  });
+  // A saw and a hammer hanging on the side.
+  for (let i = 0; i < 22; i++) {
+    for (let w = 0; w < 6; w++) T.set(10 + i, 20 + w + Math.floor(i / 6), shade([175, 180, 186], 0.85 + T.rand() * 0.2));
+    if (i % 3 === 0) T.set(10 + i, 26 + Math.floor(i / 6), [80, 80, 86]);
+  }
+  for (let y = 18; y < 30; y++) for (let x = 32; x < 36; x++) T.set(x, y, shade([96, 64, 34], 0.9 + T.rand() * 0.2));
+  for (let y = 16; y < 50; y++) for (let x = 44; x < 48; x++) T.set(x, y, shade([120, 84, 44], 0.9 + T.rand() * 0.2));
+  for (let y = 14; y < 22; y++) for (let x = 38; x < 54; x++) T.set(x, y, shade([120, 122, 128], 0.85 + T.rand() * 0.2));
+}
+
+function furnaceFront(T) {
+  stone(T, [118, 118, 116], { cracks: false, variation: 16 });
+  T.each((x, y) => {
+    const edge = x < 3 || y < 3 || x > S - 4 || y > S - 4;
+    if (edge) { T.set(x, y, shade([92, 92, 90], 0.9 + T.rand() * 0.15)); T.H(x, y, 0.8); }
+    // Fire opening
+    if (x >= 16 && x < 48 && y >= 34 && y < 54) {
+      const inner = x >= 19 && x < 45 && y >= 37 && y < 51;
+      if (inner) {
+        const t = (y - 37) / 14;
+        const fire = T.rand() < 0.5 + t * 0.4;
+        T.set(x, y, fire ? mixc([255, 200, 80], [200, 60, 10], T.rand() * (1 - t * 0.5)) : [24, 20, 18]);
+        T.H(x, y, 0.1);
+        T.R(x, y, 0.9);
+      } else {
+        T.set(x, y, shade([60, 60, 60], 0.9 + T.rand() * 0.1));
+        T.H(x, y, 0.35);
+      }
+    }
+    if (x >= 16 && x < 48 && y >= 14 && y < 18) { T.set(x, y, [40, 40, 40]); T.H(x, y, 0.2); }
+  });
+}
+
+function furnaceTop(T) {
+  stone(T, [112, 112, 110], { cracks: false, variation: 14 });
+  T.each((x, y) => {
+    if (x < 3 || y < 3 || x > S - 4 || y > S - 4) { T.set(x, y, shade([90, 90, 88], 0.9 + T.rand() * 0.15)); T.H(x, y, 0.8); }
+  });
+}
+
 const PAINTERS = {
   stone: (T) => stone(T, [124, 124, 121]),
   dirt: (T) => dirt(T),
@@ -898,6 +954,10 @@ const PAINTERS = {
   podzol_side: (T) => podzolSide(T),
   moss_block: (T) => moss(T),
   ice: (T) => ice(T),
+  crafting_table_top: (T) => craftingTableTop(T),
+  crafting_table_side: (T) => craftingTableSide(T),
+  furnace_front: (T) => furnaceFront(T),
+  furnace_top: (T) => furnaceTop(T),
 };
 
 // ---------------------------------------------------------------------------

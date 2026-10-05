@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Realistis – a realistic Minecraft-style voxel sandbox in your browser with singleplayer, multiplayer and custom skins.">
   <title>Realistis</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23795232'/%3E%3Crect width='16' height='5' fill='%2356a83a'/%3E%3Crect y='5' width='16' height='1' fill='%23417f2c'/%3E%3C/svg%3E">
@@ -34,7 +34,10 @@
       <div id="held-name"></div>
       <div id="bars">
         <div id="hearts" hidden></div>
-        <div id="air" hidden></div>
+        <div class="right-bars">
+          <div id="air" hidden></div>
+          <div id="hunger" hidden></div>
+        </div>
       </div>
       <div id="hotbar"></div>
     </div>
@@ -42,8 +45,8 @@
 
   <div id="click-to-play" class="overlay" hidden>
     <div class="panel small">
-      <h2>Click to play</h2>
-      <p class="muted">Move: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> · Look: mouse · Pause: <kbd>Esc</kbd></p>
+      <h2 id="ctp-title">Click to play</h2>
+      <p class="muted" id="ctp-help">Move: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> · Look: mouse · Pause: <kbd>Esc</kbd></p>
     </div>
   </div>
 
@@ -82,8 +85,20 @@
     <section id="screen-main" class="screen" hidden>
       <h1 class="logo">REALIS<span>TIS</span></h1>
       <p class="tagline">A realistic voxel sandbox</p>
+      <div class="mode-cards">
+        <button class="mode-card survival" data-mode="survival">
+          <span class="num">1</span>
+          <span class="mode-title">Survival</span>
+          <span class="mode-desc">Gather wood and stone, craft tools, hunt for food and survive the zombies at night.</span>
+        </button>
+        <button class="mode-card creative" data-mode="creative">
+          <span class="num">2</span>
+          <span class="mode-title">Creative</span>
+          <span class="mode-desc">Every block for free, fly anywhere and build whatever you can imagine.</span>
+        </button>
+      </div>
       <div class="buttons">
-        <button data-go="single" class="primary">Singleplayer</button>
+        <button data-go="single" data-filter="">My Worlds</button>
         <button data-go="multi">Multiplayer</button>
         <button data-go="skin">Skin &amp; Profile</button>
         <div class="row">
@@ -96,12 +111,12 @@
 
     <section id="screen-single" class="screen" hidden>
       <div class="panel wide">
-        <h2>Select World</h2>
+        <h2 id="worlds-title">Select World</h2>
         <div id="world-list" class="list"></div>
         <p id="storage-warning" class="warn" hidden>Your browser blocks saving (private mode?). Worlds will be lost when you close the tab.</p>
         <div class="row">
           <button id="btn-play-world" class="primary" disabled>Play Selected World</button>
-          <button data-go="create">Create New World</button>
+          <button id="btn-new-world" data-go="create">Create New World</button>
         </div>
         <div class="row">
           <button id="btn-delete-world" disabled>Delete</button>
@@ -117,13 +132,14 @@
         <label>Seed (leave empty for random) <input id="new-world-seed" maxlength="40" placeholder="e.g. jungle123"></label>
         <label>Game mode
           <select id="new-world-mode">
-            <option value="creative">Creative – unlimited blocks, flying</option>
-            <option value="survival">Survival – health, mining, crafting</option>
+            <option value="survival">1. Survival – health, hunger, mining, crafting, monsters</option>
+            <option value="creative">2. Creative – unlimited blocks, flying</option>
           </select>
         </label>
+        <label class="check" id="peaceful-row"><input id="new-world-peaceful" type="checkbox"> Peaceful (no monsters at night)</label>
         <div class="row">
           <button id="btn-create-world" class="primary">Create World</button>
-          <button data-go="single">Cancel</button>
+          <button id="btn-create-cancel">Cancel</button>
         </div>
       </div>
     </section>
@@ -133,6 +149,11 @@
         <h2>Multiplayer</h2>
         <label>Your name <input id="mp-name" maxlength="16"></label>
         <label>Server address <input id="mp-server" placeholder="e.g. 192.168.1.20:3000"></label>
+        <div class="mode-pick">
+          <span>Play as:</span>
+          <label class="check"><input type="radio" name="mp-mode" value="survival"> 1. Survival</label>
+          <label class="check"><input type="radio" name="mp-mode" value="creative"> 2. Creative</label>
+        </div>
         <p class="muted small">Start a server with <code>npm start</code>. Friends on your network open the game at <code>http://YOUR-IP:3000</code> or enter your address here. Leave empty to join the server this page came from.</p>
         <p id="mp-status" class="status"></p>
         <div class="row">
@@ -208,8 +229,8 @@
           <tr><td><kbd>Space</kbd></td><td>Jump / swim up · double-tap to fly (creative)</td></tr>
           <tr><td><kbd>Shift</kbd></td><td>Sneak (won't fall off edges) / fly down</td></tr>
           <tr><td><kbd>R</kbd> or double-tap <kbd>W</kbd></td><td>Sprint</td></tr>
-          <tr><td>Left click</td><td>Break block (hold in survival)</td></tr>
-          <tr><td>Right click</td><td>Place block</td></tr>
+          <tr><td>Left click</td><td>Break block (hold in survival) / attack</td></tr>
+          <tr><td>Right click</td><td>Place block / hold to eat food</td></tr>
           <tr><td>Middle click</td><td>Pick block</td></tr>
           <tr><td><kbd>1</kbd>–<kbd>9</kbd> / mouse wheel</td><td>Select hotbar slot</td></tr>
           <tr><td><kbd>E</kbd></td><td>Inventory (creative block picker / survival crafting)</td></tr>
@@ -218,6 +239,8 @@
           <tr><td><kbd>F1</kbd> · <kbd>F2</kbd> · <kbd>F3</kbd></td><td>Hide HUD · Screenshot · Debug info</td></tr>
           <tr><td><kbd>Q</kbd></td><td>Drop one item (survival)</td></tr>
           <tr><td><kbd>Esc</kbd></td><td>Pause menu</td></tr>
+          <tr><td>Phone / tablet</td><td>Left thumb: move · drag elsewhere: look · right buttons: break, place / eat, jump, sneak · tap a hotbar slot to select it</td></tr>
+          <tr><td>Mouse not captured</td><td>Some pages block mouse capture: then hold the mouse button and drag to look</td></tr>
         </table>
         <div class="row"><button id="btn-controls-done" class="primary">Done</button></div>
       </div>

@@ -5,8 +5,13 @@ the trees, animated water that mirrors the world around it, waving grass and lea
 stars and moonlight, warm torch lighting in caves, and high-resolution (64×64) textures with
 normal maps.
 
-It has **singleplayer** (worlds are saved in your browser), **multiplayer** (play together with
-friends), and **custom skins** (upload any Minecraft-format skin `.png`).
+Pick **1. Survival** (gather, craft tools, eat, survive zombies at night) or **2. Creative**
+(every block, flying, instant building) right on the title screen. It also has **singleplayer**
+(worlds are saved in your browser), **multiplayer** (play together with friends), **custom skins**
+(upload any Minecraft-format skin `.png`) and **touch controls** for phones and tablets.
+
+**Play in your browser, no install:** https://claude.ai/artifact/EkrewQJMC27wXaaCMS3WSj
+(singleplayer; for multiplayer run the server as described below).
 
 ![Jungle with sun rays](docs/screenshots/jungle-sunrays.jpg)
 
@@ -26,7 +31,10 @@ friends), and **custom skins** (upload any Minecraft-format skin `.png`).
    ```
 
 3. Open **http://localhost:3000** in Chrome, Edge or Firefox.
-4. Click **Singleplayer → Create New World → Create World**, then click the screen to play.
+4. On the title screen click **1 · Survival** or **2 · Creative** (or press the **1** / **2** key).
+   The first time, a new world is created for you; after that you get your list of worlds for
+   that mode. Click the screen to start playing. **My Worlds** lists every world and lets you
+   create one with your own name, seed and mode.
 
 ## Controls
 
@@ -37,24 +45,60 @@ friends), and **custom skins** (upload any Minecraft-format skin `.png`).
 | **Space** | Jump / swim up — double-tap to fly (creative) |
 | **Shift** | Sneak (you won't fall off edges) / fly down |
 | **R** or double-tap **W** | Sprint |
-| Left click | Break block (hold it in survival) |
-| Right click | Place block |
+| Left click | Break block (hold it in survival) / attack |
+| Right click | Place block / hold to eat food |
 | Middle click | Pick the block you are looking at |
 | **1–9** / mouse wheel | Choose hotbar slot |
 | **E** | Inventory: block picker (creative) or inventory + crafting (survival) |
+| **Q** | Drop one of the held item (survival) |
 | **T**, **Enter** or **/** | Chat and commands (`/help`) |
 | **F5** or **V** | First / third person view |
 | **F1** / **F2** / **F3** | Hide HUD / screenshot / debug info |
 | **Esc** | Pause menu (settings, save & quit) |
 
 Chat commands: `/time set day|noon|sunset|night|midnight`, `/gamemode creative|survival`,
-`/tp x y z`, `/spawn`, `/seed`, `/fly`, and `/list` on servers.
+`/tp x y z`, `/spawn`, `/seed`, `/fly`, `/give <item> [count]` (e.g. `/give iron_pickaxe`),
+`/peaceful` (turn monsters off or on), and `/list` on servers.
+
+**Phones and tablets:** move with the joystick on the left, drag anywhere else to look, and use
+the buttons on the right to break, place / eat, jump and sneak. The buttons at the top open the
+inventory, change the view, go fullscreen and pause. Tap a hotbar slot to select it.
+
+**If the mouse can't be captured** (some embedded pages and browser settings block it), the
+game switches to drag-to-look by itself: hold the mouse button and drag to look around, click
+to break, right-click to place.
 
 ## Game modes
 
-- **Creative** – every block is available, instant breaking, flying.
-- **Survival** – health and fall damage, drowning, blocks take time to mine and drop into
-  your inventory, simple crafting (logs → planks, torches, glass, bricks, …).
+### 1. Survival
+
+You start with nothing. Your health and hunger bars sit above the hotbar.
+
+1. **Wood:** hold left click on a tree trunk to get logs. Open the inventory (**E**) and craft
+   planks, then sticks and a **crafting table**. Place the table: recipes marked
+   *Crafting Table* only work within a few blocks of it.
+2. **Tools:** a wooden pickaxe can mine stone; stone tools mine iron ore; iron tools mine gold
+   and diamond ore; only a diamond pickaxe mines obsidian. Mining with the right tool is much
+   faster, and some blocks drop nothing without it. Axes are best for wood, shovels for dirt,
+   sand and gravel, swords for fighting. Tools wear out (the bar under the slot).
+3. **Furnace:** craft one from 8 cobblestone and stand near it to smelt iron and gold ore into
+   ingots, cook meat, and make glass, smooth stone and bricks. Coal comes from coal ore, or
+   smelt 2 logs into 1 coal.
+4. **Food:** running, jumping, swimming and healing make you hungry. Pigs and cows drop raw
+   meat; cook it in the furnace for much more food. Leaves sometimes drop apples. Hold right
+   click with food in your hand to eat. With a full food bar you slowly heal; with an empty
+   one you lose health.
+5. **Night:** zombies spawn in the dark and at night, and burn up when the sun rises. Fight
+   them with a sword (attacks while falling are critical hits), or build a shelter and light
+   it with torches. Choose *Peaceful* when creating a world, or type `/peaceful`, if you just
+   want to explore.
+
+Long falls and drowning hurt. When you die you respawn at the world spawn.
+
+### 2. Creative
+
+Every block and item is available in the inventory (**E**) with a search box, blocks break
+instantly, you can't take damage, and double-tapping **Space** toggles flying.
 
 ## Multiplayer
 
@@ -66,8 +110,9 @@ Chat commands: `/time set day|noon|sunset|night|midnight`, `/gamemode creative|s
   host (Render, Railway, Fly.io, a VPS…). Players enter the address in **Multiplayer**.
   If the game page is opened over `https://`, the server must also use `https`/`wss`.
 
+Each player chooses **Survival** or **Creative** on the Multiplayer screen before joining.
 Everyone shares the same world: block changes, chat, the time of day and player skins are
-synced. The server saves the world to `server/data/world.json` every 30 seconds and when it
+synced. Animals and monsters are singleplayer-only for now. The server saves the world to `server/data/world.json` every 30 seconds and when it
 stops.
 
 Server options (environment variables):
@@ -76,7 +121,7 @@ Server options (environment variables):
 |---|---|---|
 | `PORT` | Port to listen on | `3000` |
 | `SEED` | Seed for a new world | random |
-| `GAMEMODE` | `creative` or `survival` for new worlds | `creative` |
+| `GAMEMODE` | Mode for players whose game doesn't send one | `creative` |
 | `MAX_PLAYERS` | Player limit | `20` |
 | `RESET=1` | Start a fresh world (the old one is backed up) | |
 
@@ -101,27 +146,36 @@ your computer struggles. You can always change it: open **Settings** and choose 
 
 The game needs a browser with WebGL 2 (all current versions of Chrome, Edge, Firefox and Safari).
 
-## Play without installing (GitHub Pages)
+On phones and tablets the game starts on **Medium** graphics with a shorter render distance.
 
-Singleplayer also works as a static website:
+## Play without installing
 
-1. On GitHub open **Settings → Pages** and set **Source** to **GitHub Actions**.
-2. Open **Actions → Deploy to GitHub Pages → Run workflow**.
+Singleplayer works as a static website, without the Node.js server:
 
-To build the static files yourself, run `npm run build:static` and upload the `dist` folder to
-any static web host.
+- **GitHub Pages:** on GitHub open **Settings → Pages** and set **Source** to
+  **GitHub Actions**, then open **Actions → Deploy to GitHub Pages → Run workflow**.
+- **Any web host:** run `npm run build:static` and upload the `dist` folder.
+- **Hosts that wrap pages in their own HTML** (like the play link above): run
+  `node scripts/build-static.js --embedded`. This writes `dist-embedded`, which loads three.js
+  from the jsDelivr CDN.
+
+If web workers or pointer lock are blocked on a host, the game falls back to running world
+generation on the main thread and to drag-to-look.
 
 ## For developers
 
 ```
 public/            browser game (no build step, plain ES modules + three.js)
-  js/engine/       world generation, meshing, lighting, rendering, physics, networking
-  js/ui/           HUD, inventory, block icons
+  js/engine/       world generation, meshing, lighting, rendering, physics, networking,
+                   items.js / survival.js (tools, recipes, hunger, inventory), mobs.js
+  js/ui/           HUD, inventory, block and item icons, touch controls
 server/server.js   static file server + WebSocket multiplayer server
+scripts/           static build
 tests/             unit and integration tests (node --test)
 ```
 
-- `npm test` runs the tests (terrain, lighting, meshing, player physics, multiplayer server).
+- `npm test` runs the tests (terrain, lighting, meshing, player physics, survival rules,
+  crafting, worker fallback, multiplayer server).
 - Terrain generation, lighting and meshing run in Web Workers. Every chunk is a pure function of
   the world seed, so only player edits are saved and sent over the network.
 - All textures and sounds are generated in code, so there are no asset files to download.

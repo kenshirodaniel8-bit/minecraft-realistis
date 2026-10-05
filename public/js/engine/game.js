@@ -5,11 +5,17 @@ import * as THREE from 'three';
 import { World } from './world.js';
 import { PlayerPhysics } from './player.js';
 import { Input } from './input.js';
+import { TouchControls } from '../ui/touch.js';
 import { HandView } from './hand.js';
 import { Particles } from './particles.js';
 import { PlayerModel } from './skin.js';
 import { RemotePlayer, FLAG_SNEAK, FLAG_FLY, FLAG_SWING } from './entities.js';
-import { B, BLOCKS, IS_SOLID, CREATIVE_ORDER, RECIPES, isValidBlockId } from './blocks.js';
+import { B, BLOCKS, IS_SOLID, CREATIVE_ORDER, isValidBlockId } from './blocks.js';
+import { I, isValidItemId, itemName, getFood, getTool, isItemId, CREATIVE_ITEMS } from './items.js';
+import {
+  Hunger, Inventory, RECIPES, breakTime, getDrops, attackDamage, toolWear, isPlaceable, MAX_FOOD,
+} from './survival.js';
+import { MobManager } from './mobs.js';
 import { WORLD_HEIGHT, DAY_LENGTH_SECONDS, MAX_REACH, CHUNK_SIZE } from './constants.js';
 import { TerrainGenerator, BIOME_NAMES } from './terrain.js';
 import { U } from './materials.js';
@@ -18,7 +24,6 @@ import { saveWorld } from './storage.js';
 const PHYSICS_DT = 1 / 60;
 const MAX_HEALTH = 20;
 const MAX_AIR = 15;
-const STACK = 64;
 const SUPPORT_BLOCKS = new Set([B.GRASS, B.DIRT, B.PODZOL, B.MOSS_BLOCK, B.SNOW_GRASS]);
 
 const DEFAULT_HOTBAR = ['grass', 'dirt', 'stone', 'cobblestone', 'oak_planks', 'oak_log', 'glass', 'torch', 'oak_leaves'];
@@ -108,10 +113,14 @@ export class Game {
     this.regenTimer = 0;
     this.drownTimer = 0;
 
-    // Inventory: 36 slots (0-8 hotbar). Each slot is null or { id, count }.
-    this.slots = new Array(36).fill(null);
+    // Inventory: 36 slots (0-8 hotbar). Each slot is null or { id, count, dmg }.
+    this.inv = new Inventory(36);
     this.selected = 0;
-    this.cursor = null;
+    this.hunger = new Hunger();
+    this.eating = 0;
+    this.attackCooldown = 0;
+    this.peaceful = false;
+    this.mobs = null;
 
     this.dayTime = 0.04;
     this.clock = 0;
@@ -169,13 +178,31 @@ export class Game {
     // Local player model (seen in third person and as a shadow in first person).
     this.model = new PlayerModel(opts.skinCanvas, opts.slim);
     this.scene.add(this.model.group);
-    this.hand = new HandView(this.r.handScene, opts.skinCanvas, opts.slim);
+    this.hand = new HandView(this.r.handScene, opts.skinCanvas, opts.slim, opts.itemCanvases);
     this.hand.visible = !this.demo;
+    if (this.mode === 'single') this.mobs = new MobManager(this);
 
     if (!this.demo) {
       this.input = new Input(this.r.canvas);
       this.input.onLockChange = (locked) => this._onLockChange(locked);
       this.input.onKeyDown = (e) => this._onKeyDown(e);
+      this.input.onModeChange = () => {
+        this.hud.setFreeLook(true, this.input.touch);
+        this.hud.toast('Mouse capture is blocked here – drag with the mouse to look around');
+      };
+      this.hud.setFreeLook(this.input.mode === 'free', this.input.touch);
+      if (this.input.touch) {
+        this.touchUI = new TouchControls(this.input, {
+          inventory: () => this.openInventory(),
+          view: () => { this.thirdPerson = (this.thirdPerson + 1) % 3; },
+          pause: () => this.input.exitLock(),
+          fullscreen: () => {
+            if (document.fullscreenElement) document.exitFullscreen?.();
+            else document.documentElement.requestFullscreen?.().catch(() => {});
+          },
+          selectSlot: (i) => { this.selected = i; this._refreshHotbar(true); },
+        });
+      }
     }
 
     this._onVisibility = () => { if (document.hidden && this.mode === 'single' && this.ready) this.save(); };
@@ -194,6 +221,7 @@ export class Game {
       const rec = this.record;
       this.world.importEdits(rec.edits || {});
       this.gameMode = rec.mode === 'survival' ? 'survival' : 'creative';
+      this.peaceful = !!rec.peaceful;
       this.dayTime = typeof rec.time === 'number' ? rec.time : 0.04;
       if (rec.spawn) this.spawn = rec.spawn;
       else {
@@ -205,23 +233,25 @@ export class Game {
         this._placePlayer(p.x, p.y, p.z, p.yaw || 0, p.pitch || 0);
         this.health = Math.max(1, Math.min(MAX_HEALTH, p.health ?? MAX_HEALTH));
         this.player.flying = !!p.flying && this.gameMode === 'creative';
-        if (Array.isArray(p.slots)) this._loadSlots(p.slots);
+        if (Array.isArray(p.slots)) this.inv.load(p.slots);
+        if (p.hunger) this.hunger.load(p.hunger);
         if (Number.isInteger(p.selected)) this.selected = Math.max(0, Math.min(8, p.selected));
       } else {
         this._placePlayer(this.spawn.x, this.spawn.y, this.spawn.z, 0, 0);
         this.safeSpawnPending = true;
       }
-      if (!this.slots.some((s) => s) && this.gameMode === 'creative') this._defaultHotbar();
+      if (this.inv.isEmpty() && this.gameMode === 'creative') this._defaultHotbar();
     } else if (this.mode === 'multi') {
       const w = this.opts.welcome;
       this.selfId = w.id;
       if (Array.isArray(w.edits)) this.world.importFlatEdits(w.edits);
       this.dayTime = typeof w.time === 'number' ? w.time : 0.1;
       this.spawn = w.spawn || this.spawn;
-      this.gameMode = w.gameMode === 'survival' ? 'survival' : 'creative';
+      const chosen = this.opts.gameMode;
+      this.gameMode = (chosen || w.gameMode) === 'survival' ? 'survival' : 'creative';
       this._placePlayer(this.spawn.x, this.spawn.y, this.spawn.z, 0, 0);
       this.safeSpawnPending = true;
-      this._defaultHotbar();
+      if (this.gameMode === 'creative') this._defaultHotbar();
       for (const p of w.players || []) this._addRemote(p);
       this._setupNetwork();
     } else {
@@ -249,14 +279,8 @@ export class Game {
     });
   }
 
-  _loadSlots(arr) {
-    for (let i = 0; i < 36; i++) {
-      const s = arr[i];
-      if (s && isValidBlockId(s.id) && s.id !== 0 && Number.isInteger(s.count) && s.count > 0) {
-        this.slots[i] = { id: s.id, count: Math.min(STACK, s.count) };
-      } else this.slots[i] = null;
-    }
-  }
+  get slots() { return this.inv.slots; }
+  get cursor() { return this.inv.cursor; }
 
   _applyGameMode() {
     const creative = this.gameMode === 'creative';
@@ -264,6 +288,7 @@ export class Game {
     if (!creative) this.player.flying = false;
     if (this.hud) {
       this.hud.setHealth(this.health, MAX_HEALTH, !creative && !this.demo);
+      this.hud.setHunger(this.hunger.food, MAX_FOOD, !creative && !this.demo);
       this._refreshHotbar();
     }
   }
@@ -428,6 +453,7 @@ export class Game {
     });
 
     // Entities
+    if (this.mobs && this.ready && !(this.paused && this.mode === 'single')) this.mobs.update(dt);
     const playerLight = this.world.getLight(Math.floor(p.x), Math.floor(p.y + 1.2), Math.floor(p.z));
     this.particles.update(dt, this.world, playerLight);
     const now = performance.now() / 1000;
@@ -467,6 +493,7 @@ export class Game {
 
     // Nothing captured the mouse: offer "click to play".
     this.hud.setClickToPlay(!input.locked && !this.paused && !this.dead && !this.hud.isChatOpen() && !this.hud.isInventoryOpen());
+    if (this.touchUI) this.touchUI.show(active);
 
     // Fixed-step physics (frozen while a singleplayer game is paused)
     const frozen = this.paused && this.mode === 'single';
@@ -474,8 +501,9 @@ export class Game {
       forward: input.isDown('forward'), back: input.isDown('back'),
       left: input.isDown('left'), right: input.isDown('right'),
       jump: input.isDown('jump'), sneak: input.isDown('sneak'),
-      sprint: input.isDown('sprint') || input.sprintToggle,
+      sprint: (input.isDown('sprint') || input.sprintToggle) && (this.gameMode !== 'survival' || this.hunger.canSprint()),
       jumpPressed: input.wasPressed('Space'), time: this.clock,
+      moveX: input.moveX, moveZ: input.moveZ,
     } : { time: this.clock };
     this.accum += dt;
     let steps = 0;
@@ -694,6 +722,7 @@ export class Game {
       speed: Math.hypot(p.vx, p.vz),
       bobbing: this.settings.viewBobbing,
       ambient: amb, sun, torch: blk * 1.2,
+      eating: this.eating > 0,
     });
   }
 
@@ -710,9 +739,19 @@ export class Game {
     if (dmg > 0) this.damage(dmg);
   }
 
-  damage(amount) {
+  // source: optional { x, z } of the attacker for knockback.
+  damage(amount, source) {
     if (this.gameMode !== 'survival' || this.dead) return;
     this.health = Math.max(0, this.health - amount);
+    this.hunger.exhaust(0.1);
+    if (source) {
+      const p = this.player;
+      const kx = p.x - source.x, kz = p.z - source.z;
+      const l = Math.hypot(kx, kz) || 1;
+      p.vx += (kx / l) * 6;
+      p.vz += (kz / l) * 6;
+      if (p.onGround) p.vy = 5;
+    }
     this.damageFlash = Math.min(1, this.damageFlash + 0.6);
     this.sound?.hurt();
     this.hud.setHealth(this.health, MAX_HEALTH, true);
@@ -730,12 +769,15 @@ export class Game {
     this.dead = false;
     this.health = MAX_HEALTH;
     this.air = MAX_AIR;
+    this.hunger = new Hunger();
+    if (this.mobs) this.mobs.clearHostileNear(this.spawn.x, this.spawn.z, 24);
     this._placePlayer(this.spawn.x, this.spawn.y, this.spawn.z, 0, 0);
     this.player.fallDistance = 0;
     this.safeSpawnPending = true;
     this.ready = false; // show the loading screen until the spawn area is ready
     this.hud.showDeath(false);
     this.hud.setHealth(this.health, MAX_HEALTH, this.gameMode === 'survival');
+    this.hud.setHunger(this.hunger.food, MAX_FOOD, this.gameMode === 'survival');
     this.input.requestLock();
   }
 
@@ -754,9 +796,17 @@ export class Game {
       this.drownTimer = 0;
     }
     this.hud.setAir(this.air, MAX_AIR, survival && this.air < MAX_AIR - 0.01);
-    if (survival && !this.dead && this.health < MAX_HEALTH) {
-      this.regenTimer += dt;
-      if (this.regenTimer > 4) { this.regenTimer = 0; this.health += 1; this.hud.setHealth(this.health, MAX_HEALTH, true); }
+    // Hunger: sprinting, jumping and swimming make you hungry; a full belly heals.
+    const sprint = p.sprintDist - (this._lastSprint ?? p.sprintDist);
+    const swim = p.swimDist - (this._lastSwim ?? p.swimDist);
+    const jumps = p.jumps - (this._lastJumps ?? p.jumps);
+    this._lastSprint = p.sprintDist; this._lastSwim = p.swimDist; this._lastJumps = p.jumps;
+    if (survival && !this.dead) {
+      this.hunger.exhaust(sprint * 0.1 + swim * 0.015 + jumps * (p.sprinting ? 0.2 : 0.05));
+      const change = this.hunger.update(dt, this.health, MAX_HEALTH);
+      if (change > 0) { this.health = Math.min(MAX_HEALTH, this.health + change); this.hud.setHealth(this.health, MAX_HEALTH, true); }
+      else if (change < 0) this.damage(-change);
+      this.hud.setHunger(this.hunger.food, MAX_FOOD, true);
     }
     // Splash when entering water fast.
     if (p.inWater && !this.wasInWater && this.prevVy < -5) {
@@ -791,7 +841,22 @@ export class Game {
 
   _interact(dt) {
     const input = this.input;
-    const hit = this._target();
+    let hit = this._target();
+    // Creatures in front of the crosshair take priority over blocks behind them.
+    let mobHit = null;
+    if (this.mobs && this.mobs.count) {
+      const p = this.player;
+      const dir = this._dir.set(0, 0, -1).applyEuler(this._euler.set(p.pitch, p.yaw, 0, 'YXZ'));
+      mobHit = this.mobs.raycast(this.interp.x, this.eyeSmooth, this.interp.z, dir.x, dir.y, dir.z, this.gameMode === 'creative' ? 5 : 3.5);
+      if (mobHit && hit && hit.dist < mobHit.dist) mobHit = null;
+      if (mobHit) hit = null;
+    }
+    this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    if (mobHit) {
+      this.highlight.visible = false;
+      this._stopBreaking();
+      if ((input.clicked.has(0) || input.buttons.has(0)) && this.attackCooldown <= 0) this._attack(mobHit.mob);
+    }
     if (hit) {
       this.highlight.visible = true;
       this.highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
@@ -822,12 +887,11 @@ export class Game {
           this.actionCooldown = 0.22;
         }
       } else {
-        const b = BLOCKS[hit.id];
         if (!this.breaking || this.breaking.x !== hit.x || this.breaking.y !== hit.y || this.breaking.z !== hit.z) {
           this.breaking = { x: hit.x, y: hit.y, z: hit.z, progress: 0 };
         }
         if (this.hand.swing === 0) this.hand.startSwing();
-        const time = b.hardness === Infinity ? Infinity : Math.max(0.05, b.hardness * 0.75);
+        const time = breakTime(hit.id, this._heldId());
         this.breaking.progress += dt / time;
         if (this.breaking.progress >= 1) {
           this._breakBlock(hit.x, hit.y, hit.z, hit.id);
@@ -848,8 +912,16 @@ export class Game {
       this._stopBreaking();
     }
 
-    // Place
+    // Eat (hold right click with food)
     const rightDown = input.buttons.has(2) || input.clicked.has(2);
+    const food = getFood(this._heldId());
+    if (rightDown && food && this.gameMode === 'survival' && this.hunger.canEat()) {
+      this._eat(dt, food);
+      return;
+    }
+    this.eating = 0;
+
+    // Place
     if (rightDown && hit && (input.clicked.has(2) || this.placeCooldown <= 0)) {
       if (this._placeBlock(hit)) {
         this.hand.startSwing();
@@ -897,15 +969,83 @@ export class Game {
     if (this.gameMode === 'survival' && b.hardness === Infinity) return;
     if (!this.world.setBlock(x, y, z, B.AIR)) return;
     this._breakEffects(x, y, z, id);
-    if (this.gameMode === 'survival' && b.drop) this.addItem(b.drop, 1);
+    if (this.gameMode === 'survival') {
+      const held = this._heldId();
+      const drops = getDrops(id, held);
+      if (drops.length) this.addDrops(drops, false);
+      this.hunger.exhaust(0.005);
+      if (b.hardness > 0 && this.inv.wear(this.selected, toolWear(held, 'mine'))) this._toolBroke(held);
+      this._refreshHotbar();
+    }
+  }
+
+  _heldId() {
+    const s = this.inv.slots[this.selected];
+    return s ? s.id : 0;
+  }
+
+  _toolBroke(id) {
+    this.hud.toast(`Your ${itemName(id)} broke!`);
+    this.sound?.play('stone', { volume: 0.9, pitch: 1.6 });
+    this._refreshHotbar();
+  }
+
+  _attack(mob) {
+    this.hand.startSwing();
+    const held = this._heldId();
+    const dmg = this.gameMode === 'creative' ? 100 : attackDamage(held);
+    // Sprint-hits and falling hits are critical (+50%).
+    const crit = !this.player.onGround && this.player.vy < 0 ? 1.5 : 1;
+    const p = this.player;
+    if (this.mobs.hurt(mob, dmg * crit, { x: p.x, z: p.z })) {
+      if (this.gameMode === 'survival') {
+        this.hunger.exhaust(0.1);
+        if (this.inv.wear(this.selected, toolWear(held, 'attack'))) this._toolBroke(held);
+        this._refreshHotbar();
+      }
+    }
+    this.attackCooldown = 0.45;
+  }
+
+  _eat(dt, food) {
+    this.eating += dt;
+    this.highlight.visible = false;
+    this._stopBreaking();
+    this._eatSound = (this._eatSound || 0) - dt;
+    if (this._eatSound <= 0) {
+      this._eatSound = 0.22;
+      this.sound?.eat();
+      const p = this.player;
+      const fx = p.x - Math.sin(p.yaw) * 0.5, fz = p.z - Math.cos(p.yaw) * 0.5;
+      this.particles.burst(Math.floor(fx), Math.floor(p.y + 1.3), Math.floor(fz), [0.75, 0.45, 0.3], 3, { size: 0.04, up: 1.5, spread: 1, life: 0.4 });
+    }
+    if (this.eating >= 1.6) {
+      this.eating = 0;
+      this.hunger.eat(food);
+      this.inv.consume(this.selected);
+      this.sound?.pop();
+      this.hud.setHunger(this.hunger.food, MAX_FOOD, true);
+      this._refreshHotbar();
+    }
+  }
+
+  // Adds dropped items to the inventory (we auto-collect drops).
+  addDrops(list, announce = true) {
+    for (const [id, n] of list) {
+      const left = this.inv.add(id, n);
+      if (left < n && announce) this.hud.toast(`+${n - left} ${itemName(id)}`);
+      if (left > 0) this.hud.toast('Inventory full!');
+    }
+    this.sound?.pop();
+    this._refreshHotbar();
+    if (this.hud.isInventoryOpen()) this._renderInventory();
   }
 
   _placeBlock(hit) {
     const slot = this.slots[this.selected];
-    if (!slot) return false;
+    if (!slot || !isPlaceable(slot.id)) return false;
     const id = slot.id;
     const b = BLOCKS[id];
-    if (!b || id === 0) return false;
     let x = hit.x, y = hit.y, z = hit.z;
     if (!BLOCKS[hit.id].replaceable || hit.id === id) { x += hit.nx; y += hit.ny; z += hit.nz; }
     if (y < 0 || y >= WORLD_HEIGHT) return false;
@@ -932,8 +1072,7 @@ export class Game {
     if (!this.world.setBlock(x, y, z, id)) return false;
     if (this.sound) this.sound.play(b.sound, { volume: 0.8, pitch: 0.8 });
     if (this.gameMode === 'survival') {
-      slot.count--;
-      if (slot.count <= 0) this.slots[this.selected] = null;
+      this.inv.consume(this.selected);
       this._refreshHotbar();
     }
     return true;
@@ -965,50 +1104,41 @@ export class Game {
   // ------------------------------------------------------------------ inventory
 
   addItem(id, count) {
-    for (let i = 0; i < 36 && count > 0; i++) {
-      const s = this.slots[i];
-      if (s && s.id === id && s.count < STACK) {
-        const n = Math.min(count, STACK - s.count);
-        s.count += n; count -= n;
-      }
-    }
-    for (let i = 0; i < 36 && count > 0; i++) {
-      if (!this.slots[i]) {
-        const n = Math.min(count, STACK);
-        this.slots[i] = { id, count: n }; count -= n;
-      }
-    }
+    const left = this.inv.add(id, count);
     this._refreshHotbar();
     if (this.hud.isInventoryOpen()) this._renderInventory();
-    return count === 0;
+    return left === 0;
   }
 
   countItem(id) {
-    let n = 0;
-    for (const s of this.slots) if (s && s.id === id) n += s.count;
-    if (this.cursor && this.cursor.id === id) n += this.cursor.count;
-    return n;
+    return this.inv.count(id) + (this.inv.cursor && this.inv.cursor.id === id ? this.inv.cursor.count : 0);
   }
 
-  removeItem(id, count) {
-    for (let i = 35; i >= 0 && count > 0; i--) {
-      const s = this.slots[i];
-      if (s && s.id === id) {
-        const n = Math.min(count, s.count);
-        s.count -= n; count -= n;
-        if (s.count <= 0) this.slots[i] = null;
+  // Crafting tables / furnaces within reach.
+  _stations() {
+    const p = this.player;
+    const found = { table: false, furnace: false };
+    const bx = Math.floor(p.x), by = Math.floor(p.y + 1), bz = Math.floor(p.z);
+    for (let y = by - 3; y <= by + 3; y++) {
+      for (let z = bz - 4; z <= bz + 4; z++) {
+        for (let x = bx - 4; x <= bx + 4; x++) {
+          const id = this.world.getBlock(x, y, z);
+          if (id === B.CRAFTING_TABLE) found.table = true;
+          else if (id === B.FURNACE) found.furnace = true;
+        }
       }
     }
+    return found;
   }
 
-  canCraft(r) { return r.in.every(([id, n]) => this.countItem(id) >= n); }
+  canCraft(r) { return this.inv.canCraft(r, this._stations()); }
 
   craft(index) {
     const r = RECIPES[index];
-    if (!r || this.gameMode !== 'survival' || !this.canCraft(r)) return;
-    for (const [id, n] of r.in) this.removeItem(id, n);
-    this.addItem(r.out[0], r.out[1]);
-    this.sound?.click();
+    if (!r || this.gameMode !== 'survival') return;
+    if (this.inv.craft(r, this._stations())) this.sound?.click();
+    else this.hud.toast(this.inv.canCraft(r, this._stations()) ? 'Inventory full!' : 'Missing ingredients');
+    this._refreshHotbar();
     this._renderInventory();
   }
 
@@ -1021,41 +1151,13 @@ export class Game {
       this._renderInventory();
       return;
     }
-    const s = this.slots[index];
-    const c = this.cursor;
-    if (!c) {
-      if (!s) return;
-      if (button === 2 && s.count > 1) {
-        const half = Math.ceil(s.count / 2);
-        this.cursor = { id: s.id, count: half };
-        s.count -= half;
-      } else {
-        this.cursor = s;
-        this.slots[index] = null;
-      }
-    } else if (!s) {
-      if (button === 2) {
-        this.slots[index] = { id: c.id, count: 1 };
-        c.count--;
-        if (c.count <= 0) this.cursor = null;
-      } else {
-        this.slots[index] = c;
-        this.cursor = null;
-      }
-    } else if (s.id === c.id) {
-      const n = button === 2 ? 1 : Math.min(c.count, STACK - s.count);
-      s.count += n; c.count -= n;
-      if (c.count <= 0) this.cursor = null;
-    } else {
-      this.slots[index] = c;
-      this.cursor = s;
-    }
+    this.inv.click(index, button);
     this._refreshHotbar();
     this._renderInventory();
   }
 
   creativePick(id) {
-    if (!isValidBlockId(id) || id === 0) return;
+    if (!isValidItemId(id)) return;
     this.slots[this.selected] = { id, count: 1 };
     this.sound?.click();
     this._refreshHotbar(true);
@@ -1068,8 +1170,9 @@ export class Game {
       slots: this.slots,
       selected: this.selected,
       cursor: this.cursor,
-      creativeBlocks: CREATIVE_ORDER,
-      recipes: RECIPES.map((r, i) => ({ index: i, r, ok: this.canCraft(r) })),
+      creativeBlocks: CREATIVE_ORDER.concat(CREATIVE_ITEMS),
+      stations: this._stations(),
+      recipes: RECIPES.map((r, i) => ({ index: i, r, ok: this.gameMode === 'survival' && this.canCraft(r) })),
     });
   }
 
@@ -1088,7 +1191,8 @@ export class Game {
 
   closeInventory() {
     if (!this.hud.isInventoryOpen()) return;
-    if (this.cursor) { this.addItem(this.cursor.id, this.cursor.count); this.cursor = null; }
+    this.inv.returnCursor();
+    this._refreshHotbar();
     this.hud.closeInventory();
     this.input.requestLock();
   }
@@ -1098,7 +1202,7 @@ export class Game {
     this.hud.setHotbar(this.slots.slice(0, 9), this.selected, this.gameMode);
     if (showName) {
       const s = this.slots[this.selected];
-      this.hud.showHeldName(s ? BLOCKS[s.id].name : '');
+      this.hud.showHeldName(s ? itemName(s.id) : '');
     }
   }
 
@@ -1132,8 +1236,7 @@ export class Game {
     if (code === 'F1') { this.hideHud = !this.hideHud; hud.setHidden(this.hideHud); this.hand.visible = !this.hideHud; return true; }
     if (code === 'F2') { this.screenshotRequested = true; return true; }
     if (code === 'KeyQ' && this.gameMode === 'survival') {
-      const s = this.slots[this.selected];
-      if (s) { s.count--; if (s.count <= 0) this.slots[this.selected] = null; this._refreshHotbar(); }
+      if (this.inv.consume(this.selected)) this._refreshHotbar();
       return true;
     }
     return false;
@@ -1173,7 +1276,24 @@ export class Game {
     const p = this.player;
     switch ((cmd || '').toLowerCase()) {
       case 'help':
-        hud.addChat('Commands: /time set day|noon|sunset|night|midnight|<0-24000>, /gamemode creative|survival, /tp x y z, /spawn, /seed, /fly', 'system');
+        hud.addChat('Commands: /time set day|noon|sunset|night|midnight|<0-24000>, /gamemode creative|survival, /tp x y z, /spawn, /seed, /fly, /give <item> [count], /peaceful', 'system');
+        break;
+      case 'give': {
+        const key = (args[0] || '').toLowerCase().replace(/^minecraft:/, '');
+        const n = Math.max(1, Math.min(640, Number(args[1]) || 1));
+        const blk = BLOCKS.find((b) => b && b.key === key && b.id !== 0);
+        const itemId = blk ? blk.id : I[key.toUpperCase()];
+        if (!isValidItemId(itemId)) { hud.addChat(`Unknown item: ${key}`, 'system'); break; }
+        this.inv.add(itemId, n);
+        this._refreshHotbar();
+        hud.addChat(`Gave ${n} ${itemName(itemId)}`, 'system');
+        break;
+      }
+      case 'peaceful':
+        if (this.mode !== 'single') { hud.addChat('Only in singleplayer.', 'system'); break; }
+        this.peaceful = !this.peaceful;
+        if (this.record) this.record.peaceful = this.peaceful;
+        hud.addChat(this.peaceful ? 'Peaceful: no monsters.' : 'Monsters are back at night!', 'system');
         break;
       case 'time': {
         if (args[0] !== 'set' || !args[1]) { hud.addChat('Usage: /time set day|noon|sunset|night|midnight|<0-24000>', 'system'); break; }
@@ -1195,6 +1315,7 @@ export class Game {
         if (!mode) { hud.addChat('Usage: /gamemode creative|survival', 'system'); break; }
         this.gameMode = mode;
         if (mode === 'creative' && !this.slots.some((s, i) => i < 9 && s)) this._defaultHotbar();
+        if (mode === 'survival') this.hunger = new Hunger();
         this._applyGameMode();
         hud.addChat(`Game mode set to ${mode}.`, 'system');
         break;
@@ -1247,7 +1368,7 @@ export class Game {
         `Biome: ${BIOME_NAMES[col.biome]}   Light: sky ${l.sky} block ${l.block}`,
         `Time: ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}   Mode: ${this.gameMode}${p.flying ? ' (flying)' : ''}`,
         `Chunks: ${meshed} rendered / ${this.world.chunks.size} loaded   Seed: ${this.seed}`,
-        this.net ? `Players online: ${this.remote.size + 1}` : 'Singleplayer',
+        this.net ? `Players online: ${this.remote.size + 1}` : `Singleplayer  Mobs: ${this.mobs ? this.mobs.count : 0}  Food: ${this.hunger.food}`,
       ].join('\n'));
     } else if (this.showFps) {
       this.hud.setDebug(`${this.fps} fps`);
@@ -1282,8 +1403,10 @@ export class Game {
     rec.player = {
       x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch, flying: p.flying,
       health: this.health, selected: this.selected,
-      slots: this.slots.map((s) => (s ? { id: s.id, count: s.count } : null)),
+      slots: this.inv.serialize(),
+      hunger: this.hunger.serialize(),
     };
+    rec.peaceful = this.peaceful;
     return saveWorld(rec);
   }
 
@@ -1302,9 +1425,11 @@ export class Game {
     document.removeEventListener('visibilitychange', this._onVisibility);
     window.removeEventListener('beforeunload', this._onBeforeUnload);
     if (this.input) { this.input.exitLock(); this.input.dispose(); }
+    if (this.touchUI) { this.touchUI.dispose(); this.touchUI = null; }
     if (this.net) { this.net.onClose = null; this.net.close(); }
     for (const rp of this.remote.values()) rp.dispose();
     this.remote.clear();
+    if (this.mobs) this.mobs.dispose();
     this.world.dispose();
     this.particles.dispose();
     this.scene.remove(this.highlight, this.crack, this.model.group);
