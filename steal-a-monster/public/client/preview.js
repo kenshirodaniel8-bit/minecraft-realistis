@@ -68,8 +68,9 @@ export class MonsterPreview {
       this.views.delete(view);
       return;
     }
-    const w = c.clientWidth || c.width;
-    const h = c.clientHeight || c.height;
+    // hidden canvases (collapsed cards, closed tabs) are skipped
+    const w = c.clientWidth;
+    const h = c.clientHeight;
     if (w < 2 || h < 2) return;
     if (c.width !== w || c.height !== h) {
       c.width = w;

@@ -33,10 +33,11 @@ const save = (page, name) => page.screenshot({ path: path.join(out, `${name}.jpg
   const page = await browser.newPage({ viewport: { width: 1400, height: 820 } });
   await page.goto(`${base}/gallery.html`);
   await page.waitForTimeout(6000);
-  await page.screenshot({ path: path.join(out, 'gallery.png') });
-  await page.goto(`${base}/gallery.html?only=chompkin,draklet,voltkit,owlium,fennix,wolbit&cols=3`);
+  // crop to the monsters (the camera looks down on the grid)
+  await page.screenshot({ path: path.join(out, 'gallery.png'), clip: { x: 0, y: 190, width: 1400, height: 490 } });
+  await page.goto(`${base}/gallery.html?only=chompkin,draklet,voltkit,owlium,fennix&cols=5`);
   await page.waitForTimeout(5000);
-  await save(page, 'gallery-closeup');
+  await page.screenshot({ path: path.join(out, 'gallery-closeup.jpg'), type: 'jpeg', quality: 85, clip: { x: 0, y: 150, width: 1400, height: 520 } });
   await page.close();
 }
 
@@ -49,7 +50,7 @@ await page.waitForFunction(() => window.__app && window.__app.ready, null, { tim
 const s = [...srv.game.players.values()][0];
 // a lived-in profile for the shots
 srv.game.economy.credit(s, 23456, 'shots');
-s.profile.base.slots = 8;
+s.profile.base.slots = 12;
 let slot = 0;
 for (const [sp, lvl] of [['draklet', 3], ['mossbun', 2], ['voltkit', 3], ['puffcorn', 2], ['chompkin', 4], ['bloopfin', 2], ['owlium', 5], ['fennix', 4]]) {
   const m = { id: `mshot${sp}`, species: sp, level: lvl, slot: slot++, following: false, origin: 'recruited', obtainedAt: Date.now() };
@@ -84,11 +85,15 @@ for (const [sp, d, side] of [['chompkin', 9, -3], ['mossbun', 14, 5], ['voltkit'
 await page.evaluate(([yaw]) => { const a = window.__app; a.cam.yaw = yaw; a.cam.pitch = 0.25; a.cam.distance = 14; a.player.yaw = yaw + Math.PI; }, [Math.atan2(-Math.cos(gap), -Math.sin(gap))]);
 await page.waitForTimeout(3500);
 await save(page, 'plains');
-// a fight
+// a fight: a Chompkin right in front, mid-swing
+const foe = ahead(3.2, 0);
+srv.game.monsters.spawn(SPECIES_BY_ID.chompkin, 3, foe.x, foe.z, { region: 'plains' });
+await page.waitForTimeout(1500);
+await page.evaluate(([yaw]) => { const a = window.__app; a.cam.yaw = yaw + 0.5; a.cam.pitch = 0.22; a.cam.distance = 9; a.player.yaw = yaw + Math.PI; }, [Math.atan2(-Math.cos(gap), -Math.sin(gap))]);
 await page.evaluate(() => { const a = window.__app; a.input.setVirtual('attack', true); });
-await page.waitForTimeout(2500);
-await page.evaluate(() => { const a = window.__app; a.input.setVirtual('attack', false); });
+await page.waitForTimeout(1600);
 await save(page, 'battle');
+await page.evaluate(() => { const a = window.__app; a.input.setVirtual('attack', false); });
 // LUCKY LUCKY
 srv.game.events.trigger('luckyLucky');
 srv.game.events.events.luckyLucky.startsAt = Date.now();

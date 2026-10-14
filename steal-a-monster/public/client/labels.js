@@ -48,7 +48,24 @@ export function makeLabel(text, opts = {}) {
   sprite.scale.set(w * scale, h * scale, 1);
   sprite.renderOrder = opts.renderOrder ?? 5;
   sprite.userData.labelText = text;
+  sprite.userData.baseScale = sprite.scale.clone();
+  sprite.onBeforeRender = capOnScreenSize;
   return sprite;
+}
+
+// A label closer to the camera than CAP_DIST shrinks in proportion, so it never
+// looks bigger on screen than it does from CAP_DIST away (no giant names when a
+// monster walks right up to the camera).
+const CAP_DIST = 12;
+const tmpPos = new THREE.Vector3();
+function capOnScreenSize(renderer, scene, camera) {
+  const d = camera.position.distanceTo(tmpPos.setFromMatrixPosition(this.matrixWorld));
+  const k = Math.min(1, Math.max(0.2, d / CAP_DIST));
+  const b = this.userData.baseScale;
+  if (Math.abs(this.scale.x - b.x * k) > 1e-4) {
+    this.scale.set(b.x * k, b.y * k, 1);
+    this.updateMatrixWorld();
+  }
 }
 
 export function disposeLabel(sprite) {

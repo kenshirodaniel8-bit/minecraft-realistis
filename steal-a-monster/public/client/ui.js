@@ -292,7 +292,7 @@ export class UI {
       <div class="note"></div>
       <div class="row"><button class="btn go rec">Recruit (R)</button><button class="btn ghost dec">Let go</button></div>
       <div class="timer"></div>`;
-    $('offers').appendChild(el);
+    $('offers').prepend(el);
     el.querySelector('.rec').onclick = () => this.app.actions.recruit(o.monsterId);
     el.querySelector('.dec').onclick = () => this.app.actions.decline(o.monsterId);
     const view = this.app.preview.attach(el.querySelector('canvas'), o.species, { pose: 'idle', spin: 0.8 });
@@ -300,6 +300,7 @@ export class UI {
     view.st.quirk = sp.personality.idles[0];
     this.offerEls.set(o.monsterId, { el, offer: o, view, total: o.deadline - this.app.serverNow() });
     while (this.offerEls.size > 3) this.removeOffer(this.offerEls.keys().next().value);
+    this.layoutOffers();
   }
 
   removeOffer(id) {
@@ -308,6 +309,17 @@ export class UI {
     this.app.preview.detach(e.view);
     e.el.remove();
     this.offerEls.delete(id);
+    this.layoutOffers();
+  }
+
+  // The newest offer (the one R recruits) is a full card on top; older ones
+  // collapse to a compact row so several offers don't cover the screen.
+  layoutOffers() {
+    const newest = this.firstOfferId();
+    for (const [id, e] of this.offerEls) {
+      e.el.classList.toggle('mini', id !== newest);
+      setText(e.el.querySelector('.rec'), id === newest ? 'Recruit (R)' : 'Recruit');
+    }
   }
 
   updateOffers(serverNow, p) {
@@ -399,7 +411,10 @@ export class UI {
     } else if (name === 'map') {
       title.textContent = '🗺 World Map';
       body.innerHTML = '<canvas id="map-canvas" width="900" height="900"></canvas><p class="muted small" style="text-align:center">Yellow = you · Blue = other players · Squares = bases · Dots = discovered places · Dark = locked</p>';
-      this.app.drawFullMap($('map-canvas'));
+      const mc = $('map-canvas');
+      const px = Math.round(mc.clientWidth * Math.min(2, window.devicePixelRatio || 1));
+      if (px > 0) mc.width = mc.height = px;
+      this.app.drawFullMap(mc);
     } else if (name === 'settings') {
       title.textContent = '⚙ Settings';
       body.innerHTML = this.settingsHtml(s);

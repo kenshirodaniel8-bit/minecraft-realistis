@@ -27,6 +27,7 @@ const NEAR_LABELS = 70;   // pad / lock / upgrade / Money labels
 const HI_MONSTERS = 40;   // detailed monster rigs closer than this
 const SHOW_MONSTERS = 175;
 const SHOW_BASE = 290;
+const PAD_LABEL_DIST = 10; // from the local player
 
 export class BasesView {
   constructor(scene, world, effects, audio) {
@@ -185,7 +186,8 @@ export class BasesView {
           p.label = makeLabel(m.away ? `${sp.name}\n⚠ BEING STOLEN!` : `${sp.name} Lv ${m.level}\n$${m.income}/s`, { scale: 0.013, colors: ['#ffffff', m.away ? '#ff6a7a' : '#7ef06a'] });
           const s = view.base.slots[p.slot];
           p.label.position.set(s.x, view.base.y + 4.6, s.z);
-          p.label.visible = view.near !== false;
+          p.label.visible = false;
+          p.alert = !!m.away;
           view.group.add(p.label);
         }
         p.labelKey = key;
@@ -286,9 +288,11 @@ export class BasesView {
     if (near !== view.near) {
       view.near = near;
       for (const l of view.labels) l.visible = near;
-      for (const p of view.pads) if (p.label) p.label.visible = near;
       if (view.storedLabel) view.storedLabel.visible = near;
     }
+    // the big owner sign is for spotting bases from afar; up close it would
+    // hide the monsters behind it
+    if (view.sign) view.sign.visible = d > b.half + 20;
     for (const [id, m] of view.monsters) {
       const wantLo = m.rig.lod === 'lo' ? d > HI_MONSTERS - 6 : d > HI_MONSTERS;
       if (wantLo !== (m.rig.lod === 'lo')) {
@@ -315,9 +319,16 @@ export class BasesView {
 
   update(dt, t, players, camPos) {
     this.frame = (this.frame || 0) + 1;
+    const me = players[0];
     for (const view of this.views) {
       if (camPos) this.applyDistance(view, camPos);
       if (!view.state) continue;
+      // pad labels (name, level, income) only for the pads you walk up to
+      for (const p of view.pads) {
+        if (!p.label) continue;
+        const s = view.base.slots[p.slot];
+        p.label.visible = view.near && (p.alert || (!!me && Math.hypot(me.x - s.x, me.z - s.z) < PAD_LABEL_DIST));
+      }
       view.coin.rotation.z = t * 2;
       view.coin.position.y = view.base.y + 2.2 + Math.sin(t * 2) * 0.2;
       if (view.locked) {

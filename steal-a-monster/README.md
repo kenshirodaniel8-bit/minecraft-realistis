@@ -12,6 +12,17 @@ Socket.IO** (server). Not a Roblox game: no Roblox Studio, APIs or Luau.
 
 **FIND → BATTLE → DEFEAT → PAY → RECRUIT → RETURN TO BASE → COLLECT → PROTECT (or STEAL)**
 
+| | |
+|---|---|
+| ![Out in the plains](docs/screenshots/plains.jpg) | ![A defeated monster and its recruit card](docs/screenshots/battle.jpg) |
+| ![A base full of monsters earning Money](docs/screenshots/base.jpg) | ![LUCKY LUCKY event with Lucky Blocks](docs/screenshots/lucky-lucky.jpg) |
+| ![Monster inspector](docs/screenshots/inspect.jpg) | ![World map](docs/screenshots/map.jpg) |
+
+![Five of the 44 monsters up close](docs/screenshots/gallery-closeup.jpg)
+
+*Screenshots are from headless Chromium with software rendering
+(`node scripts/screenshots.mjs`).*
+
 ---
 
 ## Quick start
@@ -151,7 +162,7 @@ play (there is no single-player fallback).
 | `MAX_PLAYERS` | Players per server (max 12 = number of base plots) | `12` |
 | `EXPANSION_THRESHOLDS` | Players needed to open Bloomveil,Starfall | `3,6` |
 | `LUCKY_EVENT_FIRST_MS` / `LUCKY_EVENT_INTERVAL_MS` | LUCKY LUCKY timing | 4 min / 14 min |
-| `DEV_COMMANDS=1` | Enables `/lucky`, `/money N`, `/level N`, `/night`, `/day`, `/spawn <species>` in chat | off |
+| `DEV_COMMANDS=1` | Enables `/lucky`, `/money N`, `/level N`, `/night`, `/day`, `/spawn <species>`, `/tp X Z` in chat | off |
 | `NODE_ENV=production` | Longer browser caching | |
 
 Example: `PORT=8080 DATA_DIR=/var/lib/steal-a-monster NODE_ENV=production npm start`.

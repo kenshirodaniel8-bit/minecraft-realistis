@@ -223,6 +223,11 @@ export class MapRenderer {
   drawFull(canvas, s) {
     const ctx = canvas.getContext('2d');
     const W = canvas.width;
+    // canvas pixels per CSS pixel, so text keeps its size however big the map
+    // is shown; the label size itself follows the map's on-screen size
+    const cssW = canvas.clientWidth || W;
+    const ui = W / cssW;
+    const fontPx = Math.max(8.5, Math.min(12, cssW / 52));
     ctx.clearRect(0, 0, W, W);
     ctx.fillStyle = '#1e4a7a';
     ctx.fillRect(0, 0, W, W);
@@ -239,8 +244,8 @@ export class MapRenderer {
     const insets = [];
     this.islands.forEach((isl, i) => {
       const sz = W * 0.22;
-      const x = i === 0 ? W - sz - 10 : 10;
-      const y = W - sz - 10;
+      const x = i === 0 ? W - sz - 10 * ui : 10 * ui;
+      const y = W - sz - 10 * ui;
       ctx.save();
       ctx.beginPath();
       ctx.arc(x + sz / 2, y + sz / 2, sz / 2, 0, Math.PI * 2);
@@ -252,15 +257,17 @@ export class MapRenderer {
         ctx.fillRect(x, y, sz, sz);
       }
       ctx.restore();
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 4 * ui;
       ctx.strokeStyle = '#241640';
       ctx.beginPath();
       ctx.arc(x + sz / 2, y + sz / 2, sz / 2, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.font = '800 13px "Trebuchet MS", system-ui';
+      ctx.font = `800 ${Math.round(fontPx * ui)}px "Trebuchet MS", system-ui`;
       ctx.textAlign = 'center';
       ctx.fillStyle = '#fff';
-      ctx.fillText(`${isl.region.name}${open ? '' : ` (${s.minPop?.[isl.region.id] ?? isl.region.minPopulation}+ players)`}`, x + sz / 2, y - 6);
+      const label = `${isl.region.name}${open ? '' : ` (${s.minPop?.[isl.region.id] ?? isl.region.minPopulation}+ players)`}`;
+      const half = ctx.measureText(label).width / 2 + 4 * ui;
+      ctx.fillText(label, Math.min(W - half, Math.max(half, x + sz / 2)), y - 6 * ui);
       insets.push({ isl, x, y, sz });
     });
     ctx.save();
@@ -310,18 +317,19 @@ export class MapRenderer {
     for (const r of REGIONS) {
       if (r.shape.kind === 'island') continue;
       let c = regionCenter(r);
-      if (r.shape.kind === 'ring') c = { x: Math.cos(2.36) * 535, z: Math.sin(2.36) * 535 };
-      if (r.id === 'plains') c = { x: 0, z: -58 };
+      // (upper left: the island insets sit in the lower corners)
+      if (r.shape.kind === 'ring') c = { x: Math.cos(-2.36) * 535, z: Math.sin(-2.36) * 535 };
+      if (r.id === 'plains') c = { x: 0, z: -118 };
       // regions centred on the horizontal axis: stagger inner/outer labels
-      if (r.shape.kind === 'sector' && Math.abs(c.z) < 60) c = { x: c.x, z: c.z + (r.shape.r1 === RING.hub ? -34 : 34) };
+      if (r.shape.kind === 'sector' && Math.abs(c.z) < 60) c = { x: c.x, z: c.z + (r.shape.r1 === RING.hub ? 34 : -34) };
       const reason = regionLockReason(r, s.progress, s.active);
       const lines = [r.name];
       if (reason && r.id !== 'plains') lines.push(`🔒 Lv ${r.unlock.level}${r.unlock.swordTier ? ` · T${r.unlock.swordTier} sword` : ''}`);
-      ctx.font = `800 ${Math.round(12.5 / k)}px "Trebuchet MS", system-ui`;
-      ctx.lineWidth = 5 / k;
+      ctx.font = `800 ${Math.round((fontPx * ui) / k)}px "Trebuchet MS", system-ui`;
+      ctx.lineWidth = (4 * ui) / k;
       ctx.strokeStyle = '#241640';
       lines.forEach((t, i) => {
-        const y = c.z + (i - (lines.length - 1) / 2) * (17 / k);
+        const y = c.z + (i - (lines.length - 1) / 2) * ((fontPx * 1.3 * ui) / k);
         ctx.fillStyle = i === 0 ? '#ffffff' : '#ffb0c0';
         ctx.strokeText(t, c.x, y);
         ctx.fillText(t, c.x, y);

@@ -43,11 +43,42 @@ Starts its own server and drives **two real browser pages** (Alice and Bob)
 with the real controls (keys, camera, pointer). The result of the last run:
 
 ```
-E2E_RESULT_PLACEHOLDER
+Alice joins
+  ✔ new player starts with 1,000 Money (got 1000)
+Alice walks out and fights
+  ✔ a Chompkin is visible on the client
+  ✔ Alice defeated it with her sword (state 7)
+  ✔ a recruitment card appeared
+  ✔ defeat alone does not give ownership
+Alice pays to recruit (R)
+  ✔ Alice now owns the Chompkin
+  ✔ the fee was paid (1011 -> 891)
+Alice presses H and her monster moves in
+  ✔ teleported home
+  ✔ monster placed on pad 0
+Bob joins and steals it
+  ✔ Bob has his own base (#2) and 1,000 Money
+  ✔ Bob is carrying the stolen monster
+  ✔ Alice sees the theft alert
+  ✔ still owned by Alice while it is being carried
+  ✔ Bob delivered it: ownership transferred
+  ✔ Alice lost it (exactly one owner)
+Bob locks his base; Alice cannot get in
+  ✔ Alice's client shows Bob's lasers switched on
+  ✔ the laser gate stopped Alice at the door
+  ✔ the server agrees: Alice is not inside
+LUCKY LUCKY: Alice opens a Lucky Block
+  ✔ the event started and Lucky Blocks appeared on the client
+  ✔ Alice opened a Lucky Block (1)
+  ✔ Alice: no browser errors 
+  ✔ Bob: no browser errors 
+client (software rendering, 2 browsers on one CPU): fps 2, game logic 3.4 ms/frame, render 365.2 ms/frame, 251 draw calls, 213940 triangles
+
+E2E PASSED
 ```
 
 Because SwiftShader renders at about 1–2 frames per second with two browsers on
-one CPU, the bots pause drawing (`__app.skipRender`) while walking long routes so
+one CPU, the bots pause drawing (`__app.skipRender`) while they walk and fight so
 they move in real time; game logic, input and networking keep running, and
 drawing is switched back on before every check that looks at the screen.
 
@@ -55,25 +86,58 @@ drawing is switched back on before every check that looks at the screen.
 
 12 simulated players (real Socket.IO clients, the server's player cap) walk out
 of their bases, wander the plains and swing swords for 40 s while the server
-ticks are timed:
+ticks are timed. On this 4-core container the 20 Hz tick used about 2.5 ms of
+its 50 ms budget at the 95th percentile, and each client received about
+19 KB/s (the event-loop lag figures are at the monitor's 10 ms resolution):
 
 ```
-LOAD_RESULT_PLACEHOLDER
+{
+  "players": 12,
+  "seconds": 40,
+  "monsters": 141,
+  "ticks": 799,
+  "tickMs": {
+    "avg": 1.26,
+    "p50": 1.2,
+    "p95": 2.56,
+    "p99": 4.63,
+    "max": 7.35
+  },
+  "budgetMs": 50,
+  "eventLoopLagMs": {
+    "p50": 10.2,
+    "p99": 12.7
+  },
+  "downKBps": {
+    "avg": 18.6,
+    "max": 21.6
+  },
+  "corrections": 0,
+  "rssMB": 111
+}
+
+LOAD OK: p95 tick 2.56 ms of a 50 ms budget
 ```
 
 ### Phone-sized touch check — `node scripts/mobile-check.mjs ./shots`
 
-844×390 landscape viewport with touch emulation:
+844×390 landscape viewport with touch emulation. It checks that the touch
+controls appear, that every HUD/touch button is on screen and is the topmost
+element at its center (so a tap reaches it), and that the joystick moves the
+player:
 
 ```
-MOBILE_RESULT_PLACEHOLDER
+✔ touch controls shown
+✔ all 21 touch/HUD controls are on screen and tappable
+✔ joystick moved the player 6.5 units
+✔ no browser errors
 ```
 
 ### UI tour — `node scripts/ui-tour.mjs ./shots`
 
 Opens every panel (Monsters, Dex, sword shop, gadget shop, Base, Lucky board,
 Map, Settings, Help), the monster inspector and the LUCKY LUCKY banner, and
-saves screenshots. UI_TOUR_PLACEHOLDER The screenshots were reviewed by eye
+saves screenshots. Last run: every panel opened, **no browser errors**. The screenshots were reviewed by eye
 (layout, text fitting, 3D previews rendering).
 
 ### Rendering cost (software rendering, so frame rate is not meaningful)
@@ -85,7 +149,7 @@ and clouds, distance-culled labels):
 
 | Quality | Draw calls | Triangles |
 |---|---|---|
-| Low | 270–420 | 160–210 K |
+| Low | 250–420 | 160–215 K |
 | High (incl. shadow pass) | 470–630 | 230–320 K |
 
 Before the pass: 430–980 draw calls and 430–830 K triangles at Low.
@@ -106,7 +170,11 @@ Press **F3** in the game to see these numbers live.
   H teleport; placed monsters animating on their pads.
 - Theft: carried monster above the thief's head; the owner's alert; lasers
   visible and blocking.
-- Minimap rotation and world-map labels; offer cards on short screens.
+- Minimap rotation; world-map labels at 1280×720 and 1920×1080 (no overlaps).
+- Several recruit offers at once (newest card expanded, older ones collapsed);
+  name labels and health bars staying a sensible size up close; the base sign
+  hiding up close so it doesn't cover your monsters.
+- Landscape-phone title screen and HUD (844×390).
 
 ---
 
