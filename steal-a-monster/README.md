@@ -25,7 +25,20 @@ Socket.IO** (server). Not a Roblox game: no Roblox Studio, APIs or Luau.
 
 ---
 
-## Quick start
+## Play in the browser (no install)
+
+**https://kenshirodaniel8-bit.github.io/minecraft-realistis/** — the
+single-player web version. The whole game, including the game-server logic,
+runs inside your browser; progress is saved in that browser. It is published
+automatically to the `gh-pages` branch by `.github/workflows/steal-a-monster-pages.yml`
+(build it yourself with `node scripts/build-web.mjs`, output in `dist-web/`).
+If the link shows a 404, enable Pages once: repository **Settings → Pages →
+Deploy from a branch → `gh-pages` / (root)**.
+
+Multiplayer (stealing from other players, shared LUCKY LUCKY events) needs the
+Node.js server below, hosted somewhere everyone can reach.
+
+## Quick start (multiplayer server)
 
 You need [Node.js](https://nodejs.org) 20 or newer.
 
@@ -330,7 +343,7 @@ Web Audio API (`public/client/audio.js`). To use recorded sounds, call
 ## Testing
 
 ```bash
-npm test            # automated: node --test, 50 tests, runs in CI
+npm test            # automated: node --test, 51 tests, runs in CI
 npm run test:e2e    # two real browsers on one server (needs Playwright + Chromium)
 npm run test:load   # 12 simulated players; reports server tick time and bandwidth
 ```

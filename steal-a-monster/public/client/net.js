@@ -1,7 +1,6 @@
 // Socket.IO connection, request/acknowledgement helpers, server clock sync
 // and snapshot interpolation buffers.
 
-import { io } from '/socket.io/socket.io.esm.min.js';
 import { PROTOCOL_VERSION } from '#shared/config.js';
 import { randomId } from '#shared/rng.js';
 
@@ -18,7 +17,9 @@ export class Net {
     this.connected = false;
   }
 
-  connect() {
+  async connect() {
+    // loaded on demand: the single-player web build has no Socket.IO server
+    const { io } = await import('/socket.io/socket.io.esm.min.js');
     this.socket = io({ transports: ['websocket', 'polling'], reconnection: true, reconnectionDelay: 800, reconnectionDelayMax: 4000 });
     this.socket.on('connect', () => {
       this.connected = true;

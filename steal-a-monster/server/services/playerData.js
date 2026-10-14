@@ -2,7 +2,6 @@
 // levels, perks, and the ownership ledger that keeps monster ownership
 // consistent across crashes.
 
-import crypto from 'node:crypto';
 import { CONFIG, SAVE_SCHEMA_VERSION, xpForLevel, maxHpForLevel } from '#shared/config.js';
 import { SPECIES_BY_ID, PERKS, perkValue, incomePerSecond } from '#shared/monsters.js';
 import { SWORD_BY_ID } from '#shared/weapons.js';
@@ -11,12 +10,13 @@ import { COSMETIC_BY_ID } from '#shared/lucky.js';
 import { DECOR_BY_ID, DECOR_SPOTS, DECOR_MAX_OWNED } from '#shared/decor.js';
 import { REGION_BY_ID } from '#shared/regions.js';
 import { randomId } from '#shared/rng.js';
+import { sha256Hex } from '#shared/sha256.js';
 
 // The client keeps a random secret token; the profile id is derived from it so
 // nobody can load someone else's profile without their token.
 export function profileIdFromToken(token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{16,128}$/.test(token)) return null;
-  return 'p_' + crypto.createHash('sha256').update('steal-a-monster:' + token).digest('hex').slice(0, 32);
+  return 'p_' + sha256Hex('steal-a-monster:' + token).slice(0, 32);
 }
 
 export function newProfile(id, name, now) {
@@ -82,14 +82,18 @@ export function migrateProfile(p) {
 }
 
 const num = (v, d, lo = 0, hi = 1e12) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+// timestamps (ms since 1970): never later than "now" (today's clock is
+// already above num()'s default 1e12 limit, which would turn every save into
+// "last seen in 2001")
+const time = (v, now = Date.now()) => num(v, now, 0, now);
 
 // Repairs anything inconsistent in a loaded profile instead of trusting it.
-export function sanitizeProfile(p, id) {
-  const out = newProfile(id, typeof p.name === 'string' ? p.name.slice(0, 16) : 'Player', num(p.createdAt, Date.now()));
+export function sanitizeProfile(p, id, now = Date.now()) {
+  const out = newProfile(id, typeof p.name === 'string' ? p.name.slice(0, 16) : 'Player', time(p.createdAt, now));
   out.money = Math.floor(num(p.money, 0, 0, CONFIG.economy.maxMoney));
   out.gems = Math.floor(num(p.gems, 0, 0, CONFIG.gems.max));
-  out.createdAt = num(p.createdAt, Date.now());
-  out.lastSeen = num(p.lastSeen, Date.now());
+  out.createdAt = time(p.createdAt, now);
+  out.lastSeen = time(p.lastSeen, now);
   out.xp = Math.floor(num(p.xp, 0));
   out.level = Math.floor(num(p.level, 1, 1, CONFIG.progression.maxLevel));
   out.color = Number.isInteger(p.color) ? p.color & 0xffffff : null;
@@ -138,7 +142,7 @@ export function sanitizeProfile(p, id) {
       id: m.id,
       species: m.species,
       level: Math.floor(num(m.level, 1, 1, 60)),
-      obtainedAt: num(m.obtainedAt, Date.now()),
+      obtainedAt: time(m.obtainedAt, now),
       origin: ['recruited', 'stolen', 'event', 'gift'].includes(m.origin) ? m.origin : 'recruited',
       slot,
       following: !!m.following,

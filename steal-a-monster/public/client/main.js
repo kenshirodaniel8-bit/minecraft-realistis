@@ -19,6 +19,7 @@ import { Input, TouchControls } from './input.js';
 import { ThirdPersonCamera } from './camera.js';
 import { LocalPlayer } from './player.js';
 import { Net } from './net.js';
+import { LocalNet } from './localNet.js';
 import { Audio } from './audio.js';
 import { Effects } from './effects.js';
 import { MonstersView, MSTATE } from './monstersView.js';
@@ -76,7 +77,10 @@ class App {
     this.input.sensitivity = this.settings.sensitivity;
     this.audio = new Audio();
     this.audio.setVolume(this.settings.volume);
-    this.net = new Net();
+    // SOLO: the web build (scripts/build-web.mjs, e.g. on GitHub Pages) runs
+    // the game server inside this page; otherwise connect to the real server
+    this.solo = window.SAM_SOLO === true;
+    this.net = this.solo ? new LocalNet() : new Net();
     this.actions = this.makeActions();
     this.ready = false;
     this.joined = false;
@@ -141,6 +145,10 @@ class App {
     nameInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') go();
     });
+    if (this.solo) {
+      $('title-status').textContent = '🟢 Single-player · runs in your browser · progress is saved on this device';
+      return;
+    }
     fetch('/health').then((r) => r.json()).then((h) => {
       $('title-status').textContent = `🟢 Server online · ${h.players} player${h.players === 1 ? '' : 's'} playing`;
     }).catch(() => {

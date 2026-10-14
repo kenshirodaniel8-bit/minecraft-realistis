@@ -12,7 +12,7 @@ There was no real GPU, phone, Safari or Firefox available.
 ## 1. Automated tests — executed, all passing
 
 ```bash
-npm test          # 50 tests, ~3 s, also runs in CI (.github/workflows/ci.yml)
+npm test          # 51 tests, ~3 s, also runs in CI (.github/workflows/ci.yml)
 ```
 
 They run the real server code: the `Game` class with a controllable clock and an
@@ -21,7 +21,7 @@ Socket.IO server with real socket clients.
 
 | Suite | Tests | Covers |
 |---|---|---|
-| `profile.test.js` | 7 | 1,000 Money exactly once (new profile only); no re-grant on reconnect/refresh/respawn; token hashing; save survives a server restart; corrupt save → backup restore, both broken → login refused (no fresh bonus); save retries; schema migration (1 → 2) and repair of forged data |
+| `profile.test.js` | 8 | 1,000 Money exactly once (new profile only); no re-grant on reconnect/refresh/respawn; token hashing; save survives a server restart; corrupt save → backup restore, both broken → login refused (no fresh bonus); save retries; schema migration (1 → 2) and repair of forged data; coming back after a minute pays a minute of offline income (timestamps survive a reload) |
 | `combat.test.js` | 6 | all 44 species build a distinct 3D model in Node; sword reach/facing/cooldown, server-side damage only; monsters attack, knock out, respawn at home; dodge immunity; defeat → recruitment offers only to real fighters; AI behaviour (shy flee, territorial, region bounds) |
 | `recruitment.test.js` | 9 | not enough Money → nothing changes; extra recruit conditions on rare monsters (sword tier, discoveries); exact price deducted once; no double recruit (retries, double clicks, two players racing); fighter priority + base capacity; decline; one pad per monster; passive income, collect, offline cap; disconnect with an open offer |
 | `stealing.test.js` | 11 | lasers block entry and theft; lasers switching on eject intruders and make a thief drop; steal → carry → deliver, ownership moves exactly once; duplicate/invalid steal requests; an aborted grab tells the owner it is safe; gadget hit releases the monster (both drop rules); dropped monsters fly home; disconnects during theft; H teleport rules (own base only, cooldown, not while carrying); gadget range/facing/cooldown/shields; shop prices, proximity, idempotency |
@@ -82,6 +82,16 @@ Because SwiftShader renders at about 1–2 frames per second with two browsers o
 one CPU, the bots pause drawing (`__app.skipRender`) while they walk and fight so
 they move in real time; game logic, input and networking keep running, and
 drawing is switched back on before every check that looks at the screen.
+
+### Single-player web build (GitHub Pages)
+
+`node scripts/build-web.mjs` builds a static site in `dist-web/`. It was served
+from a sub-folder by a plain static file server (like GitHub Pages) and played
+in headless Chromium: the title says single-player, a new player gets 1,000
+Money, a Chompkin was fought, defeated and recruited with R, H took the player
+home, and after a page reload the monster and Money were still there (no second
+starting bonus, no income jackpot). No browser errors, no failed requests.
+Not verified: the live github.io site itself (this workspace cannot reach it).
 
 ### Server load test — `npm run test:load`
 

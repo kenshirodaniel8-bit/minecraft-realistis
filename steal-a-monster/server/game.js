@@ -259,7 +259,7 @@ export class Game {
       await this.store.saveProfile(pid, profile);
       return { profile, isNew: true };
     }
-    const profile = sanitizeProfile(migrateProfile(raw), pid);
+    const profile = sanitizeProfile(migrateProfile(raw), pid, this.now());
     const fixes = this.ledger.reconcile(profile);
     if (fixes.length) {
       this.log(`ownership reconciled for ${pid}:`, fixes.join(', '));

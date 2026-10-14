@@ -4,3 +4,4 @@ data/
 .DS_Store
 test-results/
 screenshots-tmp/
+dist-web/

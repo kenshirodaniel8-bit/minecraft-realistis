@@ -1,0 +1,47 @@
+# Publishes STEAL A MONSTER (single-player web version) to the gh-pages branch,
+# which GitHub Pages serves at https://<owner>.github.io/<repo>/
+# Runs on pushes to the default branch or the Steal a Monster branch.
+# One-time setup if the site doesn't appear: Settings -> Pages ->
+# "Deploy from a branch" -> gh-pages / (root).
+name: Publish Steal a Monster
+
+on:
+  push:
+    paths:
+      - 'steal-a-monster/**'
+      - '.github/workflows/steal-a-monster-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: steal-a-monster-pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.ref_name == github.event.repository.default_branch || github.ref_name == 'claude/steal-a-monster-game-mjo51w'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: steal-a-monster
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: steal-a-monster/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: node scripts/build-web.mjs
+      - name: Push the web build to gh-pages
+        run: |
+          cd dist-web
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Publish STEAL A MONSTER (${GITHUB_SHA::7})"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages

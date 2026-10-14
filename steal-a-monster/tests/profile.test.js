@@ -181,3 +181,22 @@ test('old saves are migrated and forged/invalid data is repaired on load', () =>
   assert.deepEqual(forged.decor.owned, { fountain: 1, lantern: 8 });
   assert.deepEqual(forged.base.decor.slice(0, 4), ['fountain', null, null, null], 'never more placed than owned');
 });
+
+test('coming back after a minute pays a minute of offline income, not the maximum (timestamps survive a reload)', async () => {
+  const h = await makeGame();
+  const a = await h.join(TOKEN_A, 'Alice');
+  const p = a.profile;
+  p.monsters.push({ id: 'moff1', species: 'chompkin', level: 1, slot: 0, following: false, origin: 'recruited', obtainedAt: h.clock.t });
+  h.game.ledger.set('moff1', p.id, 'chompkin', 1);
+  h.game.refreshPerks(a.s);
+  const income = a.s.income;
+  assert.ok(income > 0);
+  h.game.leave(a.sid);
+  await h.game.flushSaves();
+  h.game.profileCache.clear(); // force a real load from storage
+  h.clock.t += 60_000;
+  const back = await h.join(TOKEN_A, 'Alice');
+  const expected = Math.floor(income * 60 * CONFIG.bases.offlineIncomeRate);
+  assert.ok(Math.abs(back.profile.storedIncome - expected) <= 2, `stored ${back.profile.storedIncome}, expected about ${expected}`);
+  assert.equal(back.profile.lastSeen, h.clock.t);
+});
