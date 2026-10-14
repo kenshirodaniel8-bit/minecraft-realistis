@@ -9,6 +9,7 @@ import { buildMonster, setRigDetail } from './monsterRenderer.js';
 import { animateMonster, QUIRK_NAMES } from './animationSystem.js';
 import { makeLabel, disposeLabel } from './labels.js';
 import { boxCollider } from '#shared/collision.js';
+import { buildDecor } from './decorModels.js';
 
 const TMP_COLOR = new THREE.Color();
 const PALETTE = [0x3a7ae0, 0xe84a5f, 0x3fbf5a, 0xffb02a, 0x9a5ae0, 0x2ac8c8, 0xff7ab8, 0x5a5a6a];
@@ -43,7 +44,7 @@ export class BasesView {
   buildBase(b) {
     const g = new THREE.Group();
     this.scene.add(g);
-    const view = { base: b, group: g, pads: [], monsters: new Map(), lasers: [], labels: [], state: null };
+    const view = { base: b, group: g, pads: [], monsters: new Map(), lasers: [], labels: [], decor: new Array(b.decor.length).fill(null), state: null };
     // all 12 pads (and their colored rings) are two instanced draws
     const n = b.slots.length;
     view.padMesh = new THREE.InstancedMesh(PAD_GEO, PAD_MAT, n);
@@ -148,6 +149,7 @@ export class BasesView {
     const prev = view.state;
     view.state = st.empty ? null : st;
     this.states[st.index] = view.state;
+    this.setDecor(view, st.empty ? [] : st.decor || []);
     if (st.empty) {
       this.setSign(view, `Plot ${st.index + 1}\nFREE`, '#ffffff', '#5a5a6a');
       view.flag.material.color.setHex(0xcccccc);
@@ -196,6 +198,24 @@ export class BasesView {
     this.setLasers(view, st.lockedUntil > 0);
     if (prev && !(prev.lockedUntil > 0) && st.lockedUntil > 0) this.audio.play('laser');
     this.setStored(view, st.stored);
+  }
+
+  // Decorations on the wall spots: rebuild only the spots that changed.
+  setDecor(view, list) {
+    view.decor.forEach((cur, i) => {
+      const want = list[i] || null;
+      if ((cur?.id || null) === want) return;
+      if (cur) view.group.remove(cur.obj);
+      view.decor[i] = null;
+      const obj = want ? buildDecor(want) : null;
+      if (!obj) return;
+      const spot = view.base.decor[i];
+      obj.position.set(spot.x, view.base.y, spot.z);
+      obj.rotation.y = spot.yaw;
+      view.group.add(obj);
+      view.decor[i] = { id: want, obj };
+      if (cur) this.effects.burst(spot.x, view.base.y + 1, spot.z, 10, { color: [0xffe14a, 0xffffff], speed: 3 });
+    });
   }
 
   padStyle(view, p, unlocked, color) {

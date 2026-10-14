@@ -208,6 +208,14 @@ try {
   await bob.waitForTimeout(800);
   B = await state(bob);
   check(B.carry >= 0, 'Bob is carrying the stolen monster');
+  if (!(B.carry >= 0)) {
+    const why = await bob.evaluate((p) => {
+      const a = window.__app;
+      const it = a.findInteraction();
+      return { dist: Math.hypot(a.player.pos.x - p.x, a.player.pos.z - p.z).toFixed(2), prompt: it ? `${it.kind}: ${it.text}` : null };
+    }, pad);
+    console.log(`    (Bob is ${why.dist} from the pad; prompt: ${why.prompt})`);
+  }
   await shot(bob, '06-bob-carrying');
   const alerted = await alice.waitForFunction(() => window.__app.lastTheft?.stage === 'carry' && !document.getElementById('theft-alert').hidden, null, { timeout: 15000, polling: 500 }).then(() => true, () => false);
   check(alerted, 'Alice sees the theft alert');

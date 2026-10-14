@@ -5,6 +5,7 @@
 // input into requests. The server decides every outcome.
 
 import * as THREE from 'three';
+import { DECOR_BY_ID } from '#shared/decor.js';
 import { CONFIG } from '#shared/config.js';
 import { buildWorld, isInsideBase, PLAZA } from '#shared/world.js';
 import { REGION_BY_ID, regionIdAt, regionLockReason } from '#shared/regions.js';
@@ -407,7 +408,8 @@ class App {
       const m = this.monsters.get(d.monsterId);
       const p = m ? m.pos.clone() : new THREE.Vector3(this.player.pos.x, this.player.pos.y + 3, this.player.pos.z);
       p.y += 3;
-      this.effects.number(`+${d.xp} XP  +$${d.money}`, p, 'money');
+      this.effects.number(`+${d.xp} XP  +$${d.money}${d.gems ? `  +${d.gems}💎` : ''}`, p, 'money');
+      if (d.gems) this.ui.toast(`💎 +${d.gems} Monster Gem${d.gems > 1 ? 's' : ''}!`, 'good');
     });
     n.on('levelUp', (d) => {
       this.ui.regionBanner(`LEVEL ${d.level}!`, 'You are stronger. New regions and swords may be unlocked!');
@@ -466,7 +468,7 @@ class App {
       this.items.removeBlock(d.id, true);
       if (d.pn === this.pn) {
         this.audio.play('lucky');
-        this.ui.toast(`🍀 ${d.reward.label}`, 'good');
+        this.ui.toast(`${d.kind === 'geode' ? '💎' : '🍀'} ${d.reward.label}`, 'good');
       }
     });
     n.on('event', (ev) => {
@@ -487,7 +489,8 @@ class App {
       if (this.clues.length > 5) this.clues.shift();
     });
     n.on('milestone', (d) => {
-      this.ui.regionBanner(`🏆 ${d.title}!`, `${d.count} different monsters collected · +${fmt(d.reward)} Money`);
+      const extra = [d.gems ? `+${d.gems} 💎` : '', d.decor ? `a ${DECOR_BY_ID[d.decor].name} for your base` : ''].filter(Boolean).join(' · ');
+      this.ui.regionBanner(`🏆 ${d.title}!`, `${d.count} different monsters collected · +${fmt(d.reward)} Money${extra ? ` · ${extra}` : ''}`);
       this.audio.play('levelup');
     });
     n.on('kicked', (d) => {
@@ -637,6 +640,8 @@ class App {
       equipSword: (swordId) => req('equipSword', { swordId }),
       buyItem: (itemId, qty = 1) => req('buyItem', { itemId, qty }, `Bought ${ITEM_BY_ID[itemId].name}${qty > 1 ? ` x${qty}` : ''}!`),
       buyUpgrade: (kind) => req('buyUpgrade', { kind }, kind === 'slots' ? '🟢 More monster pads!' : '🔒 Stronger lasers!'),
+      buyDecor: (decorId) => req('buyDecor', { decorId }, (r) => `${DECOR_BY_ID[decorId].icon} ${DECOR_BY_ID[decorId].name} ${r.spot >= 0 ? 'placed in your base!' : 'bought (all spots are full)'}`),
+      placeDecor: (spot, decorId) => req('placeDecor', { spot, decorId }),
       place: (ownedId, slot) => req('place', { ownedId, slot }),
       unplace: (ownedId) => req('unplace', { ownedId }),
       follow: (ownedId, follow) => req('follow', { ownedId, follow }),
@@ -765,7 +770,7 @@ class App {
       return { kind: 'dropped', key: 'E', text: mine ? `Rescue your ${SPECIES_BY_ID[dropped.data.species].name}` : `Grab ${SPECIES_BY_ID[dropped.data.species].name}`, id: dropped.data.ownedId };
     }
     const block = this.items.nearestBlock(pos, CONFIG.lucky.claimRange - 0.5);
-    if (block) return { kind: 'lucky', key: 'E', text: 'Open the Lucky Block!', id: block.data.id };
+    if (block) return { kind: 'lucky', key: 'E', text: block.geode ? 'Crack open the Gem Geode!' : 'Open the Lucky Block!', id: block.data.id };
     // stealing from a rival base
     for (const b of this.world.bases) {
       if (b.index === this.myBase || !isInsideBase(b, pos.x, pos.z)) continue;

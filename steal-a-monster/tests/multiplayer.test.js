@@ -130,3 +130,14 @@ test('22. bad or forged socket messages are rejected (protocol, tokens, payloads
   await new Promise((res) => setTimeout(res, 200));
   assert.equal(answered, false);
 });
+
+test('every message the game handles is reachable over the socket (and answers)', async () => {
+  const c = await connect();
+  const w = await hello(c, 'mp-token-gggggggggg', 'Gus');
+  assert.equal(w.ok, true);
+  for (const type of Object.keys(srv.game.handlers)) {
+    if (type === 'move') continue; // moves are fire-and-forget
+    const res = await c.timeout(3000).emitWithAck(type, { bogus: true });
+    assert.equal(typeof res, 'object', `${type} answered`);
+  }
+});

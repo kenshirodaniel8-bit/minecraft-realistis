@@ -62,6 +62,9 @@ s.profile.swords.push('flame');
 s.profile.sword = 'flame';
 s.profile.cosmetics.owned.push('lucky_crown');
 s.profile.cosmetics.equipped = 'lucky_crown';
+s.profile.gems = 14;
+s.profile.decor.owned = { fountain: 1, flower_bed: 2, lantern: 2, gold_statue: 1, trophy_bronze: 1, crystal_cluster: 1 };
+s.profile.base.decor = ['lantern', 'lantern', 'flower_bed', 'flower_bed', 'fountain', 'crystal_cluster', 'trophy_bronze', 'gold_statue'];
 srv.game.refreshPerks(s);
 srv.game.markProfile(s);
 srv.game.bases.broadcastBase(s.baseIndex);
@@ -94,9 +97,14 @@ await page.evaluate(() => { const a = window.__app; a.input.setVirtual('attack',
 await page.waitForTimeout(1600);
 await save(page, 'battle');
 await page.evaluate(() => { const a = window.__app; a.input.setVirtual('attack', false); });
-// LUCKY LUCKY
+// LUCKY LUCKY (plus one Super Lucky Block placed in view)
 srv.game.events.trigger('luckyLucky');
 srv.game.events.events.luckyLucky.startsAt = Date.now();
+const lp = ahead(8, -3);
+const lb = { id: 999999, kind: 'super', x: lp.x, y: srv.game.world.groundHeight(lp.x, lp.z), z: lp.z, region: 'plains', event: true, claimedBy: null };
+srv.game.lucky.blocks.set(lb.id, lb);
+srv.game.broadcast('luckySpawn', srv.game.lucky.info(lb));
+await page.evaluate(() => { for (const id of [...window.__app.ui.offerEls.keys()]) window.__app.ui.removeOffer(id); });
 await page.waitForTimeout(5000);
 await save(page, 'lucky-lucky');
 // panels

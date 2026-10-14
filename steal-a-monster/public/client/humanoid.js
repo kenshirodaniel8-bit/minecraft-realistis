@@ -1,6 +1,7 @@
 // Blocky player avatars, procedural sword models and hats.
 
 import * as THREE from 'three';
+import { glowSprite } from './labels.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { SWORD_BY_ID } from '#shared/weapons.js';
 import { COSMETIC_BY_ID } from '#shared/lucky.js';
@@ -103,9 +104,9 @@ export function buildSword(id) {
     g.add(star);
   }
   if (c.glow) {
-    const light = new THREE.PointLight(c.glow, 3, 7, 2);
-    light.position.y = 0.5 + L / 2;
-    g.add(light);
+    const glow = glowSprite(c.glow, 2.2, 0.45);
+    glow.position.y = 0.5 + L / 2;
+    g.add(glow);
   }
   g.userData.length = L;
   return g;

@@ -6,7 +6,7 @@ import { LUCKY_KINDS } from '#shared/lucky.js';
 import { SPECIES_BY_ID } from '#shared/monsters.js';
 import { buildMonster } from './monsterRenderer.js';
 import { animateMonster } from './animationSystem.js';
-import { makeLabel, disposeLabel } from './labels.js';
+import { makeLabel, disposeLabel, glowSprite } from './labels.js';
 
 const texCache = {};
 function luckyTexture(kind) {
@@ -41,6 +41,29 @@ function luckyTexture(kind) {
 
 const BLOCK_GEO = new RoundedBoxGeometry(2.2, 2.2, 2.2, 3, 0.25);
 
+// Gem Geode: a lumpy rock with glowing crystals poking out of it.
+const GEODE_ROCK_GEO = new THREE.DodecahedronGeometry(1.25, 0);
+const GEODE_GEM_GEO = new THREE.OctahedronGeometry(0.45, 0);
+const GEODE_ROCK_MAT = new THREE.MeshStandardMaterial({ color: 0x5a4436, roughness: 0.95, flatShading: true });
+const GEODE_GEM_MATS = [0xff6af0, 0x6af0ff, 0xb06aff].map((c) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.55, roughness: 0.15, metalness: 0.1, flatShading: true }));
+function buildGeode() {
+  const g = new THREE.Group();
+  const rock = new THREE.Mesh(GEODE_ROCK_GEO, GEODE_ROCK_MAT);
+  rock.scale.set(1.15, 0.8, 1);
+  rock.castShadow = true;
+  g.add(rock);
+  const spots = [[0.2, 0.75, 0.3, 1.2], [-0.55, 0.55, 0.45, 0.9], [0.65, 0.4, -0.35, 0.8], [-0.2, 0.6, -0.6, 1.0], [0.75, 0.2, 0.55, 0.7]];
+  spots.forEach(([x, y, z, sc], i) => {
+    const gem = new THREE.Mesh(GEODE_GEM_GEO, GEODE_GEM_MATS[i % GEODE_GEM_MATS.length]);
+    gem.position.set(x, y, z);
+    gem.scale.set(0.7 * sc, 1.5 * sc, 0.7 * sc);
+    gem.lookAt(x * 3, y * 3 + 1, z * 3);
+    gem.rotateX(Math.PI / 2);
+    g.add(gem);
+  });
+  return g;
+}
+
 export class WorldItems {
   constructor(scene, world, effects, audio) {
     this.scene = scene;
@@ -57,15 +80,14 @@ export class WorldItems {
   addBlock(b) {
     if (this.blocks.has(b.id)) return;
     const def = LUCKY_KINDS[b.kind] || LUCKY_KINDS.lucky;
+    if (def.geode) return this.addGeode(b, def);
     const mat = new THREE.MeshStandardMaterial({ map: luckyTexture(b.kind), emissive: def.color, emissiveIntensity: 0.25, roughness: 0.35, metalness: 0.2 });
     const m = new THREE.Mesh(BLOCK_GEO, mat);
     m.castShadow = true;
     const g = new THREE.Group();
     g.add(m);
     g.position.set(b.x, b.y + 1.8, b.z);
-    const light = new THREE.PointLight(def.color, 8, 12, 2);
-    light.position.y = 0.5;
-    g.add(light);
+    g.add(glowSprite(def.color, 5.5, 0.55));
     if (b.kind !== 'lucky') {
       const halo = new THREE.Mesh(new THREE.TorusGeometry(1.9, 0.08, 6, 30), new THREE.MeshBasicMaterial({ color: def.color2 }));
       halo.rotation.x = Math.PI / 2;
@@ -79,14 +101,32 @@ export class WorldItems {
     this.blocks.set(b.id, { data: b, group: g, mesh: m, label, seed: Math.random() * 10 });
   }
 
+  addGeode(b, def) {
+    const g = new THREE.Group();
+    const m = buildGeode();
+    g.add(m);
+    g.position.set(b.x, b.y + 0.7, b.z);
+    const glow = glowSprite(def.color2, 4.5, 0.5);
+    glow.position.y = 0.9;
+    g.add(glow);
+    const label = makeLabel(`💎 ${def.name}`, { scale: 0.013, color: '#ffffff', fog: true });
+    label.position.y = 2.3;
+    g.add(label);
+    this.scene.add(g);
+    this.blocks.set(b.id, { data: b, group: g, mesh: m, label, seed: Math.random() * 10, geode: true });
+  }
+
   removeBlock(id, opened) {
     const b = this.blocks.get(id);
     if (!b) return;
     this.blocks.delete(id);
     this.scene.remove(b.group);
     disposeLabel(b.label);
-    b.mesh.material.dispose();
-    if (opened) {
+    if (!b.geode) b.mesh.material.dispose();
+    if (opened && b.geode) {
+      const p = b.group.position;
+      this.effects.burst(p.x, p.y + 0.8, p.z, 40, { color: [0xff6af0, 0x6af0ff, 0xffffff], speed: 7, up: 1.2, life: 0.9 });
+    } else if (opened) {
       const p = b.group.position;
       this.effects.confetti(p.x, p.y, p.z, 45);
       this.effects.coins(p.x, p.y, p.z, 14);
@@ -178,6 +218,11 @@ export class WorldItems {
   update(dt, t) {
     for (const b of this.blocks.values()) {
       const p = b.group.position;
+      if (b.geode) {
+        // geodes sit still and sparkle
+        if (Math.random() < dt * 4) this.effects.spawn(p.x + (Math.random() - 0.5) * 2.2, p.y + 0.6 + Math.random(), p.z + (Math.random() - 0.5) * 2.2, { color: [0xff6af0, 0x6af0ff, 0xffffff], speed: 0.2, vy: 1.2, grav: -0.2, life: 1, size: 0.1 });
+        continue;
+      }
       p.y = b.data.y + 1.8 + Math.sin(t * 2 + b.seed) * 0.3;
       b.mesh.rotation.y = t * 0.9 + b.seed;
       b.mesh.rotation.x = Math.sin(t * 0.7 + b.seed) * 0.15;

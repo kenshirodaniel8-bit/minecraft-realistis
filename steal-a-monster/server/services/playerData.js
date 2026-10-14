@@ -8,6 +8,7 @@ import { SPECIES_BY_ID, PERKS, perkValue, incomePerSecond } from '#shared/monste
 import { SWORD_BY_ID } from '#shared/weapons.js';
 import { ITEM_BY_ID } from '#shared/items.js';
 import { COSMETIC_BY_ID } from '#shared/lucky.js';
+import { DECOR_BY_ID, DECOR_SPOTS, DECOR_MAX_OWNED } from '#shared/decor.js';
 import { REGION_BY_ID } from '#shared/regions.js';
 import { randomId } from '#shared/rng.js';
 
@@ -29,13 +30,15 @@ export function newProfile(id, name, now) {
     createdAt: now,
     lastSeen: now,
     money: CONFIG.startingMoney, // granted exactly once, here
+    gems: 0,
     xp: 0,
     level: 1,
     sword: CONFIG.startingSword,
     swords: [CONFIG.startingSword],
     items,
     monsters: [],
-    base: { slots: CONFIG.startingSlots, laserLevel: 0 },
+    base: { slots: CONFIG.startingSlots, laserLevel: 0, decor: new Array(DECOR_SPOTS).fill(null) },
+    decor: { owned: {} },
     storedIncome: 0,
     discoveries: { species: {}, spots: {} },
     regionsVisited: ['plains'],
@@ -54,6 +57,14 @@ const MIGRATIONS = {
     p.schemaVersion = 1;
     p.discoveries = p.discoveries || { species: {}, spots: {} };
     p.coupons = p.coupons || { recruitDiscount: 0 };
+    return p;
+  },
+  // 1 -> 2: Monster Gems and base decorations
+  1: (p) => {
+    p.schemaVersion = 2;
+    p.gems = 0;
+    p.decor = { owned: {} };
+    p.base = { ...(p.base || {}), decor: new Array(DECOR_SPOTS).fill(null) };
     return p;
   },
 };
@@ -76,6 +87,7 @@ const num = (v, d, lo = 0, hi = 1e12) => (typeof v === 'number' && Number.isFini
 export function sanitizeProfile(p, id) {
   const out = newProfile(id, typeof p.name === 'string' ? p.name.slice(0, 16) : 'Player', num(p.createdAt, Date.now()));
   out.money = Math.floor(num(p.money, 0, 0, CONFIG.economy.maxMoney));
+  out.gems = Math.floor(num(p.gems, 0, 0, CONFIG.gems.max));
   out.createdAt = num(p.createdAt, Date.now());
   out.lastSeen = num(p.lastSeen, Date.now());
   out.xp = Math.floor(num(p.xp, 0));
@@ -98,7 +110,20 @@ export function sanitizeProfile(p, id) {
   out.base = {
     slots: Math.floor(num(b.slots, CONFIG.startingSlots, CONFIG.startingSlots, CONFIG.bases.maxSlots)),
     laserLevel: Math.floor(num(b.laserLevel, 0, 0, CONFIG.security.lockDurationsSec.length - 1)),
+    decor: new Array(DECOR_SPOTS).fill(null),
   };
+  // decorations: known ids, bounded counts, never more placed than owned
+  out.decor = { owned: {} };
+  for (const [k, v] of Object.entries(p.decor?.owned || {})) {
+    const n = Math.floor(num(v, 0, 0, DECOR_MAX_OWNED));
+    if (DECOR_BY_ID[k] && n > 0) out.decor.owned[k] = n;
+  }
+  const placed = {};
+  (Array.isArray(b.decor) ? b.decor : []).slice(0, DECOR_SPOTS).forEach((id, i) => {
+    if (!DECOR_BY_ID[id] || (placed[id] || 0) >= (out.decor.owned[id] || 0)) return;
+    placed[id] = (placed[id] || 0) + 1;
+    out.base.decor[i] = id;
+  });
   out.storedIncome = num(p.storedIncome, 0);
   // monsters: valid species, unique ids, unique slots within capacity
   const seen = new Set();

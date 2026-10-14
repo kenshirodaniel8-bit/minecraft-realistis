@@ -36,6 +36,38 @@ export class Economy {
     return true;
   }
 
+  // Monster Gems (the rare upgrade material). Same rules as Money: only the
+  // server adds or removes them, never below zero.
+  creditGems(s, amount, reason) {
+    const n = Math.floor(amount);
+    if (!(n > 0)) return 0;
+    const p = s.profile;
+    const before = p.gems;
+    p.gems = Math.min(CONFIG.gems.max, p.gems + n);
+    this.ledgerLog.push({ t: this.game.now(), who: s.id, gems: p.gems - before, reason });
+    this.game.markProfile(s);
+    return p.gems - before;
+  }
+
+  // Takes Money and Gems together, or neither.
+  pay(s, money, gems, reason) {
+    const m = Math.ceil(money || 0);
+    const g = Math.ceil(gems || 0);
+    if (!(m >= 0) || !(g >= 0) || s.profile.money < m || s.profile.gems < g) return false;
+    if (!this.debit(s, m, reason)) return false;
+    if (g) {
+      s.profile.gems -= g;
+      this.ledgerLog.push({ t: this.game.now(), who: s.id, gems: -g, reason });
+    }
+    return true;
+  }
+
+  // "Not enough Money" / "Not enough Gems" for a failed pay()
+  shortfall(s, money, gems) {
+    if (s.profile.money < (money || 0)) return fail('money', 'Not enough Money.');
+    return fail('gems', `You need ${gems} 💎 Monster Gems (you have ${s.profile.gems}).`);
+  }
+
   record(s, delta, reason) {
     this.ledgerLog.push({ t: this.game.now(), who: s.id, delta, reason, balance: s.profile.money });
     if (this.ledgerLog.length > 500) this.ledgerLog.splice(0, 100);
@@ -62,7 +94,7 @@ export class Economy {
     if (!this.nearShop(s, 'swords')) return fail('not_at_shop', 'Visit the Sword Shop in the plaza.');
     const lock = swordLockReason(sword, s.profile);
     if (lock) return fail('locked', lock);
-    if (!this.debit(s, sword.price, `sword:${sword.id}`)) return fail('money', 'Not enough Money.');
+    if (!this.pay(s, sword.price, sword.gems, `sword:${sword.id}`)) return this.shortfall(s, sword.price, sword.gems);
     s.profile.swords.push(sword.id);
     s.profile.sword = sword.id;
     this.game.saveNow(s);
@@ -101,12 +133,12 @@ export class Economy {
     const p = s.profile;
     if (kind === 'slots') {
       const next = CONFIG.bases.slotUpgrades.find((u) => u.slots > p.base.slots);
-      return next ? { price: next.price, level: next.level, to: next.slots } : null;
+      return next ? { price: next.price, gems: next.gems || 0, level: next.level, to: next.slots } : null;
     }
     if (kind === 'laser') {
       const lvl = p.base.laserLevel;
       if (lvl >= CONFIG.security.laserUpgradePrices.length) return null;
-      return { price: CONFIG.security.laserUpgradePrices[lvl], level: 1, to: lvl + 1 };
+      return { price: CONFIG.security.laserUpgradePrices[lvl], gems: CONFIG.security.laserUpgradeGems[lvl] || 0, level: 1, to: lvl + 1 };
     }
     return null;
   }
@@ -119,7 +151,7 @@ export class Economy {
     const offer = this.upgradeOffer(s, p.kind);
     if (!offer) return fail('maxed', 'Already fully upgraded.');
     if (s.profile.level < offer.level) return fail('locked', `Requires Level ${offer.level}`);
-    if (!this.debit(s, offer.price, `upgrade:${p.kind}`)) return fail('money', 'Not enough Money.');
+    if (!this.pay(s, offer.price, offer.gems, `upgrade:${p.kind}`)) return this.shortfall(s, offer.price, offer.gems);
     if (p.kind === 'slots') s.profile.base.slots = offer.to;
     else s.profile.base.laserLevel = offer.to;
     this.game.saveNow(s);

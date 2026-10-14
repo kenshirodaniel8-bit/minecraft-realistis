@@ -88,7 +88,9 @@ top; tap the hotbar for gadgets. Settings → *Touch controls* can force them on
 3. **Defeat ≠ ownership.** A defeated monster sits dazed for 35 s and everyone
    who helped defeat it gets a **recruitment card** with its stats, perk, income
    and **fee**. The top fighter gets 12 s of priority. Pay the fee (R) to recruit
-   it; if nobody does, it recovers and runs away.
+   it; if nobody does, it recovers and runs away. A few rare monsters add a
+   **condition** shown on the card (for example owning a Tier 7 sword, or
+   having discovered 20 species).
 4. **Bring it home.** Recruited monsters follow you. Walk into your base (or press
    **H**) and they hop onto free pads automatically. Rearrange them, send one to
    follow you, or release one from the **Monsters** panel.
@@ -99,8 +101,15 @@ top; tap the hotbar for gadgets. Settings → *Touch controls* can force them on
    (up to 8 hours).
 6. **Upgrade.** Better swords (10 tiers, from Wooden to Celestial — some need a
    level or a discovered region), more pads (4 → 12) and longer-lasting lasers.
-   Levels come from XP and unlock new regions.
-7. **Protect or steal.** Your lasers stay on for 60 s (up to 120 s with
+   Levels come from XP and unlock new regions. The top swords and upgrades also
+   cost **💎 Monster Gems**, the rare material: rare and stronger monsters drop
+   them, the Volcanic Kingdom drops extra, **Gem Geodes** in the Volcanic Kingdom
+   and Crystal Mountains are full of them, and Lucky Blocks sometimes give some.
+7. **Decorate.** Buy decorations at your base (Base panel → Decorations): flower
+   beds, lanterns, a bubble fountain, crystal clusters, a golden dragon statue…
+   and place them on the 8 spots along your walls. Collection milestones award
+   bronze, silver and gold **trophies**. Everyone who visits sees them.
+8. **Protect or steal.** Your lasers stay on for 60 s (up to 120 s with
    upgrades), then switch off — come back and re-lock! When a rival's lasers are
    off you can walk in, **hold E** next to a monster and carry it home. Thieves
    are slower and can't teleport. Hit a thief with a gadget and they **drop** the
@@ -217,7 +226,7 @@ steal-a-monster/
     config.js                  every gameplay number in one place
     regions.js, world.js       deterministic world: terrain, props, bases, caves, colliders
     monsters.js                the species registry (stats, AI, attacks, perks, model recipes)
-    weapons.js, items.js, lucky.js, collision.js, rng.js
+    weapons.js, items.js, lucky.js, decor.js, collision.js, rng.js
   public/
     index.html, style.css, gallery.html
     client/
@@ -229,7 +238,8 @@ steal-a-monster/
       animationSystem.js       procedural animation for every rig (one central loop)
       monstersView.js          wild monsters: interpolation, labels, HP bars, telegraphs
       playersView.js           avatars, carried monster, companion follower, status FX
-      basesView.js             pads, placed monsters, lasers, collector, signs
+      basesView.js             pads, placed monsters, lasers, collector, signs, decorations
+      decorModels.js           procedural 3D base decorations
       humanoid.js              blocky avatar, 10 procedural swords, 8 hats
       player.js, camera.js, input.js   movement prediction, third-person camera, controls
       ui.js, minimap.js, preview.js    HUD/panels, minimap + world map, monster previews
@@ -266,7 +276,8 @@ ownership, base locks and events.
 
 ### Persistence
 
-Each player has a **versioned JSON profile** (`schemaVersion: 1`) named after a
+Each player has a **versioned JSON profile** (`schemaVersion: 2`; older saves are
+migrated on load — version 2 added Monster Gems and decorations) named after a
 hash of a random secret token kept in the browser's localStorage (the token
 itself is never stored on the server). Saves are written atomically (temp file →
 fsync → keep previous as `.bak` → rename); a corrupt file falls back to the
@@ -274,7 +285,7 @@ backup, and if both are unreadable the login is **refused** instead of creating
 a fresh profile. Profiles are saved every 5 s when changed and immediately after
 any Money/ownership transaction; failed saves are retried. Loaded data is
 sanitised (unknown species/swords/items dropped, duplicate ids and doubled pads
-fixed, Money clamped).
+fixed, Money and Gems clamped, never more decorations placed than owned).
 
 An **ownership ledger** (`data/ownership.json`, written before profiles on every
 transfer) is the source of truth for who owns which monster, so a crash between
@@ -319,7 +330,7 @@ Web Audio API (`public/client/audio.js`). To use recorded sounds, call
 ## Testing
 
 ```bash
-npm test            # automated: node --test, 44 tests, runs in CI
+npm test            # automated: node --test, 50 tests, runs in CI
 npm run test:e2e    # two real browsers on one server (needs Playwright + Chromium)
 npm run test:load   # 12 simulated players; reports server tick time and bandwidth
 ```
@@ -364,8 +375,9 @@ Known limitations:
 
 - **Not verified on real hardware**: no real GPU, phone, Safari or Firefox was
   available while building this; frame rates on real devices are unmeasured.
-- **Bases** have upgradeable pads, lasers, income and a collector, but no
-  free-form decoration placement.
+- **Bases** have upgradeable pads, lasers, income, a collector and 8 fixed
+  decoration spots; decorations can't be placed anywhere else, and they have no
+  collision (you walk through them).
 - **Movement** is predicted by the client and validated by the server (speed,
   terrain, walls, region locks, lasers); the server does not re-simulate every
   step. A cheater cannot teleport, pass walls or locked lasers, or create Money

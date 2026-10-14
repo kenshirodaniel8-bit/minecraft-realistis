@@ -12,14 +12,6 @@ import { JsonFileStore, MemoryStore } from './storage.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// Client -> server messages the game understands. Anything else is ignored.
-const CLIENT_EVENTS = [
-  'move', 'attack', 'dodge', 'recruit', 'decline', 'place', 'unplace', 'follow', 'release', 'collect',
-  'buySword', 'equipSword', 'buyItem', 'buyUpgrade', 'useItem', 'lock', 'home',
-  'stealBegin', 'stealConfirm', 'stealCancel', 'grabDropped', 'claimLucky', 'chat',
-  'equipCosmetic', 'setColor', 'tutorial', 'ping',
-];
-
 export function lanAddresses() {
   const out = [];
   for (const list of Object.values(os.networkInterfaces())) {
@@ -95,7 +87,9 @@ export async function createGameServer(opts = {}) {
       }
     });
 
-    for (const type of CLIENT_EVENTS) {
+    // client -> server messages: exactly the ones the game has handlers for
+    // (anything else is ignored)
+    for (const type of Object.keys(game.handlers)) {
       socket.on(type, (payload, ack) => {
         if (!joined) return;
         const res = game.handle(socket.id, type, payload);

@@ -5,13 +5,15 @@ import { CONFIG } from '#shared/config.js';
 import { SPECIES_BY_ID, incomePerSecond } from '#shared/monsters.js';
 import { isInsideBase } from '#shared/world.js';
 import { isObj, id as isId, int, fail } from '../validate.js';
+import { DECOR_BY_ID, DECOR_SPOTS, DECOR_MAX_OWNED, placedCounts } from '#shared/decor.js';
 
-const MILESTONES = [
+// Collection milestones (different species owned at once).
+export const MILESTONES = [
   { id: 'species_3', count: 3, reward: 300, title: 'Monster Friend' },
-  { id: 'species_6', count: 6, reward: 1000, title: 'Collector' },
-  { id: 'species_10', count: 10, reward: 4000, title: 'Monster Expert' },
-  { id: 'species_20', count: 20, reward: 20000, title: 'Monster Master' },
-  { id: 'species_30', count: 30, reward: 80000, title: 'Living Legend' },
+  { id: 'species_6', count: 6, reward: 1000, title: 'Collector', decor: 'trophy_bronze' },
+  { id: 'species_10', count: 10, reward: 4000, gems: 3, title: 'Monster Expert', decor: 'trophy_silver' },
+  { id: 'species_20', count: 20, reward: 20000, gems: 10, title: 'Monster Master', decor: 'trophy_gold' },
+  { id: 'species_30', count: 30, reward: 80000, gems: 25, title: 'Living Legend' },
 ];
 
 export class BaseManager {
@@ -58,6 +60,7 @@ export class BaseManager {
       level: p.level,
       slots: p.base.slots,
       laserLevel: p.base.laserLevel,
+      decor: p.base.decor,
       lockedUntil: this.game.security.lockedUntil[index],
       relockAt: this.game.security.relockAt[index],
       stored: Math.floor(p.storedIncome),
@@ -192,9 +195,55 @@ export class BaseManager {
       if (s.profile.milestones[ms.id] || Math.max(owned, 0) < ms.count) continue;
       s.profile.milestones[ms.id] = this.game.now();
       this.game.economy.credit(s, ms.reward, 'milestone');
-      this.game.send(s, 'milestone', { title: ms.title, count: ms.count, reward: ms.reward });
+      if (ms.gems) this.game.economy.creditGems(s, ms.gems, 'milestone');
+      if (ms.decor) s.profile.decor.owned[ms.decor] = Math.min(DECOR_MAX_OWNED, (s.profile.decor.owned[ms.decor] || 0) + 1);
+      this.game.send(s, 'milestone', { title: ms.title, count: ms.count, reward: ms.reward, gems: ms.gems || 0, decor: ms.decor || null });
     }
     return n;
+  }
+
+  // ----------------------------------------------------------- decorations
+
+  // Buying happens at your own base (the upgrade terminal's catalog).
+  handleBuyDecor(s, p) {
+    if (!isObj(p) || !isId(p.decorId)) return fail('bad');
+    const cached = s.recall(p.reqId);
+    if (cached) return cached;
+    const d = DECOR_BY_ID[p.decorId];
+    if (!d) return fail('unknown_decor');
+    if (d.milestone) return fail('not_for_sale', 'Trophies are earned with collection milestones.');
+    if (!this.isAtOwnBase(s, 1)) return fail('not_at_base', 'Buy decorations at your base. Press H to go home.');
+    const owned = s.profile.decor.owned;
+    if ((owned[d.id] || 0) >= DECOR_MAX_OWNED) return fail('full', `You can own at most ${DECOR_MAX_OWNED}.`);
+    if (!this.game.economy.pay(s, d.price, d.gems, `decor:${d.id}`)) return this.game.economy.shortfall(s, d.price, d.gems);
+    owned[d.id] = (owned[d.id] || 0) + 1;
+    // put it on the first free spot right away
+    const spot = s.profile.base.decor.indexOf(null);
+    if (spot >= 0) s.profile.base.decor[spot] = d.id;
+    this.game.saveNow(s);
+    this.broadcastBase(s.baseIndex);
+    return s.remember(p.reqId, { ok: true, decor: d.id, spot, money: s.profile.money, gems: s.profile.gems });
+  }
+
+  // Put an owned decoration on a spot (or clear the spot with decorId null).
+  handlePlaceDecor(s, p) {
+    if (!isObj(p) || !int(p.spot, 0, DECOR_SPOTS - 1)) return fail('bad');
+    if (p.decorId !== null && !isId(p.decorId)) return fail('bad');
+    if (!this.isAtOwnBase(s, 1)) return fail('not_at_base', 'Decorate at your base. Press H to go home.');
+    const placed = s.profile.base.decor;
+    if (p.decorId !== null) {
+      const d = DECOR_BY_ID[p.decorId];
+      if (!d) return fail('unknown_decor');
+      const owned = s.profile.decor.owned[d.id] || 0;
+      if (!owned) return fail('not_owned', `You don't own a ${d.name} yet.`);
+      if (placed[p.spot] === d.id) return { ok: true };
+      // every copy is already out: move one from another spot
+      if ((placedCounts(placed)[d.id] || 0) >= owned) placed[placed.findIndex((id, i) => id === d.id && i !== p.spot)] = null;
+    }
+    placed[p.spot] = p.decorId;
+    this.game.markProfile(s);
+    this.broadcastBase(s.baseIndex);
+    return { ok: true };
   }
 
   // ----------------------------------------------------------- income

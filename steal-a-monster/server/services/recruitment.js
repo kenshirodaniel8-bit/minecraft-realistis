@@ -8,7 +8,7 @@
 // from the world. A request id makes retries safe (no double payment).
 
 import { CONFIG } from '#shared/config.js';
-import { RARITIES, recruitPrice, monsterStats, incomePerSecond, perkValue, monsterPower, defeatRewards } from '#shared/monsters.js';
+import { RARITIES, recruitPrice, monsterStats, incomePerSecond, perkValue, monsterPower, defeatRewards, recruitReqReason } from '#shared/monsters.js';
 import { SWORD_BY_ID } from '#shared/weapons.js';
 import { isObj, int, fail } from '../validate.js';
 import { MS } from './monsterAI.js';
@@ -53,12 +53,23 @@ export class Recruitment {
       if (!s) continue;
       const xp = game.addXp(s, rewards.xp);
       game.economy.credit(s, rewards.money, 'defeat');
+      const gems = game.economy.creditGems(s, this.rollGems(m), 'defeat');
       s.profile.stats.defeated++;
       this.discover(s, m.sp);
       game.tutorialEvent(s, 'defeat');
-      game.send(s, 'reward', { xp, money: rewards.money, monsterId: m.id });
+      game.send(s, 'reward', { xp, money: rewards.money, gems, monsterId: m.id });
       game.send(s, 'recruitOffer', this.offerFor(s, m));
     }
+  }
+
+  // Monster Gems from a defeat: by rarity, plus a bonus in gem-rich regions.
+  rollGems(m) {
+    const rng = this.game.rng;
+    const d = CONFIG.gems.drops[m.species.rarity];
+    let n = 0;
+    if (d && rng() < d.chance) n += d.min + Math.floor(rng() * (d.max - d.min + 1));
+    n += CONFIG.gems.regionBonus[m.region] || 0;
+    return n;
   }
 
   discover(s, speciesId) {
@@ -71,7 +82,6 @@ export class Recruitment {
 
   offerFor(s, m) {
     const st = monsterStats(m.species, m.level);
-    const swordReq = m.species.recruitReq?.swordTier || 0;
     return {
       monsterId: m.id,
       species: m.sp,
@@ -86,8 +96,17 @@ export class Recruitment {
       power: monsterPower(m.species, m.level),
       deadline: m.deadline,
       priorityUntil: s.id === m.top ? 0 : m.exclusiveUntil,
-      swordTier: swordReq,
+      requirement: m.species.recruitReq?.text || null,
+      requirementMissing: this.requirementMissing(s, m),
     };
+  }
+
+  bestSwordTier(s) {
+    return Math.max(1, ...s.profile.swords.map((id) => SWORD_BY_ID[id]?.tier || 1));
+  }
+
+  requirementMissing(s, m) {
+    return recruitReqReason(m.species, s.profile, this.bestSwordTier(s));
   }
 
   handleRecruit(s, p) {
@@ -106,8 +125,8 @@ export class Recruitment {
     }
     if (s.dead) return fail('dead', 'You are knocked out.');
     if (Math.hypot(s.pos.x - m.x, s.pos.z - m.z) > CONFIG.recruitment.maxDistance) return fail('too_far', 'Get closer to the monster.');
-    const req = m.species.recruitReq || {};
-    if (req.swordTier && (SWORD_BY_ID[s.profile.sword]?.tier || 1) < req.swordTier) return fail('sword', `Requires a Tier ${req.swordTier} sword.`);
+    const missing = this.requirementMissing(s, m);
+    if (missing) return fail('requirement', missing);
     const profile = s.profile;
     if (profile.monsters.length >= profile.base.slots) {
       return fail('base_full', 'Your base is full! Upgrade your base for more slots, or release a monster.');

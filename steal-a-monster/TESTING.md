@@ -12,7 +12,7 @@ There was no real GPU, phone, Safari or Firefox available.
 ## 1. Automated tests — executed, all passing
 
 ```bash
-npm test          # 44 tests, ~3 s, also runs in CI (.github/workflows/ci.yml)
+npm test          # 50 tests, ~3 s, also runs in CI (.github/workflows/ci.yml)
 ```
 
 They run the real server code: the `Game` class with a controllable clock and an
@@ -21,12 +21,13 @@ Socket.IO server with real socket clients.
 
 | Suite | Tests | Covers |
 |---|---|---|
-| `profile.test.js` | 7 | 1,000 Money exactly once (new profile only); no re-grant on reconnect/refresh/respawn; token hashing; save survives a server restart; corrupt save → backup restore, both broken → login refused (no fresh bonus); save retries; schema migration and repair of forged data |
+| `profile.test.js` | 7 | 1,000 Money exactly once (new profile only); no re-grant on reconnect/refresh/respawn; token hashing; save survives a server restart; corrupt save → backup restore, both broken → login refused (no fresh bonus); save retries; schema migration (1 → 2) and repair of forged data |
 | `combat.test.js` | 6 | all 44 species build a distinct 3D model in Node; sword reach/facing/cooldown, server-side damage only; monsters attack, knock out, respawn at home; dodge immunity; defeat → recruitment offers only to real fighters; AI behaviour (shy flee, territorial, region bounds) |
-| `recruitment.test.js` | 8 | not enough Money → nothing changes; exact price deducted once; no double recruit (retries, double clicks, two players racing); fighter priority + base capacity; decline; one pad per monster; passive income, collect, offline cap; disconnect with an open offer |
+| `recruitment.test.js` | 9 | not enough Money → nothing changes; extra recruit conditions on rare monsters (sword tier, discoveries); exact price deducted once; no double recruit (retries, double clicks, two players racing); fighter priority + base capacity; decline; one pad per monster; passive income, collect, offline cap; disconnect with an open offer |
 | `stealing.test.js` | 11 | lasers block entry and theft; lasers switching on eject intruders and make a thief drop; steal → carry → deliver, ownership moves exactly once; duplicate/invalid steal requests; an aborted grab tells the owner it is safe; gadget hit releases the monster (both drop rules); dropped monsters fly home; disconnects during theft; H teleport rules (own base only, cooldown, not while carrying); gadget range/facing/cooldown/shields; shop prices, proximity, idempotency |
 | `world.test.js` | 8 | deterministic world, 12 flat bases, spots inside their regions; region unlocks refused by the server; expansion regions open/close with hysteresis; closed portals; Lucky Blocks open once, only up close, server-rolled rewards; LUCKY LUCKY lifecycle; forged messages can't create Money/ownership/teleports; hidden/night spawns and the ruins vault puzzle |
-| `multiplayer.test.js` | 4 | HTTP serves the game, shared modules, three.js and Socket.IO; two clients get different bases and see each other move; LUCKY LUCKY is identical for both; malformed/forged socket messages are rejected |
+| `gems.test.js` | 4 | Monster Gems drop by rarity (plus the Volcanic bonus) and can't be forged; Gem Geodes pay out once and only in gem regions; gem-priced swords and upgrades take Money and Gems together or nothing; decorations are bought only at your own base, placed/moved/cleared on valid spots, visible to other players, trophies only from milestones |
+| `multiplayer.test.js` | 5 | HTTP serves the game, shared modules, three.js and Socket.IO; two clients get different bases and see each other move; LUCKY LUCKY is identical for both; malformed/forged socket messages are rejected; every message the game handles is reachable over the socket |
 
 The README's "Testing" section maps the 24 required checks to these suites.
 
@@ -72,7 +73,7 @@ LUCKY LUCKY: Alice opens a Lucky Block
   ✔ Alice opened a Lucky Block (1)
   ✔ Alice: no browser errors 
   ✔ Bob: no browser errors 
-client (software rendering, 2 browsers on one CPU): fps 2, game logic 3.4 ms/frame, render 365.2 ms/frame, 251 draw calls, 213940 triangles
+client (software rendering, 2 browsers on one CPU): fps 3, game logic 2.1 ms/frame, render 10.7 ms/frame, 411 draw calls, 238580 triangles
 
 E2E PASSED
 ```
@@ -155,6 +156,13 @@ and clouds, distance-culled labels):
 Before the pass: 430–980 draw calls and 430–830 K triangles at Low.
 Press **F3** in the game to see these numbers live.
 
+Lucky Blocks, Gem Geodes and glowing swords used to carry their own point
+light. In three.js every extra light makes all lit materials more expensive
+and recompiles their shaders whenever the light count changes, so the LUCKY
+LUCKY event (two dozen blocks) was very slow. They now use an additive glow
+sprite instead; in the two-browser e2e run the CPU time spent submitting a
+frame during the event dropped from about 300 ms to about 11 ms.
+
 ---
 
 ## 3. Checked by hand in a browser (screenshots reviewed)
@@ -175,6 +183,11 @@ Press **F3** in the game to see these numbers live.
   name labels and health bars staying a sensible size up close; the base sign
   hiding up close so it doesn't cover your monsters.
 - Landscape-phone title screen and HUD (844×390).
+- Monster Gems: the HUD counter, a Gem Geode in the Volcanic Kingdom (cracked
+  with E), gem prices in the sword shop and base upgrades; a Celestail recruit
+  card showing its sword condition with the Recruit button disabled.
+- Decorations bought through the real client actions, rendered on the wall
+  spots of the base, and the Base panel's decoration list.
 
 ---
 

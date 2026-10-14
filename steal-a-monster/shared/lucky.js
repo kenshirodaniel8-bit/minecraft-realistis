@@ -5,6 +5,8 @@ export const LUCKY_KINDS = {
   lucky: { name: 'Lucky Block', color: 0xffc23a, color2: 0xfff27a, moneyMult: 1 },
   super: { name: 'Super Lucky Block', color: 0x7a5aff, color2: 0xff7af0, moneyMult: 2.5 },
   mythic: { name: 'Mythic Lucky Block', color: 0xff3d6a, color2: 0xffe23a, moneyMult: 5 },
+  // not a Lucky Block: a rock full of Monster Gems in the gem-rich regions
+  geode: { name: 'Gem Geode', color: 0x6a4a3a, color2: 0xff6af0, moneyMult: 1, geode: true },
 };
 
 // weight: base chance weight; luckWeight: extra weight per point of luck
@@ -20,6 +22,7 @@ export const LUCKY_TABLE = [
   { kind: 'encounter', weight: 5, luckWeight: 4 },
   { kind: 'cosmetic', weight: 4, luckWeight: 3 },
   { kind: 'sword', weight: 1.5, luckWeight: 2.5 },
+  { kind: 'gems', weight: 6, luckWeight: 3, min: 1, max: 3 },
 ];
 
 export const COSMETICS = [

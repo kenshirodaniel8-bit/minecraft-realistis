@@ -7,7 +7,7 @@ import { randomId } from '#shared/rng.js';
 
 // requests that change money/ownership carry a request id so a retry after a
 // network hiccup can never be applied twice on the server
-const TRANSACTIONAL = new Set(['recruit', 'buySword', 'buyItem', 'buyUpgrade']);
+const TRANSACTIONAL = new Set(['recruit', 'buySword', 'buyItem', 'buyUpgrade', 'buyDecor']);
 
 export class Net {
   constructor() {

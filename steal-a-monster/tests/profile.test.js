@@ -160,7 +160,9 @@ test('old saves are migrated and forged/invalid data is repaired on load', () =>
     base: { slots: 99 },
   };
   const p = sanitizeProfile(migrateProfile(structuredClone(raw)), 'p_test');
-  assert.equal(p.schemaVersion, 1);
+  assert.equal(p.schemaVersion, 2);
+  assert.equal(p.gems, 0, 'schema 2 adds Monster Gems');
+  assert.deepEqual(p.base.decor, new Array(8).fill(null), 'and empty decoration spots');
   assert.equal(p.money, 0);
   assert.deepEqual(p.swords, ['wooden', 'iron']);
   assert.equal(p.sword, 'wooden');
@@ -170,4 +172,12 @@ test('old saves are migrated and forged/invalid data is repaired on load', () =>
   const slots = p.monsters.map((m) => m.slot).filter((s) => s !== null);
   assert.equal(new Set(slots).size, slots.length, 'no monster shares a pad');
   assert.equal(p.base.slots, CONFIG.bases.maxSlots);
+  // a schema 1 save gets gems and decorations; forged values are clamped
+  const v1 = migrateProfile({ schemaVersion: 1, name: 'V1', money: 10, base: { slots: 4 } });
+  assert.equal(v1.schemaVersion, 2);
+  assert.equal(v1.gems, 0);
+  const forged = sanitizeProfile({ ...v1, gems: 1e15, decor: { owned: { fountain: 1, fake: 3, lantern: 99 } }, base: { slots: 4, decor: ['fountain', 'fountain', 'trophy_gold', 'nope'] } }, 'p_forged');
+  assert.equal(forged.gems, CONFIG.gems.max);
+  assert.deepEqual(forged.decor.owned, { fountain: 1, lantern: 8 });
+  assert.deepEqual(forged.base.decor.slice(0, 4), ['fountain', null, null, null], 'never more placed than owned');
 });

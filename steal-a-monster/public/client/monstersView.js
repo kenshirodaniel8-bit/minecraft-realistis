@@ -382,7 +382,7 @@ export class MonstersView {
       if (showBar) {
         v.bar.set(v.hp / 100);
         v.bar.group.position.set(v.pos.x, v.pos.y + h + 0.55, v.pos.z);
-        v.bar.group.scale.setScalar(Math.min(1, Math.max(0.25, dist / 12))); // capped on-screen size, like labels
+        v.bar.group.scale.setScalar(Math.min(1, Math.max(0.25, dist / 18))); // capped on-screen size, like labels
       }
       // aura particles
       const aura = v.species.model.aura;

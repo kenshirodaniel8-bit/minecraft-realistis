@@ -834,6 +834,7 @@ export const SPECIES = [
   },
   {
     id: 'titanub', name: 'Titanub', title: 'Ancient Guardian Baby', element: 'earth', rarity: 'epic', category: 'boss',
+    recruitReq: { swordTier: 5, text: 'Only listens to a fighter with a Flame Sword (Tier 5) or better.' },
     description: 'The guardian sealed inside the Temple vault. Ancient, enormous, and still technically a baby.',
     spawn: { regions: ['ruins'], spot: 'temple_vault', chance: 1, respawnMs: 300000, weight: 0, requiresPuzzle: true },
     stats: { hp: 1100, atk: 20, def: 16, speed: 7 }, size: 3.0,
@@ -989,6 +990,7 @@ export const SPECIES = [
   },
   {
     id: 'celestail', name: 'Celestail', title: 'Three-Tailed Star Fox', element: 'cosmic', rarity: 'legendary', category: 'legendary',
+    recruitReq: { swordTier: 7, text: 'Only trusts a hero who owns a Crystal Sword (Tier 7) or better.' },
     description: 'A legendary fox kit said to have fallen from the night sky. Its three tails sparkle with real stars.',
     spawn: { regions: ['legendary'], spot: 'celestial_altar', chance: 0.5, respawnMs: 420000, weight: 0 },
     stats: { hp: 850, atk: 20, def: 12, speed: 16 }, size: 1.7,
@@ -1016,6 +1018,7 @@ export const SPECIES = [
   },
   {
     id: 'aurorawyrm', name: 'Aurorawyrm', title: 'Aurora Sky Serpent', element: 'cosmic', rarity: 'legendary', category: 'boss',
+    recruitReq: { discoveries: 20, text: 'Only bonds with a true expert: discover 20 species in your Monsterdex.' },
     description: 'A baby sky serpent with fins that shimmer like the northern lights. It swims through the air of its nest.',
     spawn: { regions: ['legendary'], spot: 'wyrm_nest', chance: 0.5, respawnMs: 480000, weight: 0 },
     stats: { hp: 1300, atk: 22, def: 15, speed: 12 }, size: 2.6,
@@ -1043,6 +1046,7 @@ export const SPECIES = [
   },
   {
     id: 'glitchling', name: 'Glitchling', title: '??? Pixel Error', element: 'cosmic', rarity: 'secret', category: 'secret',
+    recruitReq: { discoveries: 30, swordTier: 6, text: 'Discover 30 species and own a Tier 6 sword to recruit this glitchy legend.' },
     description: 'Nobody knows what this is. It flickers, it giggles, and it sometimes forgets which way is up.',
     spawn: { regions: ['legendary'], spot: 'gilded_secret', chance: 0.25, respawnMs: 600000, weight: 0 },
     stats: { hp: 600, atk: 18, def: 10, speed: 14 }, size: 1.2,
@@ -1218,6 +1222,18 @@ export function monsterStats(species, level) {
     def: s.def * (1 + 0.08 * (L - 1)),
     speed: s.speed,
   };
+}
+
+// Extra conditions some rare monsters set before they can be recruited
+// (beyond defeating them and paying). Returns null when met, else the reason.
+// bestSwordTier: the highest tier among the swords the player owns.
+export function recruitReqReason(species, profile, bestSwordTier) {
+  const r = species.recruitReq;
+  if (!r) return null;
+  if (r.swordTier && bestSwordTier < r.swordTier) return `Needs a Tier ${r.swordTier} sword (you have Tier ${bestSwordTier}).`;
+  const found = Object.keys(profile.discoveries?.species || {}).length;
+  if (r.discoveries && found < r.discoveries) return `Discover ${r.discoveries} species first (you have ${found}).`;
+  return null;
 }
 
 export function recruitPrice(species, level, discount = 0) {

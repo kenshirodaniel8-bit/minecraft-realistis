@@ -166,6 +166,8 @@ function makeBases() {
       outside: toWorld(0, half + 6),   // where intruders are pushed when lasers switch on
       spawn: toWorld(0, 4),
       sign: toWorld(-9, half + 4),
+      // decoration spots along the side walls, facing into the base
+      decor: [-10.5, -5, 0.5, 5.5].flatMap((v) => [-11, 11].map((u) => ({ ...toWorld(u, v), yaw: u < 0 ? Math.atan2(tu.x, tu.z) : Math.atan2(-tu.x, -tu.z) }))),
       y: 0,
     });
   }

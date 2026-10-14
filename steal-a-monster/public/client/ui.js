@@ -9,6 +9,7 @@ import { ITEMS, ITEM_BY_ID } from '#shared/items.js';
 import { REGION_BY_ID, REGIONS } from '#shared/regions.js';
 import { COSMETICS, COSMETIC_BY_ID } from '#shared/lucky.js';
 import { CONFIG } from '#shared/config.js';
+import { DECOR, DECOR_BY_ID, placedCounts } from '#shared/decor.js';
 import { SPOTS } from '#shared/world.js';
 
 const $ = (id) => document.getElementById(id);
@@ -102,6 +103,9 @@ export class UI {
       void m.offsetWidth;
       m.classList.add('bump');
     }
+    const gemsEl = $('gems');
+    gemsEl.hidden = !(p.gems > 0);
+    setText($('gems-text'), fmt(p.gems || 0));
     const sword = SWORD_BY_ID[p.sword];
     setText($('sword-name'), sword.name);
     setText($('power-text'), fmt(swordDps(sword) * (1 + (p.perks?.damage || 0)) + p.level * 5));
@@ -289,6 +293,7 @@ export class UI {
       <div class="stats"><span>❤ HP ${fmt(o.stats.hp)}</span><span>⚔ ATK ${o.stats.atk}</span><span>🛡 DEF ${o.stats.def}</span><span>💨 SPD ${o.stats.speed}</span></div>
       <div class="perk">💰 $${o.income}/s · ✨ ${esc(perk.name)}: ${esc(perk.text(o.perk.value))}</div>
       <div class="price"></div>
+      ${o.requirement ? `<div class="req">🔐 ${esc(o.requirement)}</div>` : ''}
       <div class="note"></div>
       <div class="row"><button class="btn go rec">Recruit (R)</button><button class="btn ghost dec">Let go</button></div>
       <div class="timer"></div>`;
@@ -337,11 +342,12 @@ export class UI {
       if (price.innerHTML !== html) price.innerHTML = html;
       let note = '';
       const btn = e.el.querySelector('.rec');
-      if (p.money < o.price) note = `You need $${fmt(o.price - p.money)} more. Collect income at your base!`;
+      if (o.requirementMissing) note = o.requirementMissing;
+      else if (p.money < o.price) note = `You need $${fmt(o.price - p.money)} more. Collect income at your base!`;
       else if (p.monsters.length >= p.base.slots) note = 'Your base is full! Upgrade it or release a monster.';
       else if (o.priorityUntil && serverNow < o.priorityUntil) note = `The top fighter has first pick (${Math.ceil((o.priorityUntil - serverNow) / 1000)}s)`;
       setText(e.el.querySelector('.note'), note);
-      btn.disabled = p.money < o.price || p.monsters.length >= p.base.slots;
+      btn.disabled = !!o.requirementMissing || p.money < o.price || p.monsters.length >= p.base.slots;
     }
   }
 
@@ -379,6 +385,9 @@ export class UI {
   }
 
   refresh() {
+    // don't rebuild the panel under an open dropdown
+    const focused = document.activeElement;
+    if (focused && focused.tagName === 'SELECT' && $('panel-body').contains(focused)) return;
     if (this.panelName && !['map', 'settings', 'inspect', 'help'].includes(this.panelName)) this.render(true);
     if (this.panelName === 'inspect') this.renderInspectInfo();
   }
@@ -433,6 +442,9 @@ export class UI {
 
   // delegate clicks on [data-act]
   bind(body) {
+    for (const el of body.querySelectorAll('select[data-decor-spot]')) {
+      el.onchange = () => this.app.actions.placeDecor(Number(el.dataset.decorSpot), el.value || null);
+    }
     for (const el of body.querySelectorAll('[data-act]')) {
       el.onclick = (e) => {
         e.stopPropagation();
@@ -443,6 +455,7 @@ export class UI {
           case 'equipSword': acts.equipSword(a.id); break;
           case 'buyItem': acts.buyItem(a.id, Number(a.qty || 1)); break;
           case 'upgrade': acts.buyUpgrade(a.kind); break;
+          case 'buyDecor': acts.buyDecor(a.id); break;
           case 'inspectOwned': this.open('inspect', { owned: a.id }); break;
           case 'inspectSpecies': this.open('inspect', { species: a.id }); break;
           case 'tab': this.tab = a.tab; this.render(); break;
@@ -503,7 +516,7 @@ export class UI {
       if (equipped) btn = '<button class="btn sm" disabled>Equipped</button>';
       else if (owned) btn = `<button class="btn sm blue" data-act="equipSword" data-id="${w.id}">Equip</button>`;
       else if (lock) btn = `<button class="btn sm" disabled>🔒 ${esc(lock)}</button>`;
-      else btn = `<button class="btn sm go" data-act="buySword" data-id="${w.id}" ${p.money < w.price || !near ? 'disabled' : ''}>Buy $${fmt(w.price)}</button>`;
+      else btn = `<button class="btn sm go" data-act="buySword" data-id="${w.id}" ${p.money < w.price || (p.gems || 0) < (w.gems || 0) || !near ? 'disabled' : ''}>Buy $${fmt(w.price)}${w.gems ? ` + ${w.gems}💎` : ''}</button>`;
       const sp = w.special ? specialText(w.special) : '';
       return `<div class="row-item ${owned ? 'owned' : ''} ${equipped ? 'equipped' : ''}">
         <div class="icon" style="background:#${w.colors.blade.toString(16).padStart(6, '0')}33"><img alt="" style="width:60px;height:60px" src="${this.app.preview.swordIcon(w.id)}"></div>
@@ -541,6 +554,7 @@ export class UI {
     const slotsUp = CONFIG.bases.slotUpgrades.find((u) => u.slots > p.base.slots);
     const laserLvl = p.base.laserLevel;
     const laserPrice = CONFIG.security.laserUpgradePrices[laserLvl];
+    const laserGems = CONFIG.security.laserUpgradeGems[laserLvl] || 0;
     const durations = CONFIG.security.lockDurationsSec;
     const lockLeft = base && base.lockedUntil ? Math.max(0, Math.ceil((base.lockedUntil - s.serverNow) / 1000)) : 0;
     const perks = Object.entries(p.perks || {}).filter(([, v]) => v > 0).map(([k, v]) => `<span>${esc(PERKS[k].name)}: ${esc(PERKS[k].text(v))}</span>`).join('');
@@ -559,10 +573,39 @@ export class UI {
       ${perks ? `<div class="stats-row" style="margin-bottom:10px">${perks}</div>` : ''}
       ${atBase ? '' : '<p class="note">📍 Upgrades are bought at your base terminal. Press H to go home.</p>'}
       <div class="row-item"><div class="icon" style="background:#e8ffe0">🟢</div><div class="info"><h4>More monster pads</h4><p>${slotsUp ? `${p.base.slots} → ${slotsUp.slots} pads (requires Level ${slotsUp.level})` : 'Fully upgraded!'}</p></div>
-        ${slotsUp ? `<button class="btn sm go" data-act="upgrade" data-kind="slots" ${!atBase || p.money < slotsUp.price || p.level < slotsUp.level ? 'disabled' : ''}>$${fmt(slotsUp.price)}</button>` : ''}</div>
+        ${slotsUp ? `<button class="btn sm go" data-act="upgrade" data-kind="slots" ${!atBase || p.money < slotsUp.price || (p.gems || 0) < (slotsUp.gems || 0) || p.level < slotsUp.level ? 'disabled' : ''}>$${fmt(slotsUp.price)}${slotsUp.gems ? ` + ${slotsUp.gems}💎` : ''}</button>` : ''}</div>
       <div class="row-item"><div class="icon" style="background:#ffe0e3">🔒</div><div class="info"><h4>Stronger lasers</h4><p>${laserPrice ? `Lasers last ${durations[laserLvl]}s → ${durations[laserLvl + 1]}s` : 'Fully upgraded!'}</p></div>
-        ${laserPrice ? `<button class="btn sm go" data-act="upgrade" data-kind="laser" ${!atBase || p.money < laserPrice ? 'disabled' : ''}>$${fmt(laserPrice)}</button>` : ''}</div>
-      <h3>Pads</h3><div class="grid">${pads}</div>`;
+        ${laserPrice ? `<button class="btn sm go" data-act="upgrade" data-kind="laser" ${!atBase || p.money < laserPrice || (p.gems || 0) < laserGems ? 'disabled' : ''}>$${fmt(laserPrice)}${laserGems ? ` + ${laserGems}💎` : ''}</button>` : ''}</div>
+      <h3>Pads</h3><div class="grid">${pads}</div>
+      ${this.decorHtml(s)}`;
+  }
+
+  // Decorations: what is on each wall spot, and the catalog to buy from.
+  decorHtml(s) {
+    const p = s.profile;
+    const atBase = s.atBase;
+    const owned = p.decor?.owned || {};
+    const placed = p.base.decor || [];
+    const counts = placedCounts(placed);
+    const ownedIds = DECOR.filter((d) => owned[d.id]);
+    const spots = placed.map((id, i) => {
+      const options = ['<option value="">— empty —</option>'].concat(ownedIds.map((d) => {
+        const free = (owned[d.id] || 0) - (counts[d.id] || 0) + (id === d.id ? 1 : 0);
+        return `<option value="${d.id}" ${id === d.id ? 'selected' : ''}>${d.icon} ${esc(d.name)}${free <= 0 ? ' (move here)' : ''}</option>`;
+      })).join('');
+      return `<label class="decor-spot"><span>${i % 2 ? 'Right' : 'Left'} wall ${Math.floor(i / 2) + 1}</span><select data-decor-spot="${i}" ${atBase ? '' : 'disabled'}>${options}</select></label>`;
+    }).join('');
+    const shop = DECOR.map((d) => {
+      const n = owned[d.id] || 0;
+      let btn;
+      if (d.milestone) btn = `<button class="btn sm" disabled>${n ? 'Earned ✓' : '🏆 Milestone'}</button>`;
+      else btn = `<button class="btn sm go" data-act="buyDecor" data-id="${d.id}" ${!atBase || p.money < d.price || (p.gems || 0) < d.gems ? 'disabled' : ''}>$${fmt(d.price)}${d.gems ? ` + ${d.gems}💎` : ''}</button>`;
+      return `<div class="row-item ${n ? 'owned' : ''}"><div class="icon" style="background:#fff3d8">${d.icon}</div><div class="info"><h4>${esc(d.name)} ${n ? `<small>x${n}</small>` : ''}</h4><p>${esc(d.desc)}</p></div>${btn}</div>`;
+    }).join('');
+    return `<h3>Decorations</h3>
+      <p class="muted small">Show off your base! Everyone who visits sees your decorations. ${atBase ? '' : '<b>Go to your base (H) to buy or move them.</b>'}</p>
+      <div class="decor-spots">${spots}</div>
+      ${shop}`;
   }
 
   boardHtml(s) {
@@ -669,6 +712,7 @@ export class UI {
         <b>Base income</b><span>$${incomePerSecond(sp, level)}/s</span>
         <b>Perk</b><span>${esc(perk.name)}: ${esc(perk.text(perkValue(sp, level)))}</span>
         <b>Recruit fee</b><span>$${fmt(recruitPrice(sp, level))}${owned ? '' : ` at Lv ${level}`}</span>
+        ${sp.recruitReq && !owned ? `<b>Condition</b><span>🔐 ${esc(sp.recruitReq.text)}</span>` : ''}
         ${owned ? `<b>Origin</b><span>${owned.origin === 'stolen' ? `Stolen from ${esc(owned.stolenFrom || '?')}` : owned.origin === 'event' ? 'LUCKY LUCKY event' : 'Recruited'}</span>` : ''}
       </div>
       <div class="acts">${acts}</div>`;

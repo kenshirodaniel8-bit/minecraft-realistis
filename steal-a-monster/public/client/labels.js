@@ -56,7 +56,7 @@ export function makeLabel(text, opts = {}) {
 // A label closer to the camera than CAP_DIST shrinks in proportion, so it never
 // looks bigger on screen than it does from CAP_DIST away (no giant names when a
 // monster walks right up to the camera).
-const CAP_DIST = 12;
+const CAP_DIST = 18;
 const tmpPos = new THREE.Vector3();
 function capOnScreenSize(renderer, scene, camera) {
   const d = camera.position.distanceTo(tmpPos.setFromMatrixPosition(this.matrixWorld));
@@ -82,4 +82,26 @@ export function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+// A soft additive glow (instead of a real light: adding or removing lights
+// makes three.js recompile every lit material and slows down all shading).
+const glowTextures = new Map();
+export function glowSprite(color, size = 3, opacity = 0.7) {
+  if (!glowTextures.has('g')) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    glowTextures.set('g', new THREE.CanvasTexture(c));
+  }
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTextures.get('g'), color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false }));
+  s.scale.set(size, size, 1);
+  s.renderOrder = 4;
+  return s;
 }

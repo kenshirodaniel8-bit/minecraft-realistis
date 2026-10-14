@@ -6,6 +6,7 @@
 // arc:        swing cone in degrees
 // maxTargets: monsters hit by one swing
 // special:    optional on-hit effect handled in server/services/combat.js
+// gems:       Monster Gems needed on top of the Money price (top tiers)
 
 export const SWORDS = [
   {
@@ -42,25 +43,25 @@ export const SWORDS = [
     special: { kind: 'chain', range: 7, share: 0.5 },
   },
   {
-    id: 'crystal', tier: 7, name: 'Crystal Sword', price: 70000, damage: 100, cooldownMs: 450, range: 3.8, arc: 125, maxTargets: 3,
+    id: 'crystal', tier: 7, name: 'Crystal Sword', price: 70000, gems: 3, damage: 100, cooldownMs: 450, range: 3.8, arc: 125, maxTargets: 3,
     unlock: { level: 16, discovered: 'crystal' }, colors: { blade: 0x8ff0ff, edge: 0xe8ffff, guard: 0xc28fff, grip: 0x3a2a5a, glow: 0x8ff0ff }, length: 3.0,
     description: 'Razor-sharp crystal. Big crit chance. Requires discovering the Crystal Mountains.',
     special: { kind: 'crit', chance: 0.2 },
   },
   {
-    id: 'shadow', tier: 8, name: 'Shadow Sword', price: 140000, damage: 135, cooldownMs: 440, range: 3.9, arc: 125, maxTargets: 3,
+    id: 'shadow', tier: 8, name: 'Shadow Sword', price: 140000, gems: 8, damage: 135, cooldownMs: 440, range: 3.9, arc: 125, maxTargets: 3,
     unlock: { level: 19, discovered: 'shadow' }, colors: { blade: 0x5a3a9a, edge: 0xb48cff, guard: 0x1a1030, grip: 0x0a0510, glow: 0x9a6bff }, length: 3.1,
     description: 'Drinks a little of every hit to heal you.',
     special: { kind: 'lifesteal', share: 0.06 },
   },
   {
-    id: 'dragon', tier: 9, name: 'Dragon Sword', price: 280000, damage: 180, cooldownMs: 430, range: 4.1, arc: 140, maxTargets: 4,
+    id: 'dragon', tier: 9, name: 'Dragon Sword', price: 280000, gems: 15, damage: 180, cooldownMs: 430, range: 4.1, arc: 140, maxTargets: 4,
     unlock: { level: 23, discovered: 'volcanic' }, colors: { blade: 0xd83a1f, edge: 0xffc25a, guard: 0x2a1a1a, grip: 0x5a1a10, glow: 0xff6a1f }, length: 3.3,
     description: 'A huge sweeping blade that knocks monsters back.',
     special: { kind: 'cleave', knockback: 6 },
   },
   {
-    id: 'celestial', tier: 10, name: 'Celestial Sword', price: 600000, damage: 250, cooldownMs: 420, range: 4.3, arc: 145, maxTargets: 5,
+    id: 'celestial', tier: 10, name: 'Celestial Sword', price: 600000, gems: 40, damage: 250, cooldownMs: 420, range: 4.3, arc: 145, maxTargets: 5,
     unlock: { level: 27, discovered: 'legendary' }, colors: { blade: 0xfff7d8, edge: 0xffffff, guard: 0xffc23a, grip: 0x8a7aff, glow: 0xfff7a8 }, length: 3.5,
     description: 'Forged from starlight. Heals you on hit and crits often.',
     special: { kind: 'celestial', crit: 0.15, heal: 0.03 },

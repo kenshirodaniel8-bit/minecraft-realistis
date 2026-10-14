@@ -179,3 +179,35 @@ test('24a. a player disconnecting while an offer is open does not corrupt anythi
   assert.equal(back.profile.monsters.length, 0);
   assert.equal(back.send('recruit', { monsterId: m.id, reqId: 'late' }).ok, false);
 });
+
+test('rare monsters can set extra recruit conditions (sword tier, Monsterdex discoveries), checked by the server', async () => {
+  const h = await makeGame();
+  const a = await h.join(TOKEN_A, 'Alice');
+  h.advance(CONFIG.player.spawnProtectionMs + 100);
+  h.place(a, FIELD.x, FIELD.z, 0);
+  const p = a.profile;
+  p.money = 1e6;
+  // Celestail wants a Crystal Sword (Tier 7) or better in your collection
+  const m = h.spawnMonster('celestail', 20, FIELD.x + 2, FIELD.z);
+  m.hp = 1;
+  assert.ok(h.defeat(a, m));
+  p.money = 1e6;
+  const offer = a.last('recruitOffer');
+  assert.ok(offer.requirement, 'the offer explains the condition');
+  assert.match(offer.requirementMissing, /Tier 7/);
+  const r1 = a.send('recruit', { monsterId: m.id, reqId: 'c1' });
+  assert.equal(r1.error, 'requirement');
+  assert.equal(p.money, 1e6);
+  assert.equal(p.monsters.length, 0);
+  p.swords.push('crystal'); // owning it is enough, it needn't be equipped
+  const r2 = a.send('recruit', { monsterId: m.id, reqId: 'c2' });
+  assert.equal(r2.ok, true);
+  assert.equal(p.monsters[0].species, 'celestail');
+  // Glitchling also wants 30 discovered species
+  const g = h.spawnMonster('glitchling', 20, FIELD.x + 2, FIELD.z + 4);
+  g.hp = 1;
+  assert.ok(h.defeat(a, g));
+  assert.match(a.send('recruit', { monsterId: g.id, reqId: 'g1' }).message, /Discover 30 species/);
+  for (const sp of Object.keys(SPECIES_BY_ID).slice(0, 30)) p.discoveries.species[sp] = 1;
+  assert.equal(a.send('recruit', { monsterId: g.id, reqId: 'g2' }).ok, true);
+});

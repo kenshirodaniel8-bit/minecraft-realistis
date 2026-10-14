@@ -18,6 +18,7 @@ export class LuckyBlocks {
     this.blocks = new Map();
     this.nextId = 1;
     this.ambientNext = {};
+    this.geodeNext = {};
     this.lastCheck = 0;
   }
 
@@ -54,18 +55,27 @@ export class LuckyBlocks {
     this.lastCheck = now;
     const active = this.game.expansion.active;
     const counts = {};
+    const geodes = {};
     for (const b of [...this.blocks.values()]) {
       if (!active.has(b.region)) {
         this.remove(b);
         continue;
       }
-      if (!b.event) counts[b.region] = (counts[b.region] || 0) + 1;
+      if (b.kind === 'geode') geodes[b.region] = (geodes[b.region] || 0) + 1;
+      else if (!b.event) counts[b.region] = (counts[b.region] || 0) + 1;
     }
     for (const regionId of active) {
       if ((counts[regionId] || 0) >= CONFIG.lucky.ambientPerRegion) continue;
       if (now < (this.ambientNext[regionId] || 0)) continue;
       this.ambientNext[regionId] = now + 5000;
       this.spawnAt(regionId, this.game.rng() < 0.15 ? 'super' : 'lucky', false);
+    }
+    // gem geodes in the gem-rich regions
+    for (const regionId of CONFIG.gems.geodeRegions) {
+      if (!active.has(regionId) || (geodes[regionId] || 0) >= CONFIG.gems.geodesPerRegion) continue;
+      if (now < (this.geodeNext[regionId] || 0)) continue;
+      this.geodeNext[regionId] = now + 5000;
+      this.spawnAt(regionId, 'geode', false);
     }
   }
 
@@ -121,13 +131,20 @@ export class LuckyBlocks {
     if (Math.hypot(s.pos.x - b.x, s.pos.z - b.z) > CONFIG.lucky.claimRange || Math.abs(s.pos.y - b.y) > 6) return fail('too_far', 'Get closer to the Lucky Block.');
     b.claimedBy = s.id;
     this.blocks.delete(b.id); // gone before any reward is decided
-    if (!b.event) this.ambientNext[b.region] = game.now() + CONFIG.lucky.ambientRespawnMs;
-    const reward = this.giveReward(s, b);
-    s.profile.stats.luckyOpened++;
+    if (b.kind === 'geode') this.geodeNext[b.region] = game.now() + CONFIG.gems.geodeRespawnMs;
+    else if (!b.event) this.ambientNext[b.region] = game.now() + CONFIG.lucky.ambientRespawnMs;
+    const reward = b.kind === 'geode' ? this.giveGeode(s) : this.giveReward(s, b);
+    if (b.kind !== 'geode') s.profile.stats.luckyOpened++;
     game.markProfile(s);
     game.saveNow(s);
     game.broadcast('luckyOpened', { id: b.id, pn: s.pn, kind: b.kind, reward: { kind: reward.kind, label: reward.label } });
     return { ok: true, reward };
+  }
+
+  giveGeode(s) {
+    const [lo, hi] = CONFIG.gems.geodeReward;
+    const n = this.game.economy.creditGems(s, lo + Math.floor(this.game.rng() * (hi - lo + 1)), 'geode');
+    return { kind: 'gems', amount: n, label: `+${n} 💎 Monster Gems` };
   }
 
   giveReward(s, b) {
@@ -205,6 +222,11 @@ export class LuckyBlocks {
         s.profile.sword = next.id;
         game.broadcast('playerInfo', game.playerInfo(s));
         return { kind: 'sword', id: next.id, label: `NEW SWORD: ${next.name}!` };
+      }
+      case 'gems': {
+        const mult = b.kind === 'mythic' ? 3 : b.kind === 'super' ? 2 : 1;
+        const n = game.economy.creditGems(s, rnd(entry.min, entry.max) * mult, 'lucky');
+        return { kind: 'gems', amount: n, label: `+${n} 💎 Monster Gems` };
       }
       default:
         return money(100);

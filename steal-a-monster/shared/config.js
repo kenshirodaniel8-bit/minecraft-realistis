@@ -3,7 +3,7 @@
 
 export const GAME_NAME = 'STEAL A MONSTER';
 export const PROTOCOL_VERSION = 1;
-export const SAVE_SCHEMA_VERSION = 1;
+export const SAVE_SCHEMA_VERSION = 2;
 export const WORLD_SEED = 'project-titan';
 
 export const CONFIG = {
@@ -94,8 +94,8 @@ export const CONFIG = {
     slotUpgrades: [         // price to go from (index*2 + startingSlots) to +2 slots
       { slots: 6, price: 1500, level: 2 },
       { slots: 8, price: 6000, level: 5 },
-      { slots: 10, price: 20000, level: 9 },
-      { slots: 12, price: 60000, level: 14 },
+      { slots: 10, price: 20000, level: 9, gems: 3 },
+      { slots: 12, price: 60000, level: 14, gems: 8 },
     ],
     incomeAccumulateCap: 3600, // seconds of income a base can hold before collecting
     offlineIncomeRate: 0.5,
@@ -106,6 +106,7 @@ export const CONFIG = {
   security: {
     lockDurationsSec: [60, 75, 95, 120], // by laser upgrade level
     laserUpgradePrices: [3000, 12000, 40000],
+    laserUpgradeGems: [0, 0, 4],
     relockCooldownSec: 5,
     requireAtBaseToLock: true,
   },
@@ -141,6 +142,23 @@ export const CONFIG = {
   },
 
   // --- lucky blocks & events ---------------------------------------------
+  // --- Monster Gems: the rare upgrade material ------------------------------
+  gems: {
+    max: 1000000,
+    // dropped by defeated monsters, per player who helped (rolled per rarity)
+    drops: {
+      rare: { chance: 0.35, min: 1, max: 1 },
+      epic: { chance: 1, min: 1, max: 2 },
+      legendary: { chance: 1, min: 3, max: 5 },
+      secret: { chance: 1, min: 4, max: 6 },
+      event: { chance: 1, min: 1, max: 2 },
+    },
+    regionBonus: { volcanic: 1 },   // the Volcanic Kingdom is rich in gems
+    geodeRegions: ['volcanic', 'crystal'],
+    geodesPerRegion: 2,
+    geodeRespawnMs: 240000,
+    geodeReward: [2, 4],
+  },
   lucky: {
     claimRange: 6,
     ambientPerRegion: 1,     // lucky blocks always present per active region
