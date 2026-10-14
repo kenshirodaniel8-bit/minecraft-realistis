@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { SPECIES_BY_ID } from '#shared/monsters.js';
 import { buildMonster } from './monsterRenderer.js';
 import { animateMonster } from './animationSystem.js';
+import { buildSword } from './humanoid.js';
 
 export class MonsterPreview {
   constructor() {
@@ -91,6 +92,30 @@ export class MonsterPreview {
 
   update(dt) {
     for (const v of this.views) this.render(v, dt);
+  }
+
+  // sword icon (cached data URL)
+  swordIcon(id, size = 96) {
+    const key = `sword|${id}|${size}`;
+    if (this.icons.has(key)) return this.icons.get(key);
+    const sword = buildSword(id);
+    const g = new THREE.Group();
+    g.add(sword);
+    sword.position.y = -(sword.userData.length + 0.5) / 2;
+    g.rotation.z = -Math.PI / 4;
+    g.rotation.y = 0.5;
+    this.renderer.setSize(size, size, false);
+    this.holder.clear();
+    this.holder.add(g);
+    const L = sword.userData.length + 1;
+    this.camera.aspect = 1;
+    this.camera.position.set(0, 0, (L * 0.62) / Math.tan((this.camera.fov * Math.PI) / 360));
+    this.camera.lookAt(0, 0, 0);
+    this.camera.updateProjectionMatrix();
+    this.renderer.render(this.scene, this.camera);
+    const url = this.renderer.domElement.toDataURL('image/png');
+    this.icons.set(key, url);
+    return url;
   }
 
   // static icon (cached data URL)

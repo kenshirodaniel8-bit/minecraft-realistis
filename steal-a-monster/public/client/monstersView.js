@@ -146,6 +146,14 @@ export class MonstersView {
       v.buf.push(t, x, y, z, yaw);
       if (state !== v.state) {
         if (state === MSTATE.defeated) this.audio.play('defeat', { pitch: v.species.personality.cry });
+        // noticing an enemy: a quick intimidating face before the chase
+        const calm = [MSTATE.idle, MSTATE.wander, MSTATE.sleep, MSTATE.quirk].includes(v.state);
+        if (state === MSTATE.chase && calm) {
+          v.forcePose = 'quirk';
+          v.forceQuirk = 'intimidate';
+          v.forceUntil = performance.now() + 750;
+          this.audio.play('cry', { pitch: v.species.personality.cry * 0.85, minGap: 300 });
+        }
         v.state = state;
         v.st.poseT = 0;
       }
@@ -311,8 +319,8 @@ export class MonstersView {
       else v.st.dashing = false;
       if (pose === 'quirk') {
         const idles = v.species.personality.idles;
-        v.st.quirk = idles[(v.quirk || 0) % idles.length];
-        v.st.quirkDur = 3.5;
+        v.st.quirk = v.forcePose === 'quirk' && nowMs < v.forceUntil ? v.forceQuirk : idles[(v.quirk || 0) % idles.length];
+        v.st.quirkDur = v.forcePose === 'quirk' && nowMs < v.forceUntil ? 0.75 : 3.5;
       }
       if (pose !== v.st.pose) {
         v.st.pose = pose;

@@ -488,7 +488,7 @@ export class UI {
       else btn = `<button class="btn sm go" data-act="buySword" data-id="${w.id}" ${p.money < w.price || !near ? 'disabled' : ''}>Buy $${fmt(w.price)}</button>`;
       const sp = w.special ? specialText(w.special) : '';
       return `<div class="row-item ${owned ? 'owned' : ''} ${equipped ? 'equipped' : ''}">
-        <div class="icon" style="background:#${w.colors.blade.toString(16).padStart(6, '0')}33">🗡️</div>
+        <div class="icon" style="background:#${w.colors.blade.toString(16).padStart(6, '0')}33"><img alt="" style="width:60px;height:60px" src="${this.app.preview.swordIcon(w.id)}"></div>
         <div class="info"><h4>T${w.tier} · ${esc(w.name)}</h4><p>${esc(w.description)}</p>
           <div class="stats-row"><span>⚔ ${w.damage} dmg</span><span>⏱ ${(1000 / w.cooldownMs).toFixed(1)}/s</span><span>📏 ${w.range}</span><span>🎯 ${w.maxTargets} target${w.maxTargets > 1 ? 's' : ''}</span><span>DPS ${swordDps(w)}</span>${sp ? `<span>✨ ${sp}</span>` : ''}</div>
         </div>${btn}</div>`;

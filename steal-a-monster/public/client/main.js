@@ -426,6 +426,7 @@ class App {
       this.ui.chat(d.name, d.text, '#' + ((c ?? 0xffe14a)).toString(16).padStart(6, '0'));
     });
     n.on('theft', (d) => {
+      this.lastTheft = d;
       const msg = {
         grab: `⚠ ${d.thief} is grabbing your ${d.name}! Lock your base!`,
         carry: `🚨 ${d.thief} STOLE your ${d.name}! Stop them before they reach their base!`,
@@ -919,10 +920,11 @@ class App {
 
   frame(nowMs) {
     requestAnimationFrame((t) => this.frame(t));
-    const dt = Math.min(0.05, (nowMs - this.last) / 1000);
+    const dt = Math.min(0.12, (nowMs - this.last) / 1000);
     this.last = nowMs;
     this.t += dt;
     if (!this.ready) return;
+    const t0 = performance.now();
     const input = this.input;
     const serverNow = this.serverNow();
     const renderT = serverNow - INTERP_DELAY;
@@ -933,6 +935,7 @@ class App {
       if (panelOpen) this.ui.close();
       else this.ui.open('settings');
     }
+    if (input.consumePress('debug')) this.showDebug = !this.showDebug;
     if (!input.typing) {
       if (input.consumePress('chat')) this.ui.openChat();
       if (input.consumePress('collection')) this.ui.toggle('collection');
@@ -968,7 +971,8 @@ class App {
     const faceYaw = performance.now() < this.attackFaceUntil ? this.attackYaw : input.mouseLook ? camYaw : null;
     const wasGrounded = this.player.grounded;
     const jump = active && input.down.has('jump');
-    const blocked = this.player.update(dt, move, fwd, {
+    // physics in small sub-steps so slow devices still move correctly
+    const moveOpts = {
       sprint: input.down.has('sprint'),
       jump,
       speedMult,
@@ -977,7 +981,10 @@ class App {
       canEnter: (x, z) => this.canEnter(x, z),
       resolveDynamic: (pos) => this.basesView.resolveGates(pos, this.myBase),
       faceYaw,
-    });
+    };
+    let blocked = null;
+    const steps = Math.ceil(dt / 0.034);
+    for (let i = 0; i < steps; i++) blocked = this.player.update(dt / steps, move, fwd, moveOpts) || blocked;
     if (blocked) this.blockedToast(blocked);
     if (wasGrounded && !this.player.grounded && jump && this.player.vel.y > 5) this.audio.play('jump');
     if (active && input.consumePress('dodge') && !frozen) {
@@ -1011,8 +1018,8 @@ class App {
 
     // views
     this.me.setLocal(this.player.pos, this.player.yaw, this.player.anim);
-    this.me.update(dt, this.t, renderT, this.effects);
-    for (const pl of this.players.values()) pl.update(dt, this.t, renderT, this.effects);
+    const everyone = [this.me, ...this.players.values()];
+    for (const pl of everyone) pl.update(dt, this.t, renderT, this.effects, everyone.filter((o) => o !== pl).map((o) => o.pos));
     const camPos = this.sceneView.camera.position;
     this.monsters.update(dt, renderT, this.t, camPos, this.player.pos);
     const near = [{ x: this.player.pos.x, z: this.player.pos.z }, ...[...this.players.values()].map((pl) => pl.pos)];
@@ -1040,9 +1047,45 @@ class App {
       if (this.puzzle) this.worldView.setPuzzleState(this.puzzle, serverNow);
       const open = this.puzzle && this.puzzle.openUntil > serverNow;
       for (const c of this.vaultColliders) c.enabled = !open;
+      this.updateDebug(serverNow);
     }
+    const t1 = performance.now();
     this.sceneView.render();
+    const t2 = performance.now();
+    this.jsMs = (this.jsMs || 0) * 0.95 + (t1 - t0) * 0.05;
+    this.renderMs = (this.renderMs || 0) * 0.95 + (t2 - t1) * 0.05;
+    this.frames = (this.frames || 0) + 1;
     input.endFrame();
+  }
+
+  // F3: performance and state overlay
+  updateDebug(serverNow) {
+    const el = $('debug');
+    const now = performance.now();
+    if (!this.fpsAt) this.fpsAt = now;
+    if (now - this.fpsAt >= 1000) {
+      this.fps = Math.round((this.frames * 1000) / (now - this.fpsAt));
+      this.frames = 0;
+      this.fpsAt = now;
+    }
+    this.stats = {
+      fps: this.fps || 0,
+      calls: this.sceneView.renderer.info.render.calls,
+      triangles: this.sceneView.renderer.info.render.triangles,
+      monsters: this.monsters.map.size,
+      players: this.players.size + 1,
+      particles: this.effects.mesh.count,
+      rtt: Math.round(this.net.rtt),
+      jsMs: Math.round(this.jsMs * 10) / 10,
+      renderMs: Math.round(this.renderMs * 10) / 10,
+    };
+    el.hidden = !this.showDebug;
+    if (!this.showDebug) return;
+    const p = this.player.pos;
+    el.textContent = `FPS ${this.stats.fps}  logic ${this.stats.jsMs} ms  render ${this.stats.renderMs} ms  draw calls ${this.stats.calls}  triangles ${this.stats.triangles.toLocaleString()}\n`
+      + `monsters ${this.stats.monsters}  players ${this.stats.players}  particles ${this.stats.particles}  ping ${this.stats.rtt} ms\n`
+      + `pos ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${p.z.toFixed(1)}  region ${this.region}  day ${(this.dayT() * 24).toFixed(1)}h  quality ${this.settings.quality}`;
+    void serverNow;
   }
 }
 

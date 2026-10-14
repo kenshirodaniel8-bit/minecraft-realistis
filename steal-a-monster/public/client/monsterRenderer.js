@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SPECIES_BY_ID } from '#shared/monsters.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -137,6 +138,11 @@ export const FROZEN_MAT = new THREE.MeshStandardMaterial({ color: 0xbff1ff, emis
 // ------------------------------------------------------------------ helpers
 
 function mesh(geo, material, scale, pos, rot) {
+  // small spheres don't need many polygons
+  if (geo === G.sphere && scale) {
+    const s = typeof scale === 'number' ? scale : Math.max(Math.abs(scale[0]), Math.abs(scale[1]), Math.abs(scale[2]));
+    if (s < 0.3) geo = G.sphereLo;
+  }
   const m = new THREE.Mesh(geo, material);
   if (scale) {
     if (typeof scale === 'number') m.scale.setScalar(scale);
@@ -202,7 +208,135 @@ function hex(v) {
 
 // ------------------------------------------------------------------ builder
 
+// Every species is built once into an optimised template (static meshes
+// merged per pivot and material); each monster is a cheap clone that shares
+// geometry and materials with the template.
+const TEMPLATES = new Map();
+const SINGLE_KEYS = ['root', 'bodyPivot', 'body', 'head', 'mouth', 'mouthOpen', 'jaw', 'upperTeeth', 'crest', 'shell', 'spout', 'flames', 'halo', 'tailFlame', 'coin', 'snout', 'lantern', 'waveArm'];
+
 export function buildMonster(speciesId, opts = {}) {
+  let t = TEMPLATES.get(speciesId);
+  if (!t) {
+    t = buildRawMonster(speciesId, opts);
+    optimizeTemplate(t);
+    TEMPLATES.set(speciesId, t);
+  }
+  return cloneRig(t);
+}
+
+function rigObjects(rig) {
+  const list = [];
+  for (const k of SINGLE_KEYS) if (rig[k]) list.push(rig[k]);
+  for (const e of rig.eyes) list.push(e.group, e.inner);
+  list.push(...rig.eyeX, ...rig.tail, ...rig.antennae);
+  for (const x of [...rig.ears, ...rig.legs, ...rig.arms, ...rig.wings]) list.push(x.pivot);
+  for (const x of rig.spin) list.push(x.obj);
+  return list;
+}
+
+function flipWinding(g) {
+  for (const name of Object.keys(g.attributes)) {
+    const a = g.attributes[name];
+    const n = a.itemSize;
+    for (let i = 0; i < a.count; i += 3) {
+      for (let k = 0; k < n; k++) {
+        const t = a.array[(i + 1) * n + k];
+        a.array[(i + 1) * n + k] = a.array[(i + 2) * n + k];
+        a.array[(i + 2) * n + k] = t;
+      }
+    }
+  }
+}
+
+function mergeMeshes(list) {
+  const hasUv = list.every((m) => m.geometry.attributes.uv);
+  const geos = list.map((m) => {
+    m.updateMatrix();
+    let g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && !(k === 'uv' && hasUv)) g.deleteAttribute(k);
+    g.applyMatrix4(m.matrix);
+    if (m.matrix.determinant() < 0) flipWinding(g);
+    return g;
+  });
+  const merged = mergeGeometries(geos, false);
+  const out = new THREE.Mesh(merged, list[0].material);
+  out.castShadow = list[0].castShadow;
+  out.userData.detail = !!list[0].userData.detail;
+  return out;
+}
+
+function optimizeTemplate(rig) {
+  const keep = new Set(rigObjects(rig));
+  // flag tiny parts as "detail" (hidden on far-away monsters)
+  rig.root.traverse((o) => {
+    if (o.isMesh) {
+      const sc = Math.max(Math.abs(o.scale.x), Math.abs(o.scale.y), Math.abs(o.scale.z));
+      o.userData.detail = sc < 0.13;
+    }
+  });
+  const parents = [];
+  rig.root.traverse((o) => parents.push(o));
+  for (const parent of parents) {
+    const groups = new Map();
+    for (const c of parent.children) {
+      if (!c.isMesh || keep.has(c) || c.children.length) continue;
+      const key = `${c.material.uuid}|${c.userData.detail ? 1 : 0}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(c);
+    }
+    for (const list of groups.values()) {
+      if (list.length < 2) continue;
+      const merged = mergeMeshes(list);
+      for (const m of list) parent.remove(m);
+      parent.add(merged);
+    }
+  }
+  let n = 0;
+  rig.root.traverse((o) => { o.name = `n${n++}`; });
+  rig.meshCount = 0;
+  rig.root.traverse((o) => { if (o.isMesh) rig.meshCount++; });
+}
+
+function cloneRig(t) {
+  const root = t.root.clone(true);
+  const byName = new Map();
+  root.traverse((o) => byName.set(o.name, o));
+  const get = (o) => (o ? byName.get(o.name) : o);
+  const rig = { ...t, root };
+  for (const k of SINGLE_KEYS) rig[k] = get(t[k]);
+  rig.eyes = t.eyes.map((e) => ({ ...e, group: get(e.group), inner: get(e.inner) }));
+  rig.eyeX = t.eyeX.map(get);
+  rig.tail = t.tail.map(get);
+  rig.antennae = t.antennae.map(get);
+  rig.ears = t.ears.map((e) => ({ ...e, pivot: get(e.pivot) }));
+  rig.legs = t.legs.map((e) => ({ ...e, pivot: get(e.pivot) }));
+  rig.arms = t.arms.map((e) => ({ ...e, pivot: get(e.pivot) }));
+  rig.wings = t.wings.map((e) => ({ ...e, pivot: get(e.pivot) }));
+  rig.spin = t.spin.map((e) => ({ ...e, obj: get(e.obj) }));
+  rig.meshes = [];
+  rig.detailMeshes = [];
+  root.traverse((o) => {
+    if (o.isMesh) {
+      o.userData.baseMat = o.material;
+      rig.meshes.push(o);
+      if (o.userData.detail) rig.detailMeshes.push(o);
+    }
+  });
+  rig.bbox = t.bbox.clone();
+  rig.prepared = false;
+  rig.animNodes = null;
+  rig.decor = null;
+  return rig;
+}
+
+// Hide tiny parts (eye sparkles, teeth, claws) on far-away monsters.
+export function setRigDetail(rig, on) {
+  if (rig.detailOn === on) return;
+  rig.detailOn = on;
+  for (const m of rig.detailMeshes) m.visible = on;
+}
+
+function buildRawMonster(speciesId, opts = {}) {
   const species = SPECIES_BY_ID[speciesId];
   if (!species) throw new Error(`unknown species ${speciesId}`);
   const recipe = species.model;
@@ -1578,7 +1712,6 @@ export function buildMonster(speciesId, opts = {}) {
   root.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = !!opts.shadows;
-      o.userData.baseMat = o.material;
       rig.meshes.push(o);
     }
   });
@@ -1587,6 +1720,7 @@ export function buildMonster(speciesId, opts = {}) {
   rig.width = Math.max(box.max.x - box.min.x, box.max.z - box.min.z);
   rig.bbox = box;
   rig.parts = [...parts].sort();
+  rig.rawMeshCount = rig.meshes.length;
   rig.headTop = (recipe.head ? recipe.head.pos[1] + recipe.head.size[1] / 2 : B.y + bh / 2);
   root.scale.setScalar(species.size);
   rig.scale = species.size;
@@ -1603,7 +1737,7 @@ export function rigSignature(rig) {
   const s = rig.bbox.getSize(new THREE.Vector3());
   return {
     parts: rig.parts,
-    meshes: rig.meshes.length,
+    meshes: rig.rawMeshCount ?? rig.meshes.length,
     size: [s.x, s.y, s.z].map((v) => Math.round(v * 10) / 10),
   };
 }

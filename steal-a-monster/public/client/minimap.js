@@ -64,9 +64,11 @@ export class MapRenderer {
       ctx.moveTo(toPx(0), toPx(-RING.edge));
       ctx.lineTo(toPx(0), toPx(RING.edge));
       ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(toPx(0), toPx(0), (128 / size) * px, 0, Math.PI * 2);
-      ctx.stroke();
+      for (const r of [72, 128]) {
+        ctx.beginPath();
+        ctx.arc(toPx(0), toPx(0), (r / size) * px, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.fillStyle = '#e8e0cc';
       ctx.beginPath();
       ctx.arc(toPx(0), toPx(0), (38 / size) * px, 0, Math.PI * 2);
@@ -303,20 +305,27 @@ export class MapRenderer {
     ctx.arc(s.me.x, s.me.z, 11, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // labels
-    ctx.font = `800 ${Math.round(17 / k)}px "Trebuchet MS", system-ui`;
+    // labels (two lines: name + lock)
     ctx.textAlign = 'center';
     for (const r of REGIONS) {
       if (r.shape.kind === 'island') continue;
-      const c = regionCenter(r);
+      let c = regionCenter(r);
+      if (r.shape.kind === 'ring') c = { x: Math.cos(2.36) * 535, z: Math.sin(2.36) * 535 };
+      if (r.id === 'plains') c = { x: 0, z: -58 };
+      // regions centred on the horizontal axis: stagger inner/outer labels
+      if (r.shape.kind === 'sector' && Math.abs(c.z) < 60) c = { x: c.x, z: c.z + (r.shape.r1 === RING.hub ? -34 : 34) };
       const reason = regionLockReason(r, s.progress, s.active);
-      ctx.lineWidth = 6 / k * 0.6;
+      const lines = [r.name];
+      if (reason && r.id !== 'plains') lines.push(`🔒 Lv ${r.unlock.level}${r.unlock.swordTier ? ` · T${r.unlock.swordTier} sword` : ''}`);
+      ctx.font = `800 ${Math.round(12.5 / k)}px "Trebuchet MS", system-ui`;
+      ctx.lineWidth = 5 / k;
       ctx.strokeStyle = '#241640';
-      ctx.fillStyle = reason ? '#ffb0c0' : '#ffffff';
-      const text = r.id === 'plains' ? r.name : `${r.name}${reason ? ` 🔒${r.unlock.level}` : ''}`;
-      const y = r.id === 'plains' ? -60 : c.z;
-      ctx.strokeText(text, c.x, y);
-      ctx.fillText(text, c.x, y);
+      lines.forEach((t, i) => {
+        const y = c.z + (i - (lines.length - 1) / 2) * (17 / k);
+        ctx.fillStyle = i === 0 ? '#ffffff' : '#ffb0c0';
+        ctx.strokeText(t, c.x, y);
+        ctx.fillText(t, c.x, y);
+      });
     }
     ctx.restore();
     // where are the island players

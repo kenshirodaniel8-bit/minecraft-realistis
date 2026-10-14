@@ -17,6 +17,7 @@ export const VOID_Y = -14;      // sea floor beyond the edge of the world
 export const PLAZA = { r: 38, y: 3.6 };
 export const ROAD_ANGLES = [0, 90, 180, 270];
 export const RING_PATH_R = 128;
+export const BASE_RING_R = 72; // path linking every base entrance
 
 const DEG = Math.PI / 180;
 const P = (angleDeg, r) => ({ x: Math.cos(angleDeg * DEG) * r, z: Math.sin(angleDeg * DEG) * r });
@@ -432,7 +433,8 @@ class HeightPatch {
 // Roads
 
 export function roadDistance(x, z) {
-  let best = Math.abs(Math.sqrt(x * x + z * z) - RING_PATH_R);
+  const r = Math.sqrt(x * x + z * z);
+  let best = Math.min(Math.abs(r - RING_PATH_R), Math.abs(r - BASE_RING_R));
   if (x > PLAZA.r - 4) best = Math.min(best, Math.abs(z));
   if (x < -(PLAZA.r - 4)) best = Math.min(best, Math.abs(z));
   if (z > PLAZA.r - 4) best = Math.min(best, Math.abs(x));

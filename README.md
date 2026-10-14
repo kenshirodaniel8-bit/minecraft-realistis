@@ -1,5 +1,10 @@
 # Realistis – realistic Minecraft-style game in your browser
 
+> **New in this repository: [STEAL A MONSTER](steal-a-monster/README.md)** — a separate 3D
+> multiplayer game about battling, recruiting and stealing adorable baby monsters
+> (Three.js + Node.js + Socket.IO). It lives in `steal-a-monster/` and has its own
+> `npm install` / `npm start`. Everything below is about Realistis.
+
 A block-building sandbox with **realistic graphics**: real-time sun shadows, god rays through
 the trees, animated water that mirrors the world around it, waving grass and leaves, a day/night cycle with sunsets,
 stars and moonlight, warm torch lighting in caves, and high-resolution (64×64) textures with

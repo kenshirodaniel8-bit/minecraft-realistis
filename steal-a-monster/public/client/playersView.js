@@ -172,7 +172,7 @@ export class PlayerAvatar {
     this.anim = anim;
   }
 
-  update(dt, t, renderT, effects) {
+  update(dt, t, renderT, effects, others = []) {
     this.prevPos.copy(this.pos);
     if (!this.isLocal && this.buf.sample(renderT, this.tmp)) {
       this.pos.set(this.tmp.x, this.tmp.y, this.tmp.z);
@@ -219,7 +219,20 @@ export class PlayerAvatar {
     // companion follows a little behind
     const f = this.followerRig;
     if (f) {
-      const behind = { x: this.pos.x - Math.sin(this.yaw) * 3.4 + Math.cos(this.yaw) * 1.6, z: this.pos.z - Math.cos(this.yaw) * 3.4 - Math.sin(this.yaw) * 1.6 };
+      let behind = { x: this.pos.x - Math.sin(this.yaw) * 3.4 + Math.cos(this.yaw) * 1.6, z: this.pos.z - Math.cos(this.yaw) * 3.4 - Math.sin(this.yaw) * 1.6 };
+      // shy companions hide behind their owner when a stranger comes close
+      let stranger = null;
+      if (f.species.ai.temper === 'shy') {
+        for (const o of others) {
+          if (Math.hypot(o.x - this.pos.x, o.z - this.pos.z) < 12) stranger = o;
+        }
+      }
+      if (stranger) {
+        const dx = this.pos.x - stranger.x;
+        const dz = this.pos.z - stranger.z;
+        const d = Math.hypot(dx, dz) || 1;
+        behind = { x: this.pos.x + (dx / d) * 2.2, z: this.pos.z + (dz / d) * 2.2 };
+      }
       const dx = behind.x - f.pos.x;
       const dz = behind.z - f.pos.z;
       const d = Math.hypot(dx, dz);
@@ -240,10 +253,15 @@ export class PlayerAvatar {
       f.pos.y = Math.max(g, fly ? 0 : g) + (fly ? 1.5 : 0);
       f.root.position.copy(f.pos);
       f.root.rotation.y = f.yaw;
-      const pose = f.st.speed > 1 ? 'move' : 'idle';
+      const pose = f.st.speed > 1 ? 'move' : stranger ? 'quirk' : 'idle';
       if (pose !== f.st.pose) {
         f.st.pose = pose;
         f.st.poseT = 0;
+      }
+      if (pose === 'quirk') {
+        f.st.quirk = 'shy';
+        f.st.quirkDur = 1e9;
+        if (stranger) f.yaw = Math.atan2(stranger.x - f.pos.x, stranger.z - f.pos.z);
       }
       animateMonster(f, f.st, dt, t);
       this.followerShadow.position.set(f.pos.x, Math.max(g, 0) + 0.05, f.pos.z);

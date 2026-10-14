@@ -1232,7 +1232,7 @@ export function incomePerSecond(species, level) {
 export function defeatRewards(species, level) {
   const r = RARITIES[species.rarity] || RARITIES.common;
   return {
-    xp: Math.round(9 * Math.max(1, level) * r.xp),
+    xp: Math.round(12 * Math.max(1, level) * r.xp),
     money: Math.round(recruitPrice(species, level) * 0.06 + 4),
   };
 }

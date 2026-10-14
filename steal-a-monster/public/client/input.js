@@ -22,6 +22,7 @@ const KEYMAP = {
   KeyT: 'chat', Enter: 'chat', Slash: 'chat',
   KeyV: 'mouselook',
   KeyF: 'attack',
+  F3: 'debug',
   Escape: 'menu',
   Digit1: 'item1', Digit2: 'item2', Digit3: 'item3', Digit4: 'item4',
   Digit5: 'item5', Digit6: 'item6', Digit7: 'item7', Digit8: 'item8',
@@ -75,7 +76,7 @@ export class Input {
     }
     const a = KEYMAP[e.code];
     if (!a) return;
-    if (['Tab', 'Space', 'Slash', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+    if (['Tab', 'Space', 'Slash', 'F3', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (isDown) {
       if (!this.down.has(a)) {
         this.pressed.add(a);
