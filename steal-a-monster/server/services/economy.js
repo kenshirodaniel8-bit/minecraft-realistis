@@ -1,0 +1,154 @@
+// Money, shops and upgrades. Every purchase is validated here on the server:
+// the price comes from the shared tables (never from the client), the player
+// must be at the right shop, own enough money and meet unlock requirements,
+// and repeated requests with the same request id are answered from cache.
+
+import { CONFIG } from '#shared/config.js';
+import { SWORD_BY_ID, swordLockReason } from '#shared/weapons.js';
+import { ITEM_BY_ID } from '#shared/items.js';
+import { isObj, id as isId, int, fail } from '../validate.js';
+import { isInsideBase } from '#shared/world.js';
+import { regionLockReason, REGION_BY_ID } from '#shared/regions.js';
+
+export class Economy {
+  constructor(game) {
+    this.game = game;
+    this.ledgerLog = []; // recent money movements, for debugging
+  }
+
+  credit(s, amount, reason) {
+    const n = Math.floor(amount);
+    if (!(n > 0)) return 0;
+    const p = s.profile;
+    const before = p.money;
+    p.money = Math.min(CONFIG.economy.maxMoney, p.money + n);
+    this.record(s, p.money - before, reason);
+    this.game.markProfile(s);
+    return p.money - before;
+  }
+
+  debit(s, amount, reason) {
+    const n = Math.ceil(amount);
+    if (!(n >= 0) || s.profile.money < n) return false;
+    s.profile.money -= n;
+    this.record(s, -n, reason);
+    this.game.markProfile(s);
+    return true;
+  }
+
+  record(s, delta, reason) {
+    this.ledgerLog.push({ t: this.game.now(), who: s.id, delta, reason, balance: s.profile.money });
+    if (this.ledgerLog.length > 500) this.ledgerLog.splice(0, 100);
+  }
+
+  nearShop(s, kind) {
+    if (!CONFIG.economy.requireShopProximity) return true;
+    const r = CONFIG.economy.shopRange;
+    return this.game.world.shops.some((sh) => sh.kind === kind && (s.pos.x - sh.x) ** 2 + (s.pos.z - sh.z) ** 2 <= r * r);
+  }
+
+  atOwnBase(s) {
+    const b = this.game.world.bases[s.baseIndex];
+    return b && isInsideBase(b, s.pos.x, s.pos.z, 1);
+  }
+
+  handleBuySword(s, p) {
+    if (!isObj(p) || !isId(p.swordId)) return fail('bad');
+    const cached = s.recall(p.reqId);
+    if (cached) return cached;
+    const sword = SWORD_BY_ID[p.swordId];
+    if (!sword) return fail('unknown_sword');
+    if (s.profile.swords.includes(sword.id)) return s.remember(p.reqId, fail('owned', 'You already own this sword.'));
+    if (!this.nearShop(s, 'swords')) return fail('not_at_shop', 'Visit the Sword Shop in the plaza.');
+    const lock = swordLockReason(sword, s.profile);
+    if (lock) return fail('locked', lock);
+    if (!this.debit(s, sword.price, `sword:${sword.id}`)) return fail('money', 'Not enough Money.');
+    s.profile.swords.push(sword.id);
+    s.profile.sword = sword.id;
+    this.game.saveNow(s);
+    this.game.broadcast('playerInfo', this.game.playerInfo(s));
+    this.game.tutorialEvent(s, 'sword');
+    return s.remember(p.reqId, { ok: true, sword: sword.id, money: s.profile.money });
+  }
+
+  handleEquipSword(s, p) {
+    if (!isObj(p) || !isId(p.swordId)) return fail('bad');
+    if (!s.profile.swords.includes(p.swordId)) return fail('not_owned');
+    s.profile.sword = p.swordId;
+    this.game.markProfile(s);
+    this.game.broadcast('playerInfo', this.game.playerInfo(s));
+    return { ok: true };
+  }
+
+  handleBuyItem(s, p) {
+    if (!isObj(p) || !isId(p.itemId)) return fail('bad');
+    const qty = p.qty === undefined ? 1 : p.qty;
+    if (!int(qty, 1, 10)) return fail('bad_qty');
+    const cached = s.recall(p.reqId);
+    if (cached) return cached;
+    const item = ITEM_BY_ID[p.itemId];
+    if (!item) return fail('unknown_item');
+    if (!this.nearShop(s, 'items')) return fail('not_at_shop', 'Visit the Gadget Shop in the plaza.');
+    const have = s.profile.items[item.id] || 0;
+    if (have + qty > item.maxStack) return fail('full', item.kind === 'tool' ? 'You already own this gadget.' : `You can carry at most ${item.maxStack}.`);
+    if (!this.debit(s, item.price * qty, `item:${item.id}x${qty}`)) return fail('money', 'Not enough Money.');
+    s.profile.items[item.id] = have + qty;
+    this.game.saveNow(s);
+    return s.remember(p.reqId, { ok: true, item: item.id, count: s.profile.items[item.id] });
+  }
+
+  upgradeOffer(s, kind) {
+    const p = s.profile;
+    if (kind === 'slots') {
+      const next = CONFIG.bases.slotUpgrades.find((u) => u.slots > p.base.slots);
+      return next ? { price: next.price, level: next.level, to: next.slots } : null;
+    }
+    if (kind === 'laser') {
+      const lvl = p.base.laserLevel;
+      if (lvl >= CONFIG.security.laserUpgradePrices.length) return null;
+      return { price: CONFIG.security.laserUpgradePrices[lvl], level: 1, to: lvl + 1 };
+    }
+    return null;
+  }
+
+  handleBuyUpgrade(s, p) {
+    if (!isObj(p) || (p.kind !== 'slots' && p.kind !== 'laser')) return fail('bad');
+    const cached = s.recall(p.reqId);
+    if (cached) return cached;
+    if (!this.atOwnBase(s)) return fail('not_at_base', 'Upgrade at your base terminal.');
+    const offer = this.upgradeOffer(s, p.kind);
+    if (!offer) return fail('maxed', 'Already fully upgraded.');
+    if (s.profile.level < offer.level) return fail('locked', `Requires Level ${offer.level}`);
+    if (!this.debit(s, offer.price, `upgrade:${p.kind}`)) return fail('money', 'Not enough Money.');
+    if (p.kind === 'slots') s.profile.base.slots = offer.to;
+    else s.profile.base.laserLevel = offer.to;
+    this.game.saveNow(s);
+    this.game.bases.broadcastBase(s.baseIndex);
+    return s.remember(p.reqId, { ok: true, kind: p.kind, to: offer.to });
+  }
+
+  // Portals in the plaza lead to the expansion islands (server-chosen
+  // destinations only).
+  checkPortals(s) {
+    const now = this.game.now();
+    if (s.portalReadyAt && s.portalReadyAt > now) return;
+    for (const portal of this.game.world.portals) {
+      const dx = s.pos.x - portal.x;
+      const dz = s.pos.z - portal.z;
+      if (dx * dx + dz * dz > 3.2 * 3.2) continue;
+      s.portalReadyAt = now + 2500;
+      if (s.carrying) {
+        this.game.toast(s, 'Portals refuse monster thieves!', 'bad');
+        return;
+      }
+      const region = REGION_BY_ID[portal.region];
+      const reason = regionLockReason(region, this.game.playerProgress(s), this.game.expansion.active);
+      if (reason) {
+        this.game.toast(s, reason, 'bad');
+        return;
+      }
+      this.game.teleport(s, portal.to.x, portal.to.y, portal.to.z, 'portal');
+      return;
+    }
+  }
+}

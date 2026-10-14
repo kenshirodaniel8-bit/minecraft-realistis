@@ -16,3 +16,18 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build:static
+
+  steal-a-monster:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: steal-a-monster
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: steal-a-monster/package-lock.json
+      - run: npm ci
+      - run: npm test

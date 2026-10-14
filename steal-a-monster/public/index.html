@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="description" content="STEAL A MONSTER – explore, battle and recruit adorable baby monsters, build your base and protect it from thieves. A 3D multiplayer browser game.">
+  <meta name="theme-color" content="#6b3fd8">
+  <title>STEAL A MONSTER</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='36' r='26' fill='%239be04a'/%3E%3Ccircle cx='22' cy='30' r='7' fill='%23fff'/%3E%3Ccircle cx='42' cy='30' r='7' fill='%23fff'/%3E%3Ccircle cx='23' cy='31' r='4' fill='%23222'/%3E%3Ccircle cx='41' cy='31' r='4' fill='%23222'/%3E%3Cpath d='M18 44 Q32 56 46 44 Z' fill='%236e1a2e'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/lib/three/build/three.module.js",
+        "three/addons/": "/lib/three/addons/",
+        "#shared/": "/shared/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="game" tabindex="0"></canvas>
+
+  <!-- ============================== title screen -->
+  <div id="title" class="screen">
+    <div class="title-bg"></div>
+    <div class="title-card">
+      <h1 class="logo"><span>STEAL</span><span class="a">A</span><span>MONSTER</span></h1>
+      <p class="tagline">Explore · Battle · Recruit · Protect your monsters!</p>
+      <label class="field">Your name
+        <input id="name-input" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="MonsterFan">
+      </label>
+      <div class="field">Outfit color
+        <div id="color-swatches" class="swatches"></div>
+      </div>
+      <button id="play-btn" class="btn big go">▶ PLAY</button>
+      <p id="title-status" class="muted small" role="status"></p>
+      <div class="title-links">
+        <a href="gallery.html" target="_blank" rel="noopener">🐾 Monster Gallery</a>
+        <button id="controls-btn" class="linkish" type="button">⌨ Controls</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="loading" class="screen" hidden>
+    <div class="title-card small">
+      <h2 id="loading-text">Building the world…</h2>
+      <div class="bar"><div id="loading-bar"></div></div>
+      <p id="loading-tip" class="muted small"></p>
+    </div>
+  </div>
+
+  <!-- ============================== HUD -->
+  <div id="hud" hidden>
+    <div id="profile-card">
+      <div class="pc-row">
+        <div id="pc-level" class="badge">1</div>
+        <div class="pc-name-wrap">
+          <div id="pc-name">Player</div>
+          <div class="xp"><div id="xp-fill"></div></div>
+        </div>
+      </div>
+      <div class="hp"><div id="hp-fill"></div><span id="hp-text">100/100</span></div>
+      <div id="money" class="money"><span class="coin">$</span><span id="money-text">1,000</span></div>
+      <div class="pc-stats"><span id="sword-name">Wooden Sword</span> · ⚔ <span id="power-text">0</span></div>
+    </div>
+
+    <div id="topright">
+      <canvas id="minimap" width="200" height="200"></canvas>
+      <div id="region-label"></div>
+      <div id="side-buttons">
+        <button data-panel="collection" title="Collection (C)">🐾<span>Monsters</span></button>
+        <button data-panel="codex" title="Monsterdex">📖<span>Dex</span></button>
+        <button data-panel="base" title="Base">🏠<span>Base</span></button>
+        <button data-panel="map" title="Map (M)">🗺<span>Map</span></button>
+        <button data-panel="settings" title="Settings">⚙<span>Settings</span></button>
+      </div>
+    </div>
+
+    <div id="event-banner" hidden></div>
+    <div id="region-banner" hidden></div>
+    <div id="theft-alert" hidden></div>
+    <div id="announce"></div>
+    <div id="toasts"></div>
+    <div id="quest" hidden></div>
+    <div id="status-fx"></div>
+    <div id="prompt" hidden><span class="key" id="prompt-key">E</span><span id="prompt-text"></span><div class="ring"><div id="prompt-progress"></div></div></div>
+    <div id="crosshair"></div>
+
+    <div id="bottom-bar">
+      <div id="quick">
+        <button id="home-btn" class="quick-btn" title="Return to base (H)"><b>H</b> 🏠<span id="home-cd"></span></button>
+        <button id="lock-btn" class="quick-btn" title="Security lasers (L)"><b>L</b> 🔒<span id="lock-state"></span></button>
+      </div>
+      <div id="hotbar"></div>
+    </div>
+
+    <div id="offers"></div>
+
+    <div id="chat">
+      <div id="chat-log"></div>
+      <form id="chat-form" hidden autocomplete="off"><input id="chat-input" maxlength="160" spellcheck="false" placeholder="Say something… (Enter)"></form>
+    </div>
+
+    <div id="dead" hidden><div class="title-card small"><h2>Knocked out!</h2><p class="muted" id="dead-text">Respawning at your base…</p></div></div>
+    <div id="touch-ui" hidden></div>
+  </div>
+
+  <!-- ============================== modal panel -->
+  <div id="panel-wrap" hidden>
+    <div id="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title">
+      <div class="panel-head">
+        <h2 id="panel-title">Panel</h2>
+        <button id="panel-close" class="btn icon" aria-label="Close">✕</button>
+      </div>
+      <div id="panel-body"></div>
+    </div>
+  </div>
+
+  <div id="disconnected" class="screen" hidden>
+    <div class="title-card small">
+      <h2 id="disc-title">Connection lost</h2>
+      <p class="muted" id="disc-text">Trying to reconnect…</p>
+      <button class="btn" onclick="location.reload()">Reload</button>
+    </div>
+  </div>
+
+  <script type="module" src="client/main.js"></script>
+</body>
+</html>
