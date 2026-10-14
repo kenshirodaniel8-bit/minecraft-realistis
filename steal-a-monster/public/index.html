@@ -52,6 +52,8 @@
 
   <!-- ============================== HUD -->
   <div id="hud" hidden>
+    <!-- first, so HUD buttons stack above the touch look/move zones -->
+    <div id="touch-ui" hidden></div>
     <div id="profile-card">
       <div class="pc-row">
         <div id="pc-level" class="badge">1</div>
@@ -104,7 +106,6 @@
     </div>
 
     <div id="dead" hidden><div class="title-card small"><h2>Knocked out!</h2><p class="muted" id="dead-text">Respawning at your base…</p></div></div>
-    <div id="touch-ui" hidden></div>
   </div>
 
   <!-- ============================== modal panel -->

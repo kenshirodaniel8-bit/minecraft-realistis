@@ -10,6 +10,9 @@ import { makeLabel } from './labels.js';
 
 const DEG = Math.PI / 180;
 const CHUNK_CELLS = 32;
+const PROP_CELL = 100;
+const DETAIL_DIST = 110;
+const DETAIL_PROPS = new Set(['flowers', 'fern', 'bush', 'bones', 'coral', 'fence', 'glow_mushroom']);
 
 // ------------------------------------------------------------------ materials
 
@@ -311,20 +314,22 @@ export class WorldRenderer {
 
   // ---------------------------------------------------------------- props
 
+  // Props are instanced per type within square cells, so whole cells are
+  // frustum-culled and small decorations are dropped beyond DETAIL_DIST.
   buildProps() {
     const parts = propParts();
-    const byRegionType = new Map();
+    const byCellType = new Map();
     for (const p of this.world.props) {
-      const region = p.landmark ? 'landmark' : (REGION_BY_ID[regionOf(p)] ? regionOf(p) : 'plains');
-      const key = `${region}|${p.type}`;
-      if (!byRegionType.has(key)) byRegionType.set(key, []);
-      byRegionType.get(key).push(p);
+      const key = `${Math.floor(p.x / PROP_CELL)},${Math.floor(p.z / PROP_CELL)}|${p.type}`;
+      if (!byCellType.has(key)) byCellType.set(key, []);
+      byCellType.get(key).push(p);
     }
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);
     const color = new THREE.Color();
-    for (const [key, list] of byRegionType) {
+    this.propMeshes = [];
+    for (const [key, list] of byCellType) {
       const type = key.split('|')[1];
       const defs = parts[type];
       if (!defs) continue;
@@ -332,11 +337,11 @@ export class WorldRenderer {
         const mesh = new THREE.InstancedMesh(part.geo, part.mat, list.length);
         list.forEach((p, i) => {
           q.setFromAxisAngle(up, p.rot);
-          const squash = type === 'rock' || type === 'desert_rock' ? 0.75 + ((i * 37) % 10) / 20 : 1;
+          const squash = type === 'rock' || type === 'desert_rock' ? 0.75 + ((Math.floor(p.x * 7 + p.z * 13) & 1023) % 10) / 20 : 1;
           m4.compose(new THREE.Vector3(p.x, p.y - 0.15, p.z), q, new THREE.Vector3(p.s, p.s * squash, p.s));
           mesh.setMatrixAt(i, m4);
           if (part.tint) {
-            color.setHex(part.tint[Math.abs(i * 7 + Math.floor(p.x)) % part.tint.length]);
+            color.setHex(part.tint[Math.abs(Math.floor(p.x * 3 + p.z * 5)) % part.tint.length]);
             mesh.setColorAt(i, color);
           }
         });
@@ -347,7 +352,15 @@ export class WorldRenderer {
         mesh.castShadow = big;
         mesh.receiveShadow = true;
         this.root.add(mesh);
+        this.propMeshes.push({ mesh, sphere: mesh.boundingSphere, detail: DETAIL_PROPS.has(type) });
       }
+    }
+  }
+
+  cullProps(camPos) {
+    for (const p of this.propMeshes) {
+      if (!p.detail) continue;
+      p.mesh.visible = p.sphere.center.distanceTo(camPos) - p.sphere.radius < DETAIL_DIST;
     }
   }
 
@@ -623,8 +636,9 @@ export class WorldRenderer {
     this.setVaultOpen(open);
   }
 
-  update(dt, t) {
+  update(dt, t, camPos) {
     this.time = t;
+    if (camPos && this.propMeshes) this.cullProps(camPos);
     for (const fn of this.animated) fn(t);
     if (this.lavaMat) this.lavaMat.emissiveIntensity = 1.2 + Math.sin(t * 2) * 0.3;
   }

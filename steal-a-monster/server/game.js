@@ -576,7 +576,7 @@ export class Game {
   devCommand(s, text) {
     const [cmd, ...args] = text.slice(1).split(/\s+/);
     if (cmd === 'help') {
-      this.toast(s, this.devCommands ? 'Dev commands: /lucky, /money N, /level N, /night, /day, /spawn species' : 'No commands on this server.');
+      this.toast(s, this.devCommands ? 'Dev commands: /lucky, /money N, /level N, /night, /day, /spawn species, /tp X Z' : 'No commands on this server.');
       return { ok: true };
     }
     if (!this.devCommands) return fail('no_commands', 'Commands are disabled on this server.');
@@ -588,7 +588,12 @@ export class Game {
     } else if (cmd === 'night') this.dayEpoch = this.now() - CONFIG.dayLengthMs * 0.75;
     else if (cmd === 'day') this.dayEpoch = this.now() - CONFIG.dayLengthMs * 0.2;
     else if (cmd === 'spawn') this.monsters.devSpawn(s, args[0]);
-    else return fail('unknown_command');
+    else if (cmd === 'tp') {
+      const x = Number(args[0]);
+      const z = Number(args[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(z) || Math.abs(x) > 1200 || Math.abs(z) > 1200) return fail('bad');
+      this.teleport(s, x, this.world.groundHeight(x, z), z, 'dev');
+    } else return fail('unknown_command');
     if (cmd === 'night' || cmd === 'day') this.broadcast('time', { dayEpoch: this.dayEpoch });
     this.markProfile(s);
     return { ok: true };

@@ -46,7 +46,7 @@ const url = `http://127.0.0.1:${srv.port}/`;
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 
 async function player(name, color) {
-  const ctx = await browser.newContext({ viewport: { width: 960, height: 600 } });
+  const ctx = await browser.newContext({ viewport: { width: 640, height: 400 } });
   await ctx.addInitScript(([n, c]) => localStorage.setItem('sam_settings', JSON.stringify({ quality: 'low', name: n, color: c, volume: 0 })), [name, color]);
   const page = await ctx.newPage();
   page.errors = [];
@@ -54,7 +54,7 @@ async function player(name, color) {
   page.on('console', (m) => { if (m.type() === 'error') page.errors.push(m.text()); });
   await page.goto(url);
   await page.click('#play-btn');
-  await page.waitForFunction(() => window.__app && window.__app.ready, null, { timeout: 90000 });
+  await page.waitForFunction(() => window.__app && window.__app.ready, null, { timeout: 90000, polling: 500 });
   return page;
 }
 
@@ -66,20 +66,28 @@ async function ringWalk(page, fromAngle, toAngle, r = 72) {
   const n = Math.max(1, Math.ceil(Math.abs(d) / 0.3));
   for (let i = 1; i <= n; i++) {
     const a = fromAngle + (d * i) / n;
-    await walkTo(page, Math.cos(a) * r, Math.sin(a) * r, 3, 20000);
+    await walkTo(page, Math.cos(a) * r, Math.sin(a) * r, 3, 45000);
   }
 }
 
-const shot = async (page, name) => { if (shots) await page.screenshot({ path: path.join(shots, `${name}.png`) }); };
+const shot = async (page, name) => {
+  if (!shots) return;
+  await page.evaluate(() => { window.__app.skipRender = false; });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: path.join(shots, `${name}.png`) });
+};
 const state = (page) => page.evaluate(() => {
   const a = window.__app;
   return { money: a.profile.money, monsters: a.profile.monsters.map((m) => ({ id: m.id, species: m.species, slot: m.slot })), carry: a.myCarry, base: a.myBase, pos: { ...a.player.pos }, offers: [...a.ui.offerEls.keys()], fps: a.stats?.fps };
 });
 
 // walk with the real controls (camera + forward key) inside the page
+// (drawing is paused while walking: software rendering runs at ~1 fps, which
+// would make the bots crawl; the game logic, input and networking still run)
 const walkTo = (page, x, z, near = 2, maxMs = 60000) => page.evaluate(([x, z, near, maxMs]) => new Promise((resolve) => {
   const a = window.__app;
   const t0 = performance.now();
+  a.skipRender = true;
   const iv = setInterval(() => {
     const p = a.player.pos;
     const dx = x - p.x;
@@ -88,6 +96,7 @@ const walkTo = (page, x, z, near = 2, maxMs = 60000) => page.evaluate(([x, z, ne
     if (d < near || performance.now() - t0 > maxMs) {
       a.input.setVirtual('forward', false);
       a.input.down.delete('sprint');
+      a.skipRender = false;
       clearInterval(iv);
       resolve(d);
       return;
@@ -102,11 +111,13 @@ const walkTo = (page, x, z, near = 2, maxMs = 60000) => page.evaluate(([x, z, ne
 const fight = (page, id, maxMs = 90000) => page.evaluate(([id, maxMs]) => new Promise((resolve) => {
   const a = window.__app;
   const t0 = performance.now();
+  a.skipRender = true;
   const iv = setInterval(() => {
     const m = a.monsters.get(id);
     if (!m || m.gone || m.state === 7 || performance.now() - t0 > maxMs) {
       a.input.setVirtual('attack', false);
       a.input.setVirtual('forward', false);
+      a.skipRender = false;
       clearInterval(iv);
       resolve(m ? m.state : -1);
       return;
@@ -198,7 +209,7 @@ try {
   B = await state(bob);
   check(B.carry >= 0, 'Bob is carrying the stolen monster');
   await shot(bob, '06-bob-carrying');
-  const alerted = await alice.waitForFunction(() => window.__app.lastTheft?.stage === 'carry' && !document.getElementById('theft-alert').hidden, null, { timeout: 15000 }).then(() => true, () => false);
+  const alerted = await alice.waitForFunction(() => window.__app.lastTheft?.stage === 'carry' && !document.getElementById('theft-alert').hidden, null, { timeout: 15000, polling: 500 }).then(() => true, () => false);
   check(alerted, 'Alice sees the theft alert');
   const aliceId = [...srv.game.players.values()].find((s) => s.profile.name === 'Alice').profile.id;
   check(srv.game.ledger.owner(owned.id) === aliceId, 'still owned by Alice while it is being carried');
@@ -217,7 +228,7 @@ try {
   await bob.keyboard.down('KeyL');
   await bob.waitForTimeout(250);
   await bob.keyboard.up('KeyL');
-  const locked = await alice.waitForFunction((i) => (window.__app.baseStates[i]?.lockedUntil || 0) > window.__app.serverNow(), B.base, { timeout: 15000 }).then(() => true, () => false);
+  const locked = await alice.waitForFunction((i) => (window.__app.baseStates[i]?.lockedUntil || 0) > window.__app.serverNow(), B.base, { timeout: 15000, polling: 500 }).then(() => true, () => false);
   check(locked, "Alice's client shows Bob's lasers switched on");
   await ringWalk(alice, b.angle + 0.6, bb.angle, 72);
   await walkTo(alice, bb.outside.x, bb.outside.z, 2, 60000);
@@ -238,7 +249,7 @@ try {
   console.log('LUCKY LUCKY: Alice opens a Lucky Block');
   srv.game.events.trigger('luckyLucky');
   srv.game.events.events.luckyLucky.startsAt = Date.now();
-  const hasBlock = await alice.waitForFunction(() => window.__app.items.blocks.size > 0 && window.__app.events.some((e) => e.phase === 'active'), null, { timeout: 20000 }).then(() => true, () => false);
+  const hasBlock = await alice.waitForFunction(() => window.__app.items.blocks.size > 0 && window.__app.events.some((e) => e.phase === 'active'), null, { timeout: 20000, polling: 500 }).then(() => true, () => false);
   check(hasBlock, 'the event started and Lucky Blocks appeared on the client');
   const block = await alice.evaluate(() => {
     const a = window.__app;

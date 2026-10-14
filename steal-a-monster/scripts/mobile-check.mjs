@@ -34,6 +34,22 @@ await page.waitForTimeout(1500);
 const touchVisible = await page.evaluate(() => !document.getElementById('touch-ui').hidden && document.body.classList.contains('touch'));
 console.log(touchVisible ? '✔ touch controls shown' : '✘ touch controls hidden');
 await page.screenshot({ path: path.join(out, 'mobile-hud.png') });
+// every on-screen control must be the topmost element at its center (tappable)
+const blocked = await page.evaluate(() => {
+  const sel = ['#side-buttons button', '#hotbar .slot', '#quest button', '.tc-small', '.tc-btn'];
+  const bad = [];
+  let n = 0;
+  for (const el of document.querySelectorAll(sel.join(','))) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || el.closest('[hidden]')) continue;
+    n++;
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    const inView = r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
+    if (!inView || !hit || !(el === hit || el.contains(hit))) bad.push(`${el.id || el.className || el.tagName} -> ${hit ? hit.id || hit.className || hit.tagName : 'nothing'}`);
+  }
+  return { n, bad };
+});
+console.log(blocked.bad.length ? `✘ controls covered or off screen: ${blocked.bad.join(', ')}` : `✔ all ${blocked.n} touch/HUD controls are on screen and tappable`);
 // drag the joystick forward for 2 seconds
 const start = await page.evaluate(() => ({ ...window.__app.player.pos }));
 const zone = await page.$('.tc-stick-zone');

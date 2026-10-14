@@ -109,6 +109,7 @@ class App {
     if (k === 'sensitivity') this.input.sensitivity = v;
     if (k === 'invertY' && this.cam) this.cam.invertY = v;
     if (k === 'touch') this.applyTouch();
+    if (k === 'quality' && this.sceneView) this.sceneView.setQuality(v);
   }
 
   // ---------------------------------------------------------------- title
@@ -433,10 +434,11 @@ class App {
         stolen: `💔 ${d.thief} got away with your ${d.name}…`,
         dropped: `${d.thief} dropped your ${d.name}! Touch it to send it home!`,
         saved: `✅ Your ${d.name} is back home!`,
+        safe: `✅ ${d.thief} let go — your ${d.name} is safe.`,
       }[d.stage];
-      this.ui.theftAlert(msg);
-      if (d.stage === 'grab' || d.stage === 'carry') this.audio.play('alarm', { minGap: 2000 });
-      if (d.stage === 'saved') setTimeout(() => this.ui.theftAlert(null), 2500);
+      const ongoing = d.stage === 'grab' || d.stage === 'carry';
+      this.ui.theftAlert(msg, ongoing ? 60000 : d.stage === 'saved' || d.stage === 'safe' ? 3000 : 7000);
+      if (ongoing) this.audio.play('alarm', { minGap: 2000 });
     });
     n.on('theftInterrupted', (d) => {
       const p = d.pn === this.pn ? this.me : this.players.get(d.pn);
@@ -920,7 +922,7 @@ class App {
 
   frame(nowMs) {
     requestAnimationFrame((t) => this.frame(t));
-    const dt = Math.min(0.12, (nowMs - this.last) / 1000);
+    const dt = Math.min(0.25, (nowMs - this.last) / 1000);
     this.last = nowMs;
     this.t += dt;
     if (!this.ready) return;
@@ -1023,10 +1025,10 @@ class App {
     const camPos = this.sceneView.camera.position;
     this.monsters.update(dt, renderT, this.t, camPos, this.player.pos);
     const near = [{ x: this.player.pos.x, z: this.player.pos.z }, ...[...this.players.values()].map((pl) => pl.pos)];
-    this.basesView.update(dt, this.t, near);
+    this.basesView.update(dt, this.t, near, camPos);
     this.items.update(dt, this.t);
     this.effects.update(dt, serverNow);
-    this.worldView.update(dt, this.t);
+    this.worldView.update(dt, this.t, camPos);
     if (this.preview) this.preview.update(dt);
 
     this.cam.update(dt, this.player.pos, look, zoom);
@@ -1050,7 +1052,9 @@ class App {
       this.updateDebug(serverNow);
     }
     const t1 = performance.now();
-    this.sceneView.render();
+    // skipRender: automated tests turn drawing off while bots walk long
+    // routes on software-rendered browsers (game logic still runs)
+    if (!this.skipRender) this.sceneView.render();
     const t2 = performance.now();
     this.jsMs = (this.jsMs || 0) * 0.95 + (t1 - t0) * 0.05;
     this.renderMs = (this.renderMs || 0) * 0.95 + (t2 - t1) * 0.05;

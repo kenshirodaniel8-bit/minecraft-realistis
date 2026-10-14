@@ -18,9 +18,8 @@ const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 // ------------------------------------------------------------------ geometry cache
 
-function lathe(taper, segments = 28, wobble = 0) {
+function lathe(taper, segments = 28, wobble = 0, n = 20) {
   const pts = [];
-  const n = 20;
   for (let i = 0; i <= n; i++) {
     const t = -1 + (2 * i) / n;
     const r = Math.sqrt(Math.max(0, 1 - t * t)) * (1 - taper * t) * (1 + wobble * Math.sin(t * 9));
@@ -29,29 +28,28 @@ function lathe(taper, segments = 28, wobble = 0) {
   return new THREE.LatheGeometry(pts, segments);
 }
 
-function dropGeo() {
+function dropGeo(n = 18, segments = 14) {
   // teardrop: round bottom, pointed top (flames, leaves, petals)
   const pts = [];
-  const n = 18;
   for (let i = 0; i <= n; i++) {
     const t = i / n; // 0 bottom -> 1 top
     const a = t * Math.PI;
     const r = Math.sin(a) * (1 - t * 0.85) * 0.95 + 0.0001;
     pts.push(new THREE.Vector2(r, -Math.cos(a) * 0.5 + t * 0.5));
   }
-  return new THREE.LatheGeometry(pts, 14);
+  return new THREE.LatheGeometry(pts, segments);
 }
 
-function ghostGeo() {
+function ghostGeo(n = 12, segments = 28) {
   const pts = [];
-  for (let i = 0; i <= 12; i++) {
-    const a = (i / 12) * (Math.PI / 2);
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * (Math.PI / 2);
     pts.push(new THREE.Vector2(Math.sin(a), Math.cos(a)));
   }
   pts.push(new THREE.Vector2(1.0, -0.4));
   pts.push(new THREE.Vector2(0.94, -0.62));
   pts.push(new THREE.Vector2(0.0001, -0.62));
-  return new THREE.LatheGeometry(pts.reverse(), 28);
+  return new THREE.LatheGeometry(pts.reverse(), segments);
 }
 
 function batWingShape() {
@@ -78,10 +76,40 @@ function starShape() {
   return new THREE.ExtrudeGeometry(s, { depth: 0.3, bevelEnabled: false }).translate(0, 0, -0.15);
 }
 
+// Two resolutions of every primitive: 'hi' for close-ups and nearby
+// monsters, 'lo' for the far-away copies (same shapes, far fewer triangles).
+const GEO_SETS = {};
 let G = null;
-function geos() {
-  if (G) return G;
-  G = {
+
+function makeGeoSet(lo) {
+  if (lo) {
+    return {
+      sphere: new THREE.SphereGeometry(1, 14, 10),
+      sphereLo: new THREE.SphereGeometry(1, 8, 6),
+      hemi: new THREE.SphereGeometry(1, 12, 5, 0, Math.PI * 2, 0, Math.PI / 2),
+      cone: new THREE.ConeGeometry(1, 1, 8).translate(0, 0.5, 0),
+      cone4: new THREE.ConeGeometry(1, 1, 4).rotateY(Math.PI / 4).translate(0, 0.5, 0),
+      cone3: new THREE.ConeGeometry(1, 1, 3).translate(0, 0.5, 0),
+      cyl: new THREE.CylinderGeometry(1, 1, 1, 8).translate(0, 0.5, 0),
+      cylC: new THREE.CylinderGeometry(1, 1, 1, 8),
+      rbox: new RoundedBoxGeometry(1, 1, 1, 1, 0.2),
+      rboxSoft: new RoundedBoxGeometry(1, 1, 1, 2, 0.42),
+      box: new THREE.BoxGeometry(1, 1, 1),
+      arc: new THREE.TorusGeometry(1, 0.2, 4, 10, Math.PI),
+      torus: new THREE.TorusGeometry(1, 0.14, 4, 14),
+      octa: new THREE.OctahedronGeometry(1, 0),
+      ico: new THREE.IcosahedronGeometry(1, 0),
+      egg: lathe(0.12, 12, 0, 9),
+      pear: lathe(0.24, 12, 0, 9),
+      ghost: ghostGeo(5, 12),
+      drop: dropGeo(8, 7),
+      wing: batWingShape(),
+      star: starShape(),
+      capsule: new THREE.CapsuleGeometry(0.5, 1, 3, 8),
+      disc: new THREE.CircleGeometry(1, 12),
+    };
+  }
+  return {
     sphere: new THREE.SphereGeometry(1, 32, 24),
     sphereLo: new THREE.SphereGeometry(1, 14, 10),
     hemi: new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
@@ -106,7 +134,16 @@ function geos() {
     capsule: new THREE.CapsuleGeometry(0.5, 1, 6, 14),
     disc: new THREE.CircleGeometry(1, 24),
   };
+}
+
+function useGeoSet(name) {
+  if (!GEO_SETS[name]) GEO_SETS[name] = makeGeoSet(name === 'lo');
+  G = GEO_SETS[name];
   return G;
+}
+
+function geos() {
+  return G || useGeoSet('hi');
 }
 
 // ------------------------------------------------------------------ materials
@@ -214,14 +251,24 @@ function hex(v) {
 const TEMPLATES = new Map();
 const SINGLE_KEYS = ['root', 'bodyPivot', 'body', 'head', 'mouth', 'mouthOpen', 'jaw', 'upperTeeth', 'crest', 'shell', 'spout', 'flames', 'halo', 'tailFlame', 'coin', 'snout', 'lantern', 'waveArm'];
 
+// opts.lod: 'hi' (default) or 'lo' (low-poly copy for far-away monsters).
 export function buildMonster(speciesId, opts = {}) {
-  let t = TEMPLATES.get(speciesId);
+  const lod = opts.lod === 'lo' ? 'lo' : 'hi';
+  const key = `${speciesId}|${lod}`;
+  let t = TEMPLATES.get(key);
   if (!t) {
-    t = buildRawMonster(speciesId, opts);
-    optimizeTemplate(t);
-    TEMPLATES.set(speciesId, t);
+    useGeoSet(lod);
+    try {
+      t = buildRawMonster(speciesId, opts);
+    } finally {
+      useGeoSet('hi');
+    }
+    optimizeTemplate(t, lod === 'lo');
+    TEMPLATES.set(key, t);
   }
-  return cloneRig(t);
+  const rig = cloneRig(t);
+  rig.lod = lod;
+  return rig;
 }
 
 function rigObjects(rig) {
@@ -265,15 +312,19 @@ function mergeMeshes(list) {
   return out;
 }
 
-function optimizeTemplate(rig) {
+function optimizeTemplate(rig, dropDetail = false) {
   const keep = new Set(rigObjects(rig));
-  // flag tiny parts as "detail" (hidden on far-away monsters)
+  // flag tiny parts as "detail" (hidden on far-away monsters, left out of
+  // the low-poly copy)
+  const tiny = [];
   rig.root.traverse((o) => {
     if (o.isMesh) {
       const sc = Math.max(Math.abs(o.scale.x), Math.abs(o.scale.y), Math.abs(o.scale.z));
-      o.userData.detail = sc < 0.13;
+      o.userData.detail = sc < 0.13 && !keep.has(o);
+      if (o.userData.detail && !o.children.length) tiny.push(o);
     }
   });
+  if (dropDetail) for (const o of tiny) o.parent.remove(o);
   const parents = [];
   rig.root.traverse((o) => parents.push(o));
   for (const parent of parents) {

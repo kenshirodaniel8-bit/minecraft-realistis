@@ -5,16 +5,28 @@
 import * as THREE from 'three';
 import { SPECIES_BY_ID } from '#shared/monsters.js';
 import { CONFIG } from '#shared/config.js';
-import { buildMonster } from './monsterRenderer.js';
+import { buildMonster, setRigDetail } from './monsterRenderer.js';
 import { animateMonster, QUIRK_NAMES } from './animationSystem.js';
 import { makeLabel, disposeLabel } from './labels.js';
 import { boxCollider } from '#shared/collision.js';
 
+const TMP_COLOR = new THREE.Color();
 const PALETTE = [0x3a7ae0, 0xe84a5f, 0x3fbf5a, 0xffb02a, 0x9a5ae0, 0x2ac8c8, 0xff7ab8, 0x5a5a6a];
 
 function std(color, o = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.5, ...o });
 }
+
+const PAD_GEO = new THREE.CylinderGeometry(1.7, 1.9, 0.5, 24);
+const PAD_MAT = std(0xffffff);
+const RING_GEO = new THREE.TorusGeometry(1.75, 0.12, 6, 28);
+const RING_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+// distance tiers (from the camera to the base center)
+const NEAR_LABELS = 70;   // pad / lock / upgrade / Money labels
+const HI_MONSTERS = 40;   // detailed monster rigs closer than this
+const SHOW_MONSTERS = 175;
+const SHOW_BASE = 290;
 
 export class BasesView {
   constructor(scene, world, effects, audio) {
@@ -30,19 +42,23 @@ export class BasesView {
   buildBase(b) {
     const g = new THREE.Group();
     this.scene.add(g);
-    const view = { base: b, group: g, pads: [], monsters: new Map(), lasers: [], state: null };
-    const padGeo = new THREE.CylinderGeometry(1.7, 1.9, 0.5, 24);
+    const view = { base: b, group: g, pads: [], monsters: new Map(), lasers: [], labels: [], state: null };
+    // all 12 pads (and their colored rings) are two instanced draws
+    const n = b.slots.length;
+    view.padMesh = new THREE.InstancedMesh(PAD_GEO, PAD_MAT, n);
+    view.ringMesh = new THREE.InstancedMesh(RING_GEO, RING_MAT, n);
+    view.padMesh.receiveShadow = true;
+    const m4 = new THREE.Matrix4();
+    const flat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+    const none = new THREE.Quaternion();
+    const one = new THREE.Vector3(1, 1, 1);
     b.slots.forEach((s, i) => {
-      const pad = new THREE.Mesh(padGeo, std(0xbfc6d8));
-      pad.position.set(s.x, b.y + 0.25, s.z);
-      pad.receiveShadow = true;
-      g.add(pad);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.75, 0.12, 6, 28), std(0xffffff, { emissive: 0x000000 }));
-      ring.rotation.x = Math.PI / 2;
-      ring.position.set(s.x, b.y + 0.52, s.z);
-      g.add(ring);
-      view.pads.push({ pad, ring, slot: i, label: null, labelKey: '' });
+      view.padMesh.setMatrixAt(i, m4.compose(new THREE.Vector3(s.x, b.y + 0.25, s.z), none, one));
+      view.ringMesh.setMatrixAt(i, m4.compose(new THREE.Vector3(s.x, b.y + 0.52, s.z), flat, one));
+      view.pads.push({ slot: i, label: null, labelKey: '' });
     });
+    g.add(view.padMesh, view.ringMesh);
+    view.pads.forEach((p) => this.padStyle(view, p, false, null));
     // collector
     const col = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.6, 0.4, 28), std(0xffd23a, { metalness: 0.4, roughness: 0.3, emissive: 0x3a2a00 }));
     col.position.set(b.collector.x, b.y + 0.2, b.collector.z);
@@ -62,6 +78,7 @@ export class BasesView {
     const lockLabel = makeLabel('🔒 LOCK', { scale: 0.016, bg: '#d8384a', color: '#ffffff' });
     lockLabel.position.set(b.lockPad.x, b.y + 2.3, b.lockPad.z);
     g.add(lockLabel);
+    view.labels.push(lockLabel);
     // terminal
     const term = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.6, 1.0), std(0x4a5a7a));
     term.position.set(b.terminal.x, b.y + 1.3, b.terminal.z);
@@ -73,6 +90,7 @@ export class BasesView {
     const termLabel = makeLabel('⬆ UPGRADES', { scale: 0.016, bg: '#3a4a7a', color: '#ffffff' });
     termLabel.position.set(b.terminal.x, b.y + 3.6, b.terminal.z);
     g.add(termLabel);
+    view.labels.push(termLabel);
     // laser gate (3 beams across the door)
     const doorHalf = CONFIG.bases.doorWidth / 2;
     const laserMat = new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0.85 });
@@ -113,7 +131,7 @@ export class BasesView {
       disposeLabel(view.sign);
     }
     const b = view.base;
-    view.sign = makeLabel(text, { scale: 0.018, color, bg, border: '#ffffff' });
+    view.sign = makeLabel(text, { scale: 0.015, color, bg, border: '#ffffff' });
     const p = b.toWorld(0, b.half + 0.5);
     view.sign.position.set(p.x, b.y + 10, p.z);
     view.group.add(view.sign);
@@ -133,7 +151,7 @@ export class BasesView {
       this.setSign(view, `Plot ${st.index + 1}\nFREE`, '#ffffff', '#5a5a6a');
       view.flag.material.color.setHex(0xcccccc);
       for (const [id, m] of view.monsters) this.removeMonster(view, id, m);
-      view.pads.forEach((p) => this.padStyle(p, false, null));
+      view.pads.forEach((p) => this.padStyle(view, p, false, null));
       this.setLasers(view, false);
       return;
     }
@@ -143,7 +161,7 @@ export class BasesView {
       this.setSign(view, `${st.name}'s Base\nLv ${st.level}`, '#ffffff', hex);
     }
     view.flag.material.color.setHex(color);
-    view.pads.forEach((p, i) => this.padStyle(p, i < st.slots, color));
+    view.pads.forEach((p, i) => this.padStyle(view, p, i < st.slots, color));
     // monsters on pads
     const wanted = new Map(st.monsters.filter((m) => !m.away).map((m) => [m.id, m]));
     for (const [id, m] of view.monsters) {
@@ -167,6 +185,7 @@ export class BasesView {
           p.label = makeLabel(m.away ? `${sp.name}\n⚠ BEING STOLEN!` : `${sp.name} Lv ${m.level}\n$${m.income}/s`, { scale: 0.013, colors: ['#ffffff', m.away ? '#ff6a7a' : '#7ef06a'] });
           const s = view.base.slots[p.slot];
           p.label.position.set(s.x, view.base.y + 4.6, s.z);
+          p.label.visible = view.near !== false;
           view.group.add(p.label);
         }
         p.labelKey = key;
@@ -177,10 +196,13 @@ export class BasesView {
     this.setStored(view, st.stored);
   }
 
-  padStyle(p, unlocked, color) {
-    p.pad.material.color.setHex(unlocked ? 0xf3f1ea : 0x8a8f9a);
-    p.ring.material.color.setHex(unlocked && color ? color : 0x6a6f7a);
-    p.ring.material.emissive.setHex(unlocked && color ? new THREE.Color(color).multiplyScalar(0.3).getHex() : 0);
+  padStyle(view, p, unlocked, color) {
+    TMP_COLOR.setHex(unlocked ? 0xf3f1ea : 0x8a8f9a);
+    view.padMesh.setColorAt(p.slot, TMP_COLOR);
+    TMP_COLOR.setHex(unlocked && color ? color : 0x6a6f7a);
+    view.ringMesh.setColorAt(p.slot, TMP_COLOR);
+    view.padMesh.instanceColor.needsUpdate = true;
+    view.ringMesh.instanceColor.needsUpdate = true;
   }
 
   setLasers(view, on) {
@@ -199,6 +221,7 @@ export class BasesView {
     const b = view.base;
     view.storedLabel = makeLabel(`$${Math.floor(amount).toLocaleString()}`, { scale: 0.022, color: '#7ef06a', font: '900 46px "Trebuchet MS", system-ui, sans-serif' });
     view.storedLabel.position.set(b.collector.x, b.y + 3.8, b.collector.z);
+    view.storedLabel.visible = view.near !== false;
     view.group.add(view.storedLabel);
   }
 
@@ -219,7 +242,7 @@ export class BasesView {
     rig.st = { pose: 'celebrate', poseT: 0 };
     rig.nextQuirk = 2 + Math.random() * 6;
     this.scene.add(rig.root);
-    view.monsters.set(m.id, { rig, slot: m.slot, species: sp });
+    view.monsters.set(m.id, { rig, rigHi: rig, rigLo: null, slot: m.slot, species: sp });
     this.effects.burst(slot.x, view.base.y + 1.5, slot.z, 14, { color: [0xffe14a, 0xffffff, 0xff9fd8], speed: 4 });
   }
 
@@ -252,8 +275,48 @@ export class BasesView {
     }
   }
 
-  update(dt, t, players) {
+  // Far bases drop their small labels and show low-poly monsters; very far
+  // ones are hidden (the walls are part of the static world mesh).
+  applyDistance(view, camPos) {
+    const b = view.base;
+    const d = Math.hypot(camPos.x - b.x, camPos.z - b.z);
+    view.dist = d;
+    view.group.visible = d < SHOW_BASE;
+    const near = d < NEAR_LABELS;
+    if (near !== view.near) {
+      view.near = near;
+      for (const l of view.labels) l.visible = near;
+      for (const p of view.pads) if (p.label) p.label.visible = near;
+      if (view.storedLabel) view.storedLabel.visible = near;
+    }
+    for (const [id, m] of view.monsters) {
+      const wantLo = m.rig.lod === 'lo' ? d > HI_MONSTERS - 6 : d > HI_MONSTERS;
+      if (wantLo !== (m.rig.lod === 'lo')) {
+        const from = m.rig;
+        let to = wantLo ? m.rigLo : m.rigHi;
+        if (!to) {
+          to = buildMonster(m.species.id, { lod: 'lo' });
+          m.rigLo = to;
+        }
+        to.root.position.copy(from.root.position);
+        to.root.rotation.copy(from.root.rotation);
+        to.root.scale.copy(from.root.scale);
+        to.baseYaw = from.baseYaw;
+        to.st = from.st;
+        to.nextQuirk = from.nextQuirk;
+        this.scene.remove(from.root);
+        this.scene.add(to.root);
+        m.rig = to;
+      }
+      if (m.rig.lod === 'hi') setRigDetail(m.rig, d < 24);
+      m.rig.root.visible = d < SHOW_MONSTERS;
+    }
+  }
+
+  update(dt, t, players, camPos) {
+    this.frame = (this.frame || 0) + 1;
     for (const view of this.views) {
+      if (camPos) this.applyDistance(view, camPos);
       if (!view.state) continue;
       view.coin.rotation.z = t * 2;
       view.coin.position.y = view.base.y + 2.2 + Math.sin(t * 2) * 0.2;
@@ -266,10 +329,13 @@ export class BasesView {
         view.lockBtn.material.color.setHex(0xff3a4a);
         view.lockBtn.position.y = view.base.y + 0.55 + Math.max(0, Math.sin(t * 4)) * 0.08;
       }
+      const far = view.dist > HI_MONSTERS;
+      if (view.dist > SHOW_MONSTERS) continue;
+      if (far && (this.frame + view.base.index) % 3 !== 0) continue;
+      const adt = far ? dt * 3 : dt;
       for (const m of view.monsters.values()) {
         const rig = m.rig;
         const st = rig.st;
-        st.poseT += 0;
         // look at the closest player nearby, with personality idles in between
         let look = null;
         let bestD = 15;
@@ -280,7 +346,7 @@ export class BasesView {
             look = p;
           }
         }
-        rig.nextQuirk -= dt;
+        rig.nextQuirk -= adt;
         if (st.pose === 'celebrate' && st.poseT > 1.6) {
           st.pose = 'idle';
           st.poseT = 0;
@@ -300,16 +366,16 @@ export class BasesView {
           let d = want - rig.root.rotation.y;
           while (d > Math.PI) d -= Math.PI * 2;
           while (d < -Math.PI) d += Math.PI * 2;
-          rig.root.rotation.y += d * Math.min(1, dt * 3);
+          rig.root.rotation.y += d * Math.min(1, adt * 3);
         } else {
           let d = rig.baseYaw - rig.root.rotation.y;
           while (d > Math.PI) d -= Math.PI * 2;
           while (d < -Math.PI) d += Math.PI * 2;
-          rig.root.rotation.y += d * Math.min(1, dt * 1.5);
+          rig.root.rotation.y += d * Math.min(1, adt * 1.5);
         }
-        animateMonster(rig, st, dt, t);
-        if (rig.sparking && Math.random() < dt * 10) this.effects.aura('spark', rig.root.position.x, rig.root.position.y + 2, rig.root.position.z);
-        if (rig.blowing && Math.random() < dt * 3) this.effects.aura('bubble', rig.root.position.x, rig.root.position.y + 2, rig.root.position.z);
+        animateMonster(rig, st, adt, t);
+        if (rig.sparking && Math.random() < adt * 10) this.effects.aura('spark', rig.root.position.x, rig.root.position.y + 2, rig.root.position.z);
+        if (rig.blowing && Math.random() < adt * 3) this.effects.aura('bubble', rig.root.position.x, rig.root.position.y + 2, rig.root.position.z);
       }
     }
   }

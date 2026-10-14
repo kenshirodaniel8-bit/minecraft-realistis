@@ -118,6 +118,27 @@ test('duplicate and invalid steal requests are refused', async () => {
   assert.equal(b.send('stealBegin', { ownedId: mon.id }).error, 'base_full');
 });
 
+test('an aborted grab tells the owner their monster is safe (cancel, timeout, thief leaving)', async () => {
+  const { h, a, b, mon, baseA } = await setup();
+  h.walk(b, baseA.slots[0].x + 1.5, baseA.slots[0].z);
+  const safeCount = () => a.events('theft').filter((t) => t.stage === 'safe').length;
+  // let go of the key
+  assert.equal(b.send('stealBegin', { ownedId: mon.id }).ok, true);
+  assert.ok(a.events('theft').some((t) => t.stage === 'grab'));
+  b.send('stealCancel', {});
+  assert.equal(safeCount(), 1);
+  // never confirmed: the pending grab times out
+  assert.equal(b.send('stealBegin', { ownedId: mon.id }).ok, true);
+  h.advance(CONFIG.stealing.holdMs + 4500, 100);
+  assert.equal(b.s.stealPending, null);
+  assert.equal(safeCount(), 2);
+  // the thief disconnects mid-grab
+  assert.equal(b.send('stealBegin', { ownedId: mon.id }).ok, true);
+  h.game.leave(b.sid);
+  assert.equal(safeCount(), 3);
+  assert.equal(h.game.ledger.owner(mon.id), a.profile.id, 'nothing changed hands');
+});
+
 test('16. hitting a thief with a gadget releases the monster (return-to-owner and drop-recoverable rules)', async () => {
   for (const rule of ['returnToOwner', 'dropRecoverable']) {
     const old = CONFIG.stealing.dropRule;

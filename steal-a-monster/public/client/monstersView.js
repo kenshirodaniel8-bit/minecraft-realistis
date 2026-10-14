@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { SPECIES, RARITIES } from '#shared/monsters.js';
-import { buildMonster, setRigMaterial, FLASH_MAT } from './monsterRenderer.js';
+import { buildMonster, setRigMaterial, setRigDetail, FLASH_MAT } from './monsterRenderer.js';
 import { animateMonster } from './animationSystem.js';
 import { InterpBuffer } from './net.js';
 import { makeLabel, disposeLabel } from './labels.js';
@@ -86,6 +86,31 @@ export class MonstersView {
     return this.map.get(id);
   }
 
+  // Near monsters use the detailed rig; far ones a low-poly copy (built on
+  // first need). Hysteresis keeps them from flickering at the boundary.
+  applyLod(v, dist) {
+    const lo = v.rig.lod === 'lo' ? dist > 34 : dist > 42;
+    if (lo === (v.rig.lod === 'lo')) {
+      if (!lo) setRigDetail(v.rig, dist < 24);
+      return;
+    }
+    const from = v.rig;
+    let to = lo ? v.rigLo : v.rigHi;
+    if (!to) {
+      to = buildMonster(v.species.id, { lod: 'lo' });
+      v.rigLo = to;
+    }
+    to.root.position.copy(from.root.position);
+    to.root.rotation.copy(from.root.rotation);
+    to.root.scale.copy(from.root.scale);
+    to.root.visible = from.root.visible;
+    setRigMaterial(from, null);
+    this.scene.remove(from.root);
+    this.scene.add(to.root);
+    v.rig = to;
+    if (v.flashT > 0) setRigMaterial(to, FLASH_MAT);
+  }
+
   create(id, idx) {
     const species = SPECIES[idx];
     const rig = buildMonster(species.id);
@@ -93,6 +118,8 @@ export class MonstersView {
     const rarity = RARITIES[species.rarity];
     const v = {
       id, species, rig,
+      rigHi: rig,
+      rigLo: null,
       st: { pose: 'idle', poseT: 0, speed: 0 },
       buf: new InterpBuffer(),
       pos: new THREE.Vector3(),
@@ -305,10 +332,11 @@ export class MonstersView {
       }
       const moved = Math.hypot(v.pos.x - v.prev.x, v.pos.z - v.prev.z) / Math.max(dt, 1e-3);
       v.st.speed = v.st.speed * 0.8 + moved * 0.2;
+      const dist = camPos.distanceTo(v.pos);
+      this.applyLod(v, dist);
       const root = v.rig.root;
       root.position.copy(v.pos);
       root.rotation.y = v.yaw;
-      const dist = camPos.distanceTo(v.pos);
       // pose from server state, refined by actual motion
       let pose = POSES[v.state] || 'idle';
       if (v.forcePose && nowMs < v.forceUntil && v.state !== MSTATE.defeated && v.state !== MSTATE.stunned) pose = v.forcePose;

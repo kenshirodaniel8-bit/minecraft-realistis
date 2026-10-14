@@ -58,7 +58,7 @@ export class Stealing {
     for (const o of game.players.values()) {
       if (o !== s && o.stealPending && o.stealPending.ownedId === m.id) return fail('busy', 'Someone else is grabbing it.');
     }
-    s.stealPending = { ownedId: m.id, baseIndex: owner.baseIndex, startedAt: now, victim: owner.id };
+    s.stealPending = { ownedId: m.id, baseIndex: owner.baseIndex, startedAt: now, victim: owner.id, species: m.species };
     const sp = SPECIES_BY_ID[m.species];
     game.send(owner, 'theft', { stage: 'grab', thief: s.profile.name, species: m.species, name: sp.name });
     return { ok: true, holdMs: CONFIG.stealing.holdMs };
@@ -71,17 +71,22 @@ export class Stealing {
     const pend = s.stealPending;
     if (!pend || pend.ownedId !== p.ownedId) return fail('no_pending');
     if (now - pend.startedAt < CONFIG.stealing.holdMs - CONFIG.stealing.holdToleranceMs) return fail('too_soon', 'Keep holding!');
-    s.stealPending = null;
-    if (s.dead || s.carrying) return fail('cant');
-    if (s.fx.frozenUntil > now || s.fx.rootedUntil > now) return fail('stuck');
+    // from here on the grab ends either way; on failure the owner hears it is safe
+    const abort = (code, message) => {
+      this.cancelPending(s);
+      return fail(code, message);
+    };
+    if (s.dead || s.carrying) return abort('cant');
+    if (s.fx.frozenUntil > now || s.fx.rootedUntil > now) return abort('stuck');
     const found = this.findPlaced(p.ownedId);
-    if (!found || found.owner.id !== pend.victim) return fail('gone', 'The monster is gone.');
+    if (!found || found.owner.id !== pend.victim) return abort('gone', 'The monster is gone.');
     const { owner, m } = found;
-    if (this.isAway(m.id)) return fail('busy');
-    if (game.security.isLocked(owner.baseIndex)) return fail('lasers', 'The security lasers switched on!');
+    if (this.isAway(m.id)) return abort('busy');
+    if (game.security.isLocked(owner.baseIndex)) return abort('lasers', 'The security lasers switched on!');
     const slot = game.world.bases[owner.baseIndex].slots[m.slot];
-    if (Math.hypot(s.pos.x - slot.x, s.pos.z - slot.z) > CONFIG.stealing.maxDistance + 1) return fail('too_far');
-    if (s.profile.monsters.length >= s.profile.base.slots) return fail('base_full');
+    if (Math.hypot(s.pos.x - slot.x, s.pos.z - slot.z) > CONFIG.stealing.maxDistance + 1) return abort('too_far');
+    if (s.profile.monsters.length >= s.profile.base.slots) return abort('base_full');
+    s.stealPending = null;
     s.carrying = { ownedId: m.id, victimId: owner.id, baseIndex: owner.baseIndex, species: m.species, level: m.level, since: now };
     this.away.set(m.id, { kind: 'carried', by: s.id });
     const name = SPECIES_BY_ID[m.species].name;
@@ -97,10 +102,16 @@ export class Stealing {
     return { ok: true };
   }
 
+  // A grab that ended without a theft (let go, interrupted, timed out, the
+  // thief left): the owner's alarm is cleared.
   cancelPending(s, message) {
-    if (!s.stealPending) return;
+    const pend = s.stealPending;
+    if (!pend) return;
     s.stealPending = null;
     if (message) this.game.toast(s, message, 'bad');
+    const victim = this.game.byProfile.get(pend.victim);
+    const sp = SPECIES_BY_ID[pend.species];
+    if (victim && sp) this.game.send(victim, 'theft', { stage: 'safe', thief: s.profile.name, species: pend.species, name: sp.name });
   }
 
   // Delivery: the thief made it home.
@@ -220,7 +231,7 @@ export class Stealing {
     const game = this.game;
     for (const s of game.players.values()) {
       if (s.carrying && now - s.carrying.since > CONFIG.stealing.carryTimeoutMs) this.interrupt(s, 'timeout', 'returnToOwner');
-      if (s.stealPending && now - s.stealPending.startedAt > CONFIG.stealing.holdMs + 4000) s.stealPending = null;
+      if (s.stealPending && now - s.stealPending.startedAt > CONFIG.stealing.holdMs + 4000) this.cancelPending(s);
     }
     for (const d of [...this.dropped.values()]) {
       const owner = game.byProfile.get(d.victimId);
@@ -248,7 +259,7 @@ export class Stealing {
       const victim = this.game.byProfile.get(c.victimId);
       if (victim) this.game.send(victim, 'theft', { stage: 'saved', thief: s.profile.name, species: c.species, name: SPECIES_BY_ID[c.species].name });
     }
-    s.stealPending = null;
+    this.cancelPending(s);
     // the victim left: every theft of their monsters is cancelled
     for (const o of this.game.players.values()) {
       if (o === s) continue;

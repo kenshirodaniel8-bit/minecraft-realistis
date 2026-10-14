@@ -89,7 +89,7 @@ export class ItemSystem {
       default:
         break;
     }
-    t.stealPending = null;
+    game.stealing.cancelPending(t);
     if (item.interrupts) game.stealing.interrupt(t, 'hit');
     return { ok: true, hit: true, target: t.pn };
   }
@@ -159,7 +159,7 @@ export class ItemSystem {
         s.fx.rootedUntil = Math.max(s.fx.rootedUntil, now + item.rootMs);
         game.send(s, 'status', { kind: 'trapped', until: s.fx.rootedUntil });
         game.stealing.interrupt(s, 'trap');
-        s.stealPending = null;
+        game.stealing.cancelPending(s);
         this.removeGround(g);
         return;
       }
@@ -171,7 +171,7 @@ export class ItemSystem {
         game.send(s, 'knock', { x: Math.cos(a) * 8, z: Math.sin(a) * 8, up: 3, slip: true });
         game.send(s, 'status', { kind: 'slipping', until: s.fx.slipUntil });
         game.stealing.interrupt(s, 'slip');
-        s.stealPending = null;
+        game.stealing.cancelPending(s);
       }
     }
   }

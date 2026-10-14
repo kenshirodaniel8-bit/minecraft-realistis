@@ -8,7 +8,8 @@ varying vec3 vDir;
 void main() {
   vDir = normalize(position);
   vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  gl_Position = p.xyww;
+  // pinned to the far plane (a hair inside so it is never clipped)
+  gl_Position = vec4(p.xy, p.w * 0.99999, p.w);
 }`;
 
 const SKY_FRAG = /* glsl */ `
@@ -43,6 +44,7 @@ void main() {
 }`;
 
 const C = (hex) => new THREE.Color(hex);
+const CLOUD_SPAN = 360;
 
 // Keyframes over the day (0 = sunrise). Colors for sky top/horizon and lights.
 const DAY_KEYS = [
@@ -50,8 +52,8 @@ const DAY_KEYS = [
   { t: 0.08, top: C(0x3f9bff), hor: C(0xbfe6ff), sun: C(0xfff4e0), sunI: 2.6, hemi: 1.25, amb: C(0xffffff) },
   { t: 0.55, top: C(0x3f9bff), hor: C(0xc9ecff), sun: C(0xfff4e0), sunI: 2.6, hemi: 1.25, amb: C(0xffffff) },
   { t: 0.64, top: C(0x5a6fc8), hor: C(0xff9a6a), sun: C(0xffa070), sunI: 1.4, hemi: 0.9, amb: C(0xffc0a0) },
-  { t: 0.7, top: C(0x1a2050), hor: C(0x3a3a7a), sun: C(0x8090ff), sunI: 0.45, hemi: 0.55, amb: C(0x8a90ff) },
-  { t: 0.95, top: C(0x101838), hor: C(0x2a3060), sun: C(0x8090ff), sunI: 0.4, hemi: 0.5, amb: C(0x8a90ff) },
+  { t: 0.7, top: C(0x1a2050), hor: C(0x3a3a7a), sun: C(0x8090ff), sunI: 0.6, hemi: 0.75, amb: C(0x9aa0ff) },
+  { t: 0.95, top: C(0x101838), hor: C(0x2a3060), sun: C(0x8090ff), sunI: 0.55, hemi: 0.7, amb: C(0x9aa0ff) },
   { t: 1.0, top: C(0x6f8fd8), hor: C(0xffb98a), sun: C(0xffc79a), sunI: 1.2, hemi: 0.9, amb: C(0xc9b0ff) },
 ];
 
@@ -73,7 +75,9 @@ export class SceneView {
     this.renderer.toneMappingExposure = 1.05;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(60, 1, 0.3, 2000);
+    // nothing is visible through the fog beyond viewDist, so the far plane
+    // sits just past it and the frustum culls everything further away
+    this.camera = new THREE.PerspectiveCamera(60, 1, 0.3, q.viewDist + 80);
     this.scene.fog = new THREE.Fog(0xbfe6ff, 120, q.viewDist);
 
     this.hemi = new THREE.HemisphereLight(0xdff3ff, 0x7a9a5a, 1.2);
@@ -120,32 +124,84 @@ export class SceneView {
     window.addEventListener('resize', () => this.resize());
   }
 
+  // One instanced draw for every cloud puff. Clouds drift and wrap around
+  // the player so the sky is never empty and never beyond the far plane.
   makeClouds() {
-    const g = new THREE.Group();
     const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.92, fog: false });
-    const box = new THREE.BoxGeometry(1, 1, 1);
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (let i = 0; i < 40; i++) {
-      const c = new THREE.Group();
+    this.cloudList = [];
+    let puffs = 0;
+    for (let i = 0; i < 22; i++) {
       const n = 3 + Math.floor(rnd() * 4);
+      const parts = [];
       for (let k = 0; k < n; k++) {
-        const m = new THREE.Mesh(box, mat);
-        m.scale.set(18 + rnd() * 26, 6 + rnd() * 6, 14 + rnd() * 18);
-        m.position.set((k - n / 2) * 14 + rnd() * 8, rnd() * 4, rnd() * 10 - 5);
-        c.add(m);
+        parts.push({
+          sx: 18 + rnd() * 26, sy: 6 + rnd() * 6, sz: 14 + rnd() * 18,
+          x: (k - n / 2) * 14 + rnd() * 8, y: rnd() * 4, z: rnd() * 10 - 5,
+        });
       }
-      const a = rnd() * Math.PI * 2;
-      const r = 100 + rnd() * 700;
-      c.position.set(Math.cos(a) * r, 150 + rnd() * 60, Math.sin(a) * r);
-      c.userData.speed = 1 + rnd() * 2;
-      g.add(c);
+      puffs += n;
+      this.cloudList.push({ x: (rnd() - 0.5) * CLOUD_SPAN, y: 115 + rnd() * 40, z: (rnd() - 0.5) * CLOUD_SPAN, speed: 1 + rnd() * 2, parts });
     }
-    return g;
+    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, puffs);
+    mesh.frustumCulled = false;
+    return mesh;
   }
 
-  setQuality(q) {
-    this.quality = q;
+  updateClouds(dt, focus) {
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const v = new THREE.Vector3();
+    const sc = new THREE.Vector3();
+    const half = CLOUD_SPAN / 2;
+    let i = 0;
+    for (const c of this.cloudList) {
+      c.x += c.speed * dt;
+      // wrap around the player
+      if (focus) {
+        while (c.x - focus.x > half) c.x -= CLOUD_SPAN;
+        while (c.x - focus.x < -half) c.x += CLOUD_SPAN;
+        while (c.z - focus.z > half) c.z -= CLOUD_SPAN;
+        while (c.z - focus.z < -half) c.z += CLOUD_SPAN;
+      }
+      for (const p of c.parts) {
+        v.set(c.x + p.x, c.y + p.y, c.z + p.z);
+        sc.set(p.sx, p.sy, p.sz);
+        this.clouds.setMatrixAt(i++, m4.compose(v, q, sc));
+      }
+    }
+    this.clouds.instanceMatrix.needsUpdate = true;
+  }
+
+  // Applies a quality preset live (antialiasing needs a reload).
+  setQuality(name) {
+    if (!QUALITY[name] || name === this.quality) return;
+    this.quality = name;
+    const q = QUALITY[name];
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
+    this.camera.far = q.viewDist + 80;
+    this.targetFog.far = Math.min(this.targetFog.far, q.viewDist);
+    if (q.shadows !== this.renderer.shadowMap.enabled || (q.shadows && this.sun.shadow.mapSize.x !== q.shadowSize)) {
+      this.renderer.shadowMap.enabled = q.shadows;
+      this.sun.castShadow = q.shadows;
+      if (q.shadows) {
+        this.sun.shadow.mapSize.set(q.shadowSize, q.shadowSize);
+        const sc = this.sun.shadow.camera;
+        sc.left = -75; sc.right = 75; sc.top = 75; sc.bottom = -75; sc.near = 1; sc.far = 400;
+        this.sun.shadow.bias = -0.0006;
+        this.sun.shadow.normalBias = 0.6;
+      }
+      if (this.sun.shadow.map) {
+        this.sun.shadow.map.dispose();
+        this.sun.shadow.map = null;
+      }
+      this.scene.traverse((o) => {
+        if (!o.material) return;
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.needsUpdate = true;
+      });
+    }
+    this.resize();
   }
 
   resize() {
@@ -173,7 +229,7 @@ export class SceneView {
     const sunCol = a.sun.clone().lerp(b.sun, k);
     const sunI = a.sunI + (b.sunI - a.sunI) * k;
     const hemiI = a.hemi + (b.hemi - a.hemi) * k;
-    this.nightness = Math.max(0, Math.min(1, (0.9 - sunI) / 0.5));
+    this.nightness = Math.max(0, Math.min(1, (0.95 - sunI) / 0.4));
 
     this.luckyMix += ((lucky ? 1 : 0) - this.luckyMix) * Math.min(1, dt * 1.5);
     if (this.luckyMix > 0.01) {
@@ -219,10 +275,7 @@ export class SceneView {
     this.scene.fog.far += (this.targetFog.far - this.scene.fog.far) * Math.min(1, dt);
     this.renderer.setClearColor(this.scene.fog.color);
 
-    for (const c of this.clouds.children) {
-      c.position.x += c.userData.speed * dt;
-      if (c.position.x > 900) c.position.x = -900;
-    }
+    this.updateClouds(dt, focus);
   }
 
   render() {

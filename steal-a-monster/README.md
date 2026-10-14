@@ -224,7 +224,12 @@ steal-a-monster/
       ui.js, minimap.js, preview.js    HUD/panels, minimap + world map, monster previews
       effects.js, audio.js, net.js, labels.js, worldItems.js, gallery.js
   tests/                       node --test suites (see below)
-  scripts/e2e-smoke.mjs        two-player browser test (Playwright)
+  scripts/
+    run-tests.mjs              npm test runner (works on Node 20+)
+    e2e-smoke.mjs              two-player browser test (Playwright)
+    load-test.mjs              12-player server load test
+    ui-tour.mjs, mobile-check.mjs, screenshots.mjs   browser QA helpers
+  TESTING.md                   what is tested automatically, by hand, and not at all
 ```
 
 ### Server authority
@@ -303,8 +308,9 @@ Web Audio API (`public/client/audio.js`). To use recorded sounds, call
 ## Testing
 
 ```bash
-npm test            # automated: node --test, ~45 tests, runs in CI
+npm test            # automated: node --test, 44 tests, runs in CI
 npm run test:e2e    # two real browsers on one server (needs Playwright + Chromium)
+npm run test:load   # 12 simulated players; reports server tick time and bandwidth
 ```
 
 The automated suites run the real server code (with a controllable clock and an
@@ -339,12 +345,34 @@ what remains unverified.
 
 ---
 
+## Status and known limitations
+
+The full loop is playable end to end in the browser and covered by automated
+tests (see [TESTING.md](TESTING.md) for exactly what was and wasn't verified).
+Known limitations:
+
+- **Not verified on real hardware**: no real GPU, phone, Safari or Firefox was
+  available while building this; frame rates on real devices are unmeasured.
+- **Bases** have upgradeable pads, lasers, income and a collector, but no
+  free-form decoration placement.
+- **Movement** is predicted by the client and validated by the server (speed,
+  terrain, walls, region locks, lasers); the server does not re-simulate every
+  step. A cheater cannot teleport, pass walls or locked lasers, or create Money
+  or monsters, but could move optimally within the speed limit.
+- **Storage** is one JSON file per player (atomic writes + backups) in a single
+  server process. That suits one world on one machine; a bigger deployment
+  would swap in a database behind the same store interface.
+- **Audio** is synthesized sound effects only (no recorded sounds or music).
+- **Art** is entirely procedural (no imported models or textures).
+- **Balance** (prices, income, spawn rates) has not been tuned by long playtests.
+
 ## Troubleshooting
 
 - **"Cannot reach the game server"** — start it with `npm start` and open the
   address it prints (not the HTML file directly).
 - **Black screen / very slow** — the game needs WebGL 2. Lower *Graphics* in
-  Settings (Low disables shadows) and reload. Press **F3** to see FPS and draw calls.
+  Settings (Low disables shadows and shortens the view distance; it applies
+  immediately, antialiasing after a reload). Press **F3** to see FPS and draw calls.
 - **"Your saved progress could not be loaded"** — the profile file and its backup
   are both unreadable; nothing was overwritten. Look in `DATA_DIR/players/`.
 - **Mouse look doesn't work** — hold the right mouse button and drag, or press V

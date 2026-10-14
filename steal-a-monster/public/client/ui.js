@@ -19,12 +19,12 @@ const setText = (el, t) => {
 };
 
 export const TUTORIAL = [
-  { key: 'explore', title: 'Explore!', text: 'Leave the plaza and head into Greenstarter Plains. Move with WASD, hold right mouse to look around.' },
-  { key: 'defeat', title: 'Battle a monster', text: 'Find a wild monster and click to swing your sword until it is defeated. Watch out for red warning circles!' },
-  { key: 'recruit', title: 'Pay to recruit', text: 'Defeating is not enough — pay its fee! Press R or click Recruit on the card.' },
-  { key: 'place', title: 'Bring it home', text: 'Press H to return to your base. Your new friend hops onto a free pad.' },
+  { key: 'explore', title: 'Explore!', text: 'Leave the plaza and head into Greenstarter Plains. Move with WASD, hold right mouse to look around.', touch: 'Leave the plaza and head into Greenstarter Plains. Move with the left stick, drag on the right to look around.' },
+  { key: 'defeat', title: 'Battle a monster', text: 'Find a wild monster and click to swing your sword until it is defeated. Watch out for red warning circles!', touch: 'Find a wild monster and tap ⚔ to swing your sword until it is defeated. Watch out for red warning circles!' },
+  { key: 'recruit', title: 'Pay to recruit', text: 'Defeating is not enough — pay its fee! Press R or click Recruit on the card.', touch: 'Defeating is not enough — pay its fee! Tap Recruit on the card.' },
+  { key: 'place', title: 'Bring it home', text: 'Press H to return to your base. Your new friend hops onto a free pad.', touch: 'Tap 🏠 at the top to return to your base. Your new friend hops onto a free pad.' },
   { key: 'collect', title: 'Collect income', text: 'Monsters on pads earn Money. Step on the gold $ pad in your base to collect it.' },
-  { key: 'lock', title: 'Protect your base', text: 'Rivals can steal your monsters! Step on the red LOCK button to switch on your lasers.' },
+  { key: 'lock', title: 'Protect your base', text: 'Rivals can steal your monsters! Step on the red LOCK button (or press L) to switch on your lasers.', touch: 'Rivals can steal your monsters! Step on the red LOCK button (or tap 🔒) to switch on your lasers.' },
   { key: 'sword', title: 'Upgrade your sword', text: 'Buy a Stone Sword at the Sword Shop in the plaza. Stronger swords beat tougher monsters.' },
 ];
 
@@ -156,10 +156,11 @@ export class UI {
       q.hidden = true;
       return;
     }
-    const key = `${p.tutorial.step}`;
+    const touch = document.body.classList.contains('touch');
+    const key = `${p.tutorial.step}|${touch}`;
     if (q.dataset.key !== key) {
       q.dataset.key = key;
-      q.innerHTML = `<h3>📜 ${step.title}</h3><div>${esc(step.text)}</div>
+      q.innerHTML = `<h3>📜 ${step.title}</h3><div>${esc((touch && step.touch) || step.text)}</div>
         <div class="steps">${TUTORIAL.map((_, i) => `<i class="${i < p.tutorial.step ? 'done' : ''}"></i>`).join('')}</div>
         <button class="btn sm ghost" id="quest-skip">Skip tutorial</button>`;
       $('quest-skip').onclick = () => this.app.actions.skipTutorial();
@@ -200,16 +201,18 @@ export class UI {
     this.bannerT = setTimeout(() => { el.hidden = true; }, 3600);
   }
 
-  theftAlert(text) {
+  // holdMs: how long the alert stays up (a theft in progress stays until it
+  // is resolved, with a long safety timeout)
+  theftAlert(text, holdMs = 7000) {
     const el = $('theft-alert');
+    clearTimeout(this.theftT);
     if (!text) {
       el.hidden = true;
       return;
     }
     el.hidden = false;
     el.textContent = text;
-    clearTimeout(this.theftT);
-    this.theftT = setTimeout(() => { el.hidden = true; }, 7000);
+    this.theftT = setTimeout(() => { el.hidden = true; }, holdMs);
   }
 
   updateEvent(events, serverNow) {
