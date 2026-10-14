@@ -200,6 +200,33 @@ export class BasesView {
     this.setStored(view, st.stored);
   }
 
+  // Your own base: a tall light beam and a "YOUR BASE" sign you can spot from
+  // anywhere nearby (the on-screen 🏠 pointer covers longer distances).
+  setMine(index) {
+    if (this.myIndex === index && this.mine) return;
+    if (this.mine) {
+      this.scene.remove(this.mine.group);
+      disposeLabel(this.mine.label);
+      this.mine = null;
+    }
+    this.myIndex = index;
+    const view = this.views[index];
+    if (!view) return;
+    const b = view.base;
+    const g = new THREE.Group();
+    const p = b.toWorld(0, -11.5);
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.1, 2.0, 90, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
+    );
+    beam.position.set(p.x, b.y + 45, p.z);
+    const label = makeLabel('🏠 YOUR BASE', { scale: 0.032, bg: '#3fbf5a', color: '#ffffff', border: '#ffffff' });
+    label.position.set(b.x, b.y + 20, b.z);
+    g.add(beam, label);
+    this.scene.add(g);
+    this.mine = { group: g, beam, label };
+  }
+
   // Decorations on the wall spots: rebuild only the spots that changed.
   setDecor(view, list) {
     view.decor.forEach((cur, i) => {
@@ -340,6 +367,14 @@ export class BasesView {
   update(dt, t, players, camPos) {
     this.frame = (this.frame || 0) + 1;
     const me = players[0];
+    if (this.mine) {
+      const v = this.views[this.myIndex];
+      // the sign would only get in the way inside your own base
+      this.mine.label.visible = (v.dist ?? 99) > v.base.half + 14;
+      this.mine.beam.material.opacity = 0.16 + Math.sin(t * 2) * 0.05;
+      const st = v.state;
+      if (st) this.mine.beam.material.color.setHex(this.colorOf(st));
+    }
     for (const view of this.views) {
       if (camPos) this.applyDistance(view, camPos);
       if (!view.state) continue;

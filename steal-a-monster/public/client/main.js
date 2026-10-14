@@ -57,6 +57,10 @@ function saveJSON(key, v) {
   } catch { /* storage may be blocked */ }
 }
 
+function setTextOnce(el, text) {
+  if (el.textContent !== text) el.textContent = text;
+}
+
 class App {
   constructor() {
     this.isTouch = matchMedia('(pointer: coarse)').matches;
@@ -138,7 +142,7 @@ class App {
       sw.appendChild(b);
     }
     $('controls-btn').onclick = () => {
-      $('title-status').innerHTML = 'WASD move · Right-drag look · Click attack · Q dodge · E interact · R recruit · H home · L lasers · 1–8 gadgets';
+      $('title-status').innerHTML = 'WASD move · Drag mouse or ← → to turn the camera · Click attack · Q dodge · E interact · R recruit · H home · L lasers · 1–8 gadgets';
     };
     const go = () => this.play();
     $('play-btn').onclick = go;
@@ -248,7 +252,8 @@ class App {
     this.worldState = w.world;
     this.activeRegions = new Set(w.world.active);
     this.player.teleport(w.pos.x, w.pos.y, w.pos.z, w.pos.yaw);
-    this.cam.yaw = w.pos.yaw + Math.PI;
+    this.viewBase();
+    this.basesView.setMine(this.myBase);
     // reset dynamic things (also used after a reconnect)
     for (const p of this.players.values()) p.dispose();
     this.players.clear();
@@ -335,7 +340,8 @@ class App {
     n.on('teleport', (d) => {
       this.teleportSeq = d.seq;
       this.player.teleport(d.x, d.y, d.z, d.yaw);
-      if (d.yaw !== undefined) this.cam.yaw = d.yaw + Math.PI;
+      if (d.reason === 'home' || d.reason === 'respawn') this.viewBase();
+      else if (d.yaw !== undefined) this.cam.yaw = d.yaw + Math.PI;
       if (d.reason === 'home' || d.reason === 'portal' || d.reason === 'respawn') {
         this.audio.play('teleport');
         this.effects.burst(d.x, d.y + 2, d.z, 30, { color: [0x7af0ff, 0xffffff], speed: 6 });
@@ -606,6 +612,55 @@ class App {
 
   flashScreen() {
     document.body.animate([{ boxShadow: 'inset 0 0 0 0 rgba(255,0,40,0)' }, { boxShadow: 'inset 0 0 120px 20px rgba(255,0,40,.55)' }, { boxShadow: 'inset 0 0 0 0 rgba(255,0,40,0)' }], { duration: 350 });
+  }
+
+  // On-screen 🏠 pointer to your base with the distance (hidden when close).
+  // Off-screen (or behind the camera) it sticks to the screen edge and the
+  // arrow points the way.
+  updateBaseMarker(hide) {
+    const el = this.baseMarkerEl || (this.baseMarkerEl = $('base-marker'));
+    const b = this.world.bases[this.myBase];
+    const p = this.player.pos;
+    const dist = b ? Math.hypot(b.x - p.x, b.z - p.z) : 0;
+    if (!b || hide || dist < 32) {
+      el.hidden = true;
+      return;
+    }
+    const v = (this.tmpMarker || (this.tmpMarker = new THREE.Vector3())).set(b.x, b.y + 10, b.z).project(this.sceneView.camera);
+    let x = v.x;
+    let y = v.y;
+    const behind = v.z > 1;
+    if (behind) {
+      x = -x;
+      y = -y;
+    }
+    // keep inside the screen, and above the hotbar at the bottom
+    const ex = 0.86;
+    const top = 0.8;
+    const bottom = -0.66;
+    const off = behind || Math.abs(x) > ex || y > top || y < bottom;
+    if (off) {
+      const k = Math.min(ex / Math.max(Math.abs(x), 1e-6), (y >= 0 ? top : -bottom) / Math.max(Math.abs(y), 1e-6));
+      x *= k;
+      y *= k;
+    }
+    el.hidden = false;
+    el.style.transform = `translate(${((x + 1) / 2) * innerWidth}px, ${((1 - y) / 2) * innerHeight}px) translate(-50%, -50%)`;
+    const arrow = el.firstElementChild;
+    arrow.hidden = !off;
+    if (off) arrow.style.transform = `rotate(${Math.atan2(-y, x)}rad)`;
+    setTextOnce(el.lastElementChild, `🏠 ${Math.round(dist)} m`);
+  }
+
+  // Camera looking into your base from the door, so you see your pads and
+  // monsters (and your character's face) when you arrive.
+  viewBase() {
+    const b = this.world.bases[this.myBase];
+    if (!b) return;
+    this.cam.yaw = b.yaw;
+    this.cam.pitch = 0.5;
+    this.cam.distance = Math.max(this.cam.distance, 18);
+    if (this.input) this.input.lastManualLook = performance.now() + 1500; // let it sink in
   }
 
   blockedToast(text) {
@@ -1044,7 +1099,23 @@ class App {
     this.worldView.update(dt, this.t, camPos);
     if (this.preview) this.preview.update(dt);
 
+    // ← → turn the camera; walking forward slowly swings it behind you
+    // (unless you turned it yourself in the last moment)
+    if (active) {
+      const turn = (input.down.has('camRight') ? 1 : 0) - (input.down.has('camLeft') ? 1 : 0);
+      if (turn) {
+        this.cam.yaw -= turn * 2.0 * dt;
+        input.lastManualLook = performance.now();
+      }
+      if (!input.mouseLook && move.z > 0.2 && !dead && performance.now() - input.lastManualLook > 1500) {
+        let d = this.player.yaw + Math.PI - this.cam.yaw;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        this.cam.yaw += d * Math.min(1, dt * 1.3);
+      }
+    }
     this.cam.update(dt, this.player.pos, look, zoom);
+    this.updateBaseMarker(panelOpen);
     const lucky = this.events?.some((e) => e.phase === 'active');
     this.sceneView.update(dt, this.t, this.dayT(), this.player.pos, this.region, lucky);
     if (lucky && Math.random() < dt * 6) this.effects.confetti(this.player.pos.x + (Math.random() - 0.5) * 40, this.player.pos.y + 25, this.player.pos.z + (Math.random() - 0.5) * 40, 3);

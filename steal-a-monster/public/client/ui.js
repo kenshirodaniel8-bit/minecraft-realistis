@@ -20,7 +20,7 @@ const setText = (el, t) => {
 };
 
 export const TUTORIAL = [
-  { key: 'explore', title: 'Explore!', text: 'Leave the plaza and head into Greenstarter Plains. Move with WASD, hold right mouse to look around.', touch: 'Leave the plaza and head into Greenstarter Plains. Move with the left stick, drag on the right to look around.' },
+  { key: 'explore', title: 'Explore!', text: 'This is your base! Walk out of it into Greenstarter Plains. Move with WASD, drag the mouse (or use ← →) to turn the camera.', touch: 'This is your base! Walk out of it into Greenstarter Plains. Move with the left stick, drag on the right to turn the camera.' },
   { key: 'defeat', title: 'Battle a monster', text: 'Find a wild monster and click to swing your sword until it is defeated. Watch out for red warning circles!', touch: 'Find a wild monster and tap ⚔ to swing your sword until it is defeated. Watch out for red warning circles!' },
   { key: 'recruit', title: 'Pay to recruit', text: 'Defeating is not enough — pay its fee! Press R or click Recruit on the card.', touch: 'Defeating is not enough — pay its fee! Tap Recruit on the card.' },
   { key: 'place', title: 'Bring it home', text: 'Press H to return to your base. Your new friend hops onto a free pad.', touch: 'Tap 🏠 at the top to return to your base. Your new friend hops onto a free pad.' },
@@ -758,7 +758,7 @@ function specialText(sp) {
 
 export function helpHtml() {
   const rows = [
-    ['W A S D / arrows', 'Move'], ['Right mouse drag', 'Look around (or press V for mouse-look)'], ['Mouse wheel', 'Zoom'],
+    ['W A S D / ↑ ↓', 'Move'], ['Drag the mouse (either button) / ← →', 'Turn the camera (or press V for mouse-look)'], ['Mouse wheel', 'Zoom'],
     ['Left click / F', 'Swing your sword (aims at the closest monster in front)'], ['Space', 'Jump / swim up'], ['Shift', 'Run'], ['Q', 'Dodge roll (dodges attacks)'],
     ['E', 'Interact: shops, Lucky Blocks, steal (hold), rescue'], ['R', 'Recruit the defeated monster (pay its fee)'],
     ['H', 'Teleport to your base (cooldown; not while carrying a stolen monster)'], ['L', 'Switch on your base lasers (at your base)'],

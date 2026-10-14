@@ -1,15 +1,18 @@
 // Keyboard, mouse and touch input mapped to game actions.
 //
-// Desktop: WASD move, mouse (right-drag or mouse-look) camera, left click
-// attack, Space jump, Shift sprint, Q dodge, E interact, R recruit, H home,
+// Desktop: WASD move, drag with either mouse button (or arrow keys, or V for
+// mouse-look) to turn the camera, left click attack, Space jump, Shift
+// sprint, Q dodge, E interact, R recruit, H home,
 // L lasers, 1-8 gadgets, C collection, M map, T chat, V mouse-look, Esc menu.
 // Touch: left joystick, drag right side to look, on-screen buttons.
 
 const KEYMAP = {
   KeyW: 'forward', ArrowUp: 'forward',
   KeyS: 'back', ArrowDown: 'back',
-  KeyA: 'left', ArrowLeft: 'left',
-  KeyD: 'right', ArrowRight: 'right',
+  KeyA: 'left',
+  KeyD: 'right',
+  ArrowLeft: 'camLeft',
+  ArrowRight: 'camRight',
   Space: 'jump',
   ShiftLeft: 'sprint', ShiftRight: 'sprint',
   KeyQ: 'dodge',
@@ -38,6 +41,8 @@ export class Input {
     this.stick = { x: 0, y: 0, active: false };
     this.mouseLook = false;
     this.dragging = false;
+    this.leftDrag = null;     // left button held: a click attacks, a drag turns the camera
+    this.lastManualLook = 0;  // when the player last turned the camera (ms)
     this.enabled = true;
     this.typing = false;
     this.sensitivity = 1;
@@ -94,20 +99,36 @@ export class Input {
     if (e.button === 0) {
       if (!this.down.has('attack')) this.pressed.add('attack');
       this.down.add('attack');
+      if (!this.mouseLook) this.leftDrag = { moved: 0, turning: false };
     } else if (e.button === 2) {
       this.dragging = true;
     }
   }
 
   onMouseUp(e) {
-    if (e.button === 0) this.down.delete('attack');
+    if (e.button === 0) {
+      this.down.delete('attack');
+      this.leftDrag = null;
+    }
     if (e.button === 2) this.dragging = false;
   }
 
   onMouseMove(e) {
-    if (this.mouseLook || this.dragging) {
+    let turn = this.mouseLook || this.dragging;
+    const ld = this.leftDrag;
+    if (ld && !turn) {
+      // dragging with the left button turns the camera (and stops swinging)
+      ld.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
+      if (!ld.turning && ld.moved > 6) {
+        ld.turning = true;
+        this.down.delete('attack');
+      }
+      turn = ld.turning;
+    }
+    if (turn) {
       this.look.x += e.movementX * this.sensitivity;
       this.look.y += e.movementY * this.sensitivity;
+      this.lastManualLook = performance.now();
     }
   }
 
@@ -246,6 +267,7 @@ export class TouchControls {
       if (e.pointerId !== lookId) return;
       input.look.x += (e.clientX - last.x) * 1.6;
       input.look.y += (e.clientY - last.y) * 1.6;
+      input.lastManualLook = performance.now();
       last = { x: e.clientX, y: e.clientY };
     });
     const endLook = (e) => {

@@ -71,15 +71,15 @@ animated side by side.
 
 | Desktop | Action |
 |---|---|
-| **W A S D** / arrows | Move (camera-relative) |
-| Hold **right mouse** + drag | Look around · **V** toggles mouse-look (pointer lock) |
+| **W A S D** / ↑ ↓ | Move (camera-relative); walking forward swings the camera behind you |
+| **Drag** with the mouse (left or right button) · **← →** | Turn the camera · **V** toggles mouse-look (pointer lock) |
 | Mouse wheel | Zoom |
 | **Left click** (or **F**) | Swing your sword — it auto-aims at the nearest monster in front of you |
 | **Space** | Jump / swim up · **Shift** run |
 | **Q** | Dodge roll (brief invulnerability — dodge the red warning areas) |
 | **E** | Interact: shops, Lucky Blocks, hold to steal, rescue a dropped monster |
 | **R** | Recruit the defeated monster on your newest card (pays its fee) |
-| **H** | Teleport to your base (20 s cooldown, not while carrying a stolen monster) |
+| **H** | Teleport to your base (20 s cooldown, not while carrying a stolen monster). Your base has a light beam and a "🏠 YOUR BASE" sign; when you're away, an on-screen 🏠 pointer shows the way and the distance |
 | **L** | Switch on your base's security lasers (you must be at your base) |
 | **1 – 8** | Use gadgets |
 | **C** / Tab · **M** | Your monsters · World map |
@@ -411,7 +411,7 @@ Known limitations:
   immediately, antialiasing after a reload). Press **F3** to see FPS and draw calls.
 - **"Your saved progress could not be loaded"** — the profile file and its backup
   are both unreadable; nothing was overwritten. Look in `DATA_DIR/players/`.
-- **Mouse look doesn't work** — hold the right mouse button and drag, or press V
+- **Camera doesn't turn** — drag with the mouse, use the ← → keys, or press V
   (some embedded browsers block pointer lock).
 - **Port in use** — `PORT=3001 npm start`.
 
