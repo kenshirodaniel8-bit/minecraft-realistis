@@ -116,6 +116,7 @@ export class Game {
     this.dayEpoch = this.now();
     this.lastSaveAt = this.now();
     this.saveFailures = 0;
+    this.saving = new Map(); // profile id -> the save of it still running
 
     this.economy = new Economy(this);
     this.combat = new Combat(this);
@@ -500,7 +501,20 @@ export class Game {
     s.saveDirty = true;
   }
 
-  async saveProfile(profile) {
+  // Saves of one profile run one after another (they write the same file and
+  // its backup), and flushSaves()/shutdown() can wait for every save that is
+  // still running, including the one started when a player leaves.
+  saveProfile(profile) {
+    const prev = this.saving.get(profile.id) || Promise.resolve();
+    const job = prev.then(() => this.writeProfile(profile));
+    this.saving.set(profile.id, job);
+    job.finally(() => {
+      if (this.saving.get(profile.id) === job) this.saving.delete(profile.id);
+    });
+    return job;
+  }
+
+  async writeProfile(profile) {
     try {
       await this.store.saveProfile(profile.id, profile);
       return true;
@@ -705,6 +719,8 @@ export class Game {
         jobs.push(this.saveProfile(s.profile));
       }
     }
+    // and the saves still running (e.g. of players who just left)
+    jobs.push(...this.saving.values());
     return Promise.all(jobs);
   }
 
@@ -715,6 +731,7 @@ export class Game {
     }
     const jobs = [...this.players.values()].map((s) => this.saveProfile(s.profile));
     jobs.push(this.ledger.save().catch(() => {}));
+    jobs.push(...this.saving.values());
     await Promise.all(jobs);
   }
 

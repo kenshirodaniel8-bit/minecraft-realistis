@@ -103,8 +103,7 @@ test('a corrupt save file is restored from its backup; if both are broken the lo
     a.profile.money = 888;
     await h.game.saveNow(a); // previous version (777) is now the .bak
     h.game.leave(a.sid);
-    await h.game.flushSaves();
-    await new Promise((r) => setTimeout(r, 30));
+    await h.game.flushSaves(); // also waits for the save started by leave()
     const file = path.join(dir, 'players', `${profileIdFromToken(TOKEN_A)}.json`);
     fs.writeFileSync(file, '{ this is not json');
     const h2 = await makeGame({ store: new JsonFileStore(dir) });
@@ -113,7 +112,7 @@ test('a corrupt save file is restored from its backup; if both are broken the lo
     assert.ok([777, 888].includes(back.profile.money), `restored money ${back.profile.money}`);
     // now break both copies
     h2.game.leave(back.sid);
-    await new Promise((r) => setTimeout(r, 30));
+    await h2.game.flushSaves();
     fs.writeFileSync(file, 'garbage');
     fs.writeFileSync(`${file}.bak`, 'garbage');
     const h3 = await makeGame({ store: new JsonFileStore(dir) });
