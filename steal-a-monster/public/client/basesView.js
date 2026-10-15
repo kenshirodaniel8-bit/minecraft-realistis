@@ -18,9 +18,10 @@ function std(color, o = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.5, ...o });
 }
 
-const PAD_GEO = new THREE.CylinderGeometry(1.7, 1.9, 0.5, 24);
+const PAD_GEO = new THREE.CylinderGeometry(1.45, 1.6, 0.5, 24);
 const PAD_MAT = std(0xffffff);
-const RING_GEO = new THREE.TorusGeometry(1.75, 0.12, 6, 28);
+const RING_GEO = new THREE.TorusGeometry(1.5, 0.12, 6, 28);
+const TOWER_TOP = CONFIG.bases.floors * CONFIG.bases.floorHeight;
 const RING_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
 // distance tiers (from the camera to the base center)
@@ -45,7 +46,7 @@ export class BasesView {
     const g = new THREE.Group();
     this.scene.add(g);
     const view = { base: b, group: g, pads: [], monsters: new Map(), lasers: [], labels: [], decor: new Array(b.decor.length).fill(null), state: null };
-    // all 12 pads (and their colored rings) are two instanced draws
+    // all pads on every floor (and their colored rings) are two instanced draws
     const n = b.slots.length;
     view.padMesh = new THREE.InstancedMesh(PAD_GEO, PAD_MAT, n);
     view.ringMesh = new THREE.InstancedMesh(RING_GEO, RING_MAT, n);
@@ -55,8 +56,8 @@ export class BasesView {
     const none = new THREE.Quaternion();
     const one = new THREE.Vector3(1, 1, 1);
     b.slots.forEach((s, i) => {
-      view.padMesh.setMatrixAt(i, m4.compose(new THREE.Vector3(s.x, b.y + 0.25, s.z), none, one));
-      view.ringMesh.setMatrixAt(i, m4.compose(new THREE.Vector3(s.x, b.y + 0.52, s.z), flat, one));
+      view.padMesh.setMatrixAt(i, m4.compose(new THREE.Vector3(s.x, b.y + s.y + 0.25, s.z), none, one));
+      view.ringMesh.setMatrixAt(i, m4.compose(new THREE.Vector3(s.x, b.y + s.y + 0.52, s.z), flat, one));
       view.pads.push({ slot: i, label: null, labelKey: '' });
     });
     g.add(view.padMesh, view.ringMesh);
@@ -93,20 +94,20 @@ export class BasesView {
     termLabel.position.set(b.terminal.x, b.y + 3.6, b.terminal.z);
     g.add(termLabel);
     view.labels.push(termLabel);
-    // laser gate (3 beams across the door)
+    // laser gate: red bars across the door (one instanced draw)
     const doorHalf = CONFIG.bases.doorWidth / 2;
     const laserMat = new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0.85 });
-    for (let k = 0; k < 4; k++) {
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, doorHalf * 2 + 0.6, 6), laserMat);
-      beam.position.set(b.door.x, b.y + 0.9 + k * 1.6, b.door.z);
-      beam.rotation.z = Math.PI / 2;
-      beam.rotation.y = Math.atan2(-b.tu.z, b.tu.x);
-      beam.visible = false;
-      g.add(beam);
-      view.lasers.push(beam);
+    const nBars = 13;
+    const bars = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.11, 0.11, 6, 6), laserMat, nBars);
+    for (let k = 0; k < nBars; k++) {
+      const p = b.toWorld(-doorHalf + 0.4 + (k * (doorHalf * 2 - 0.8)) / (nBars - 1), b.half);
+      bars.setMatrixAt(k, m4.compose(new THREE.Vector3(p.x, b.y + 3.05, p.z), none, one));
     }
-    const glow = new THREE.Mesh(new THREE.PlaneGeometry(doorHalf * 2 + 0.5, 6.6), new THREE.MeshBasicMaterial({ color: 0xff3a4a, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
-    glow.position.set(b.door.x, b.y + 3.3, b.door.z);
+    bars.visible = false;
+    g.add(bars);
+    view.lasers.push(bars);
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(doorHalf * 2 + 0.5, 6.2), new THREE.MeshBasicMaterial({ color: 0xff3a4a, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false }));
+    glow.position.set(b.door.x, b.y + 3.1, b.door.z);
     glow.rotation.y = b.yaw;
     glow.visible = false;
     g.add(glow);
@@ -114,17 +115,59 @@ export class BasesView {
     // dynamic collider used by the local player's physics when lasers are on
     view.gateCollider = boxCollider(b.door.x, b.door.z, doorHalf + 0.4, 0.6, Math.atan2(b.tu.z, b.tu.x), b.y - 2, b.y + 10);
     view.gateCollider.br = doorHalf + 1;
-    // banner flag
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 9, 6), std(0xd8d8e0));
-    const flagPos = b.toWorld(b.half - 1.5, b.half + 0.5);
-    pole.position.set(flagPos.x, b.y + 4.5, flagPos.z);
-    const flag = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.6), std(0xcccccc, { side: THREE.DoubleSide }));
-    flag.position.set(flagPos.x + b.tu.x * 1.3, b.y + 8, flagPos.z + b.tu.z * 1.3);
+    // banner flag on the roof
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 9, 6), std(0xd8d8e0));
+    const flagPos = b.toWorld(b.half - 2, -b.half + 2);
+    pole.position.set(flagPos.x, b.y + TOWER_TOP + 1.6 + 4.5, flagPos.z);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2), std(0xcccccc, { side: THREE.DoubleSide }));
+    flag.position.set(flagPos.x - b.tu.x * 1.6, b.y + TOWER_TOP + 1.6 + 7.8, flagPos.z - b.tu.z * 1.6);
     flag.rotation.y = b.yaw + Math.PI / 2;
     g.add(pole, flag);
     view.flag = flag;
+    // wooden name board above the door (like a shop sign)
+    const board = new THREE.Mesh(new THREE.BoxGeometry(9.5, 2, 0.35), std(0x9a5a32, { roughness: 0.8 }));
+    const bp = b.toWorld(0, b.half + 0.75);
+    board.position.set(bp.x, b.y + 7.6, bp.z);
+    board.rotation.y = b.yaw;
+    g.add(board);
+    view.boardCanvas = document.createElement('canvas');
+    view.boardCanvas.width = 512;
+    view.boardCanvas.height = 108;
+    view.boardTex = new THREE.CanvasTexture(view.boardCanvas);
+    view.boardTex.colorSpace = THREE.SRGBColorSpace;
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(9.1, 1.8), new THREE.MeshBasicMaterial({ map: view.boardTex }));
+    face.position.set(bp.x + b.tv.x * 0.19, b.y + 7.6, bp.z + b.tv.z * 0.19);
+    face.rotation.y = b.yaw;
+    g.add(face);
+    this.drawBoard(view, 'Base', '#ffffff');
     this.setSign(view, `Plot ${b.index + 1}\nFREE`, '#ffffff', '#5a5a6a');
     return view;
+  }
+
+  drawBoard(view, text, color) {
+    if (view.boardText === text) return;
+    view.boardText = text;
+    const c = view.boardCanvas;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#9a5a32';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = '#6e3c1e';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(4, 4, c.width - 8, c.height - 8);
+    ctx.font = '900 58px "Trebuchet MS", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    let size = 58;
+    while (ctx.measureText(text).width > c.width - 40 && size > 24) {
+      size -= 4;
+      ctx.font = `900 ${size}px "Trebuchet MS", system-ui, sans-serif`;
+    }
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = '#4a2410';
+    ctx.strokeText(text, c.width / 2, c.height / 2 + 3);
+    ctx.fillStyle = color;
+    ctx.fillText(text, c.width / 2, c.height / 2 + 3);
+    view.boardTex.needsUpdate = true;
   }
 
   setSign(view, text, color, bg) {
@@ -135,7 +178,7 @@ export class BasesView {
     const b = view.base;
     view.sign = makeLabel(text, { scale: 0.015, color, bg, border: '#ffffff' });
     const p = b.toWorld(0, b.half + 0.5);
-    view.sign.position.set(p.x, b.y + 10, p.z);
+    view.sign.position.set(p.x, b.y + TOWER_TOP + 5, p.z);
     view.group.add(view.sign);
   }
 
@@ -152,6 +195,7 @@ export class BasesView {
     this.setDecor(view, st.empty ? [] : st.decor || []);
     if (st.empty) {
       this.setSign(view, `Plot ${st.index + 1}\nFREE`, '#ffffff', '#5a5a6a');
+      this.drawBoard(view, 'Base', '#ffffff');
       view.flag.material.color.setHex(0xcccccc);
       for (const [id, m] of view.monsters) this.removeMonster(view, id, m);
       view.pads.forEach((p) => this.padStyle(view, p, false, null));
@@ -162,6 +206,7 @@ export class BasesView {
     const hex = '#' + color.toString(16).padStart(6, '0');
     if (!prev || prev.name !== st.name || prev.color !== st.color || prev.level !== st.level) {
       this.setSign(view, `${st.name}'s Base\nLv ${st.level}`, '#ffffff', hex);
+      this.drawBoard(view, `${st.name}'s Base`, '#ffffff');
     }
     view.flag.material.color.setHex(color);
     view.pads.forEach((p, i) => this.padStyle(view, p, i < st.slots, color));
@@ -187,7 +232,7 @@ export class BasesView {
           const sp = SPECIES_BY_ID[m.species];
           p.label = makeLabel(m.away ? `${sp.name}\n⚠ BEING STOLEN!` : `${sp.name} Lv ${m.level}\n$${m.income}/s`, { scale: 0.013, colors: ['#ffffff', m.away ? '#ff6a7a' : '#7ef06a'] });
           const s = view.base.slots[p.slot];
-          p.label.position.set(s.x, view.base.y + 4.6, s.z);
+          p.label.position.set(s.x, view.base.y + s.y + 4.4, s.z);
           p.label.visible = false;
           p.alert = !!m.away;
           view.group.add(p.label);
@@ -219,9 +264,9 @@ export class BasesView {
       new THREE.CylinderGeometry(1.1, 2.0, 90, 16, 1, true),
       new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
     );
-    beam.position.set(p.x, b.y + 45, p.z);
+    beam.position.set(p.x, b.y + TOWER_TOP + 1.6 + 45, p.z);
     const label = makeLabel('🏠 YOUR BASE', { scale: 0.032, bg: '#3fbf5a', color: '#ffffff', border: '#ffffff' });
-    label.position.set(b.x, b.y + 20, b.z);
+    label.position.set(b.x, b.y + TOWER_TOP + 10, b.z);
     g.add(beam, label);
     this.scene.add(g);
     this.mine = { group: g, beam, label };
@@ -246,7 +291,7 @@ export class BasesView {
   }
 
   padStyle(view, p, unlocked, color) {
-    TMP_COLOR.setHex(unlocked ? 0xf3f1ea : 0x8a8f9a);
+    TMP_COLOR.setHex(unlocked ? 0x63e070 : 0x5d6068); // green pads, grey while locked
     view.padMesh.setColorAt(p.slot, TMP_COLOR);
     TMP_COLOR.setHex(unlocked && color ? color : 0x6a6f7a);
     view.ringMesh.setColorAt(p.slot, TMP_COLOR);
@@ -285,7 +330,7 @@ export class BasesView {
     const s = Math.min(sp.size, 3.3 / rig.height);
     rig.root.scale.setScalar(s);
     const slot = view.base.slots[m.slot];
-    rig.root.position.set(slot.x, view.base.y + 0.5, slot.z);
+    rig.root.position.set(slot.x, view.base.y + slot.y + 0.5, slot.z);
     rig.root.rotation.y = view.base.yaw;
     rig.baseYaw = view.base.yaw;
     rig.st = { pose: 'celebrate', poseT: 0 };
@@ -382,7 +427,8 @@ export class BasesView {
       for (const p of view.pads) {
         if (!p.label) continue;
         const s = view.base.slots[p.slot];
-        p.label.visible = view.near && (p.alert || (!!me && Math.hypot(me.x - s.x, me.z - s.z) < PAD_LABEL_DIST));
+        const sameFloor = !!me && Math.abs((me.y ?? view.base.y) - (view.base.y + s.y)) < 3;
+        p.label.visible = view.near && (p.alert || (sameFloor && Math.hypot(me.x - s.x, me.z - s.z) < PAD_LABEL_DIST));
       }
       view.coin.rotation.z = t * 2;
       view.coin.position.y = view.base.y + 2.2 + Math.sin(t * 2) * 0.2;
@@ -454,6 +500,7 @@ export class BasesView {
       if (!view.state || view.base.index === exceptIndex) continue;
       for (const [id, m] of view.monsters) {
         const s = view.base.slots[m.slot];
+        if (Math.abs(pos.y - (view.base.y + s.y)) > 3) continue; // another floor
         const d = Math.hypot(pos.x - s.x, pos.z - s.z);
         if (d < bd) {
           bd = d;

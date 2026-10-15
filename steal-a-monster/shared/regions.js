@@ -30,7 +30,6 @@ export const REGIONS = [
     colors: { low: 0x6cc24a, high: 0x8fd65a, cliff: 0x9a7b4f, path: 0xd8b878, accent: 0xffe27a },
     fog: { color: 0xbfe6ff, near: 120, far: 330 },
     props: [['tree_round', 60], ['bush', 70], ['flowers', 140], ['rock', 30], ['fence', 0]],
-    maxMonsters: 16,
     music: 'meadow',
   },
   {
@@ -45,7 +44,6 @@ export const REGIONS = [
     colors: { low: 0x2f8f3a, high: 0x46a842, cliff: 0x6b5233, path: 0x9b7a4a, accent: 0xff7ab8 },
     fog: { color: 0x9fd8a8, near: 60, far: 220 },
     props: [['jungle_tree', 120], ['bush', 160], ['fern', 200], ['rock', 40], ['flowers', 60]],
-    maxMonsters: 14,
     music: 'jungle',
   },
   {
@@ -60,7 +58,6 @@ export const REGIONS = [
     colors: { low: 0xf0cf7c, high: 0xf7dd96, cliff: 0xc98f4e, path: 0xd8a860, accent: 0xff9d3a },
     fog: { color: 0xffe6b0, near: 110, far: 320 },
     props: [['cactus', 90], ['desert_rock', 60], ['ruin_pillar', 18], ['bones', 20]],
-    maxMonsters: 14,
     music: 'desert',
   },
   {
@@ -75,7 +72,6 @@ export const REGIONS = [
     colors: { low: 0xe8f4ff, high: 0xffffff, cliff: 0x9fb4c8, path: 0xc9dced, accent: 0x7fd8ff },
     fog: { color: 0xdcefff, near: 80, far: 260 },
     props: [['pine_snow', 110], ['ice_spike', 45], ['snow_rock', 40]],
-    maxMonsters: 14,
     music: 'frost',
   },
   {
@@ -90,7 +86,6 @@ export const REGIONS = [
     colors: { low: 0xf3e2a6, high: 0x8ed46b, cliff: 0xd9c38a, path: 0xf3e2a6, accent: 0x4fd6ff },
     fog: { color: 0xb5ecff, near: 110, far: 330 },
     props: [['palm', 70], ['coral', 90], ['shell_rock', 30]],
-    maxMonsters: 14,
     music: 'ocean',
   },
   {
@@ -105,7 +100,6 @@ export const REGIONS = [
     colors: { low: 0x3a3358, high: 0x4d4475, cliff: 0x2b2440, path: 0x5b4d7a, accent: 0x9dff6a },
     fog: { color: 0x2c2645, near: 30, far: 170 },
     props: [['dark_tree', 120], ['glow_mushroom', 110], ['rock', 30]],
-    maxMonsters: 14,
     music: 'shadow',
   },
   {
@@ -120,7 +114,6 @@ export const REGIONS = [
     colors: { low: 0xa9a06f, high: 0xc2b98a, cliff: 0x8a8070, path: 0xd8cfae, accent: 0x5fe3c0 },
     fog: { color: 0xe6e0c8, near: 90, far: 280 },
     props: [['ruin_pillar', 70], ['ruin_wall', 50], ['bush', 50], ['rock', 30]],
-    maxMonsters: 14,
     music: 'ruins',
   },
   {
@@ -135,7 +128,6 @@ export const REGIONS = [
     colors: { low: 0x8d7bc4, high: 0xb7a6ef, cliff: 0x6a5a9a, path: 0xc7b8f2, accent: 0x7af7ff },
     fog: { color: 0xd7ccff, near: 80, far: 260 },
     props: [['crystal', 120], ['rock', 40]],
-    maxMonsters: 14,
     music: 'crystal',
   },
   {
@@ -150,7 +142,6 @@ export const REGIONS = [
     colors: { low: 0x3b3236, high: 0x564a4c, cliff: 0x2a2224, path: 0x6d5a52, accent: 0xff6a1f },
     fog: { color: 0x5a3a33, near: 50, far: 210 },
     props: [['lava_rock', 80], ['obsidian', 50], ['dead_tree', 30]],
-    maxMonsters: 14,
     music: 'volcano',
   },
   {
@@ -165,7 +156,6 @@ export const REGIONS = [
     colors: { low: 0xd8c25a, high: 0xf0de7a, cliff: 0x9b8a5a, path: 0xfff1b0, accent: 0xff7af0 },
     fog: { color: 0xffe9c4, near: 100, far: 300 },
     props: [['golden_tree', 90], ['crystal', 30], ['rock', 40], ['flowers', 80]],
-    maxMonsters: 16,
     music: 'legend',
   },
   // ---- expansion islands (open with server population) -------------------
@@ -182,7 +172,6 @@ export const REGIONS = [
     colors: { low: 0x79d98a, high: 0xa4ef8a, cliff: 0xc98fbf, path: 0xffd1ec, accent: 0xff8fd0 },
     fog: { color: 0xffe0f4, near: 100, far: 300 },
     props: [['blossom_tree', 70], ['flowers', 160], ['bush', 50]],
-    maxMonsters: 12,
     music: 'bloom',
   },
   {
@@ -198,7 +187,6 @@ export const REGIONS = [
     colors: { low: 0x2b3b7a, high: 0x4257a8, cliff: 0x1c2550, path: 0x8ea0ff, accent: 0xfff27a },
     fog: { color: 0x1d2350, near: 60, far: 240 },
     props: [['star_crystal', 80], ['crystal', 30], ['rock', 30]],
-    maxMonsters: 12,
     music: 'stars',
   },
 ];

@@ -51,9 +51,11 @@ export class MonsterManager {
     return this.game.rng;
   }
 
+  // Every open region can hold its 50 (plus a little room for hidden-spot and
+  // event monsters), so opening an expansion island raises the capacity.
   cap() {
     const c = CONFIG.monsters;
-    return Math.min(c.hardCap, c.baseCap + c.perPlayerCap * this.game.players.size);
+    return Math.min(c.hardCap, c.perRegion * this.game.expansion.active.size + 20);
   }
 
   // ------------------------------------------------------------ spawning
@@ -144,6 +146,15 @@ export class MonsterManager {
     return table[0] || null;
   }
 
+  // Regions with a player inside them.
+  occupiedRegions() {
+    const out = new Set();
+    for (const s of this.game.players.values()) {
+      if (!s.dead) out.add(regionIdAt(s.pos.x, s.pos.z));
+    }
+    return out;
+  }
+
   // Regions within reach of at least one player -> players near them.
   nearbyRegions() {
     const out = new Map();
@@ -175,33 +186,44 @@ export class MonsterManager {
     return true;
   }
 
+  // A region with a player in it fills up to CONFIG.monsters.perRegion (50),
+  // spread over the whole region; a region a player is only close to gets a
+  // smaller group near them, so walking across a border never feels empty.
+  // Regions nobody is near stay empty (see cleanup), which keeps the server
+  // and every client's work bounded by where players actually are.
   spawnTick(now) {
     const game = this.game;
     if (game.players.size === 0) return;
+    const C = CONFIG.monsters;
     const active = game.expansion.active;
     const counts = {};
-    for (const m of this.list.values()) counts[m.region] = (counts[m.region] || 0) + 1;
+    for (const m of this.list.values()) if (!m.spot && !m.event) counts[m.region] = (counts[m.region] || 0) + 1;
+    const occupied = this.occupiedRegions();
     const nearby = this.nearbyRegions();
-    const scale = Math.min(1.5, 0.75 + 0.08 * game.players.size) * game.expansion.spawnScale();
     for (const [regionId, near] of nearby) {
       if (!active.has(regionId)) continue;
-      if (this.list.size >= this.cap()) break;
-      const region = REGION_BY_ID[regionId];
-      const target = Math.round(region.maxMonsters * scale);
-      if ((counts[regionId] || 0) >= target) continue;
+      const inside = occupied.has(regionId);
+      const target = inside ? C.perRegion : C.neighbourRegion;
+      // fill quickly when a region is mostly empty, then top up slowly
+      let groups = (counts[regionId] || 0) < target * 0.6 ? 6 : 1;
       if (now < (this.regionSpawnAt[regionId] || 0)) continue;
       this.regionSpawnAt[regionId] = now + 700;
-      const sp = this.pickSpecies(regionId);
-      if (!sp) continue;
-      const anchor = near[Math.floor(this.rng() * near.length)];
-      const pt = this.findSpawnPoint(sp, regionId, anchor.pos, 34, 150);
-      if (!pt) continue;
-      const [g0, g1] = sp.spawn.group || [1, 1];
-      const n = Math.round(rand(this.rng, g0, g1));
-      for (let i = 0; i < n; i++) {
-        const q = i === 0 ? pt : randomGroundPoint(this.world, regionId, this.rng, { near: pt, minR: 2, maxR: 7, anyWater: true }) || pt;
-        this.spawn(sp, this.pickLevel(region), q.x, q.z, { region: regionId });
-        counts[regionId] = (counts[regionId] || 0) + 1;
+      const region = REGION_BY_ID[regionId];
+      while (groups-- > 0 && (counts[regionId] || 0) < target && this.list.size < this.cap()) {
+        const sp = this.pickSpecies(regionId);
+        if (!sp) break;
+        const anchor = near[Math.floor(this.rng() * near.length)];
+        // inside a region half of them go anywhere in it, half near a player
+        const anywhere = inside && this.rng() < 0.5;
+        const pt = this.findSpawnPoint(sp, regionId, anywhere ? null : anchor.pos, 34, C.spawnMaxPlayerDist);
+        if (!pt) continue;
+        const [g0, g1] = sp.spawn.group || [1, 1];
+        const n = Math.min(Math.round(rand(this.rng, g0, g1)), target - (counts[regionId] || 0));
+        for (let i = 0; i < n; i++) {
+          const q = i === 0 ? pt : randomGroundPoint(this.world, regionId, this.rng, { near: pt, minR: 2, maxR: 7, anyWater: true }) || pt;
+          this.spawn(sp, this.pickLevel(region), q.x, q.z, { region: regionId });
+          counts[regionId] = (counts[regionId] || 0) + 1;
+        }
       }
     }
     this.spotTick(now);
@@ -213,7 +235,7 @@ export class MonsterManager {
     const canSwim = sp.ai.swims || sp.ai.move === 'swim';
     const flies = FLYERS.has(sp.ai.move);
     for (let t = 0; t < 4; t++) {
-      const opts = { near, minR, maxR };
+      const opts = near ? { near, minR, maxR } : {};
       if (water) opts.water = true;
       else if (canSwim || flies) opts.anyWater = true;
       let pt = randomGroundPoint(this.world, regionId, this.rng, opts);
@@ -417,10 +439,12 @@ export class MonsterManager {
 
   cleanup(now) {
     const active = this.game.expansion.active;
+    const occupied = this.occupiedRegions();
     for (const m of [...this.list.values()]) {
       if (m.state === MS.defeated) continue;
-      let near = false;
-      for (const s of this.game.players.values()) {
+      // a monster stays while someone is on its island or close to it
+      let near = occupied.has(m.region);
+      if (!near) for (const s of this.game.players.values()) {
         const dx = s.pos.x - m.x;
         const dz = s.pos.z - m.z;
         if (dx * dx + dz * dz < CONFIG.monsters.activationRadius ** 2) {

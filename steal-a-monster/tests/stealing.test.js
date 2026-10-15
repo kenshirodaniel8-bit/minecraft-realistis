@@ -85,7 +85,8 @@ test('15. with lasers off a rival can steal: carry, deliver, ownership moves exa
   assert.ok(h.game.bases.state(a.s.baseIndex).monsters[0].away);
   // can't teleport home while carrying
   assert.equal(b.send('home', {}).error, 'carrying');
-  // carry it home on foot
+  // carry it home on foot, out through Alice's door and in through Bob's
+  for (const p of [baseA.spawn, baseA.outside, baseB.outside]) assert.equal(h.walk(b, p.x, p.z, 13).ok, true);
   const r = h.walk(b, baseB.spawn.x, baseB.spawn.z, 13);
   assert.notEqual(r.error, 'speed');
   assert.equal(b.s.carrying, null);

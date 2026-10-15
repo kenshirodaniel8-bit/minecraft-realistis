@@ -558,12 +558,21 @@ export class UI {
     const durations = CONFIG.security.lockDurationsSec;
     const lockLeft = base && base.lockedUntil ? Math.max(0, Math.ceil((base.lockedUntil - s.serverNow) / 1000)) : 0;
     const perks = Object.entries(p.perks || {}).filter(([, v]) => v > 0).map(([k, v]) => `<span>${esc(PERKS[k].name)}: ${esc(PERKS[k].text(v))}</span>`).join('');
-    const pads = Array.from({ length: CONFIG.bases.maxSlots }, (_, i) => {
+    const padCard = (i) => {
       const m = p.monsters.find((x) => x.slot === i);
       if (i >= p.base.slots) return '<div class="card locked"><div class="icon" style="background:#ddd">🔒</div><h4>Locked pad</h4><div class="sub">Upgrade to unlock</div></div>';
       if (!m) return `<div class="card"><div class="icon" style="background:#f1e9ff">➕</div><h4>Pad ${i + 1}</h4><div class="sub">Empty</div></div>`;
       const sp = SPECIES_BY_ID[m.species];
       return `<div class="card" data-act="inspectOwned" data-id="${esc(m.id)}"><div class="icon" style="${rarityStyle(sp)}"><img alt="" src="${this.app.preview.icon(sp.id)}"></div><h4>${esc(sp.name)}</h4><div class="sub">Pad ${i + 1} · $${incomePerSecond(sp, m.level)}/s</div></div>`;
+    };
+    // one grid per floor (10 pads each)
+    const B = CONFIG.bases;
+    const pads = Array.from({ length: Math.ceil(B.maxSlots / B.padsPerFloor) }, (_, f) => {
+      const first = f * B.padsPerFloor;
+      const ids = Array.from({ length: Math.min(B.padsPerFloor, B.maxSlots - first) }, (_, k) => first + k);
+      const used = ids.filter((i) => p.monsters.some((m) => m.slot === i)).length;
+      const open = ids.filter((i) => i < p.base.slots).length;
+      return `<h4 class="floor-title">Floor ${f + 1} <small>${open ? `${used}/${open} pads` : '🔒 upgrade to unlock'}</small></h4><div class="grid">${ids.map(padCard).join('')}</div>`;
     }).join('');
     return `
       <div class="kv"><b>Income</b><span>$${p.income}/s (collect it on the gold $ pad)</span>
@@ -576,7 +585,7 @@ export class UI {
         ${slotsUp ? `<button class="btn sm go" data-act="upgrade" data-kind="slots" ${!atBase || p.money < slotsUp.price || (p.gems || 0) < (slotsUp.gems || 0) || p.level < slotsUp.level ? 'disabled' : ''}>$${fmt(slotsUp.price)}${slotsUp.gems ? ` + ${slotsUp.gems}💎` : ''}</button>` : ''}</div>
       <div class="row-item"><div class="icon" style="background:#ffe0e3">🔒</div><div class="info"><h4>Stronger lasers</h4><p>${laserPrice ? `Lasers last ${durations[laserLvl]}s → ${durations[laserLvl + 1]}s` : 'Fully upgraded!'}</p></div>
         ${laserPrice ? `<button class="btn sm go" data-act="upgrade" data-kind="laser" ${!atBase || p.money < laserPrice || (p.gems || 0) < laserGems ? 'disabled' : ''}>$${fmt(laserPrice)}${laserGems ? ` + ${laserGems}💎` : ''}</button>` : ''}</div>
-      <h3>Pads</h3><div class="grid">${pads}</div>
+      <h3>Pads</h3><p class="muted small">Every floor holds 10 monsters. Use the stairs inside your base to go up.</p>${pads}
       ${this.decorHtml(s)}`;
   }
 

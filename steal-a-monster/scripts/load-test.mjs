@@ -38,26 +38,34 @@ function connect() {
 }
 
 const bots = [];
+const reasons = {};
 for (let i = 0; i < N; i++) {
   const s = await connect();
   const w = await s.timeout(5000).emitWithAck('hello', { protocol: PROTOCOL_VERSION, token: `load-test-token-${i}-xxxxxxxx`, name: `Bot${i + 1}` });
   if (!w.ok) throw new Error(`join failed: ${w.error}`);
   const base = world.bases[w.baseIndex];
-  const bot = { s, pos: { ...w.pos }, tp: w.teleportSeq, yaw: 0, base, bytes: 0, corrections: 0, route: [base.spawn, base.outside], leg: 0 };
+  // out through the tower door, then round the tower through the gap between
+  // two bases (towers are solid: walking through one is refused)
+  const gap = base.angle + (i % 2 ? 1 : -1) * (Math.PI / 12);
+  const route = [base.spawn, base.outside, { x: Math.cos(gap) * 76, z: Math.sin(gap) * 76 }, { x: Math.cos(gap) * 128, z: Math.sin(gap) * 128 }];
+  const bot = { s, pos: { ...w.pos }, tp: w.teleportSeq, yaw: 0, base, bytes: 0, corrections: 0, route, leg: 0 };
   s.onAny((e, d) => { bot.bytes += e.length + JSON.stringify(d ?? null).length; });
   s.on('teleport', (d) => {
     bot.pos = { x: d.x, y: d.y, z: d.z };
     bot.tp = d.seq;
     bot.corrections++;
+    reasons[d.reason] = (reasons[d.reason] || 0) + 1;
   });
   bots.push(bot);
 }
 console.log(`${N} players joined; running ${SECONDS}s`);
 
 // after leaving the base, wander between random points on the plains ring
+// behind the towers (close enough together that no straight line between
+// two of them cuts through a tower)
 function nextTarget(bot) {
-  const a = bot.base.angle + (Math.random() - 0.5) * 0.9;
-  const r = 112 + Math.random() * 30;
+  const a = bot.base.angle + (Math.random() - 0.5) * 0.6;
+  const r = 120 + Math.random() * 25;
   return { x: Math.cos(a) * r, z: Math.sin(a) * r };
 }
 
@@ -79,7 +87,13 @@ await new Promise((resolve) => {
         bot.pos.z += (dz / d) * step;
         bot.yaw = Math.atan2(dx, dz);
       }
-      bot.pos.y = world.groundHeight(bot.pos.x, bot.pos.z);
+      // slide around trees and walls like the real client does; if stuck on
+      // something, pick another place to go
+      const bx = bot.pos.x;
+      const bz = bot.pos.z;
+      world.colliders.resolve(bot.pos, CONFIG.player.radius, CONFIG.player.height);
+      if (Math.hypot(bot.pos.x - bx, bot.pos.z - bz) > step * 0.8 && bot.leg >= bot.route.length - 1) bot.route[bot.leg] = nextTarget(bot);
+      bot.pos.y = world.surfaceHeight(bot.pos.x, bot.pos.z, bot.pos.y);
       bot.s.emit('move', { x: bot.pos.x, y: bot.pos.y, z: bot.pos.z, yaw: bot.yaw, a: 1, tp: bot.tp });
       if (Math.random() < 0.08) bot.s.emit('attack', { yaw: bot.yaw });
     }
@@ -105,6 +119,7 @@ const result = {
   eventLoopLagMs: { p50: +(lag.percentile(50) / 1e6).toFixed(1), p99: +(lag.percentile(99) / 1e6).toFixed(1) },
   downKBps: { avg: +(kbps.reduce((a, b) => a + b, 0) / kbps.length).toFixed(1), max: +Math.max(...kbps).toFixed(1) },
   corrections: bots.reduce((a, b) => a + b.corrections, 0),
+  correctionReasons: reasons,
   rssMB: Math.round(process.memoryUsage().rss / 1048576),
 };
 console.log(JSON.stringify(result, null, 2));

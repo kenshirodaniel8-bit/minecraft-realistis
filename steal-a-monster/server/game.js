@@ -384,8 +384,14 @@ export class Game {
       }
     }
     if (!this.puzzles.mayMove(s, nx, nz)) return this.correct(s, 'sealed', 'The vault door is sealed.');
+    // walls: the client stays out of them on its own, so a move through one
+    // (for example into a base tower anywhere but its door) is refused
+    if (this.world.colliders.segmentBlocked(s.pos.x, s.pos.z, nx, nz, 0.3, p.y + 0.6, p.y + CONFIG.player.height - 0.6)) {
+      return this.correct(s, 'wall');
+    }
 
-    const ground = this.world.groundHeight(nx, nz);
+    // ground, or the base floor / stair tread under the player
+    const ground = this.world.surfaceHeight(nx, nz, p.y);
     let y = p.y;
     if (y < ground - 3 && y < WATER_Y - 3) y = Math.max(ground, WATER_Y - 2);
     if (y < ground - 3) y = ground;

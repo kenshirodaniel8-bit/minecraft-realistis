@@ -58,9 +58,11 @@ const DAY_KEYS = [
 ];
 
 export const QUALITY = {
-  low: { pixelRatio: 1, shadows: false, shadowSize: 0, viewDist: 230, antialias: false },
-  medium: { pixelRatio: 1.25, shadows: true, shadowSize: 1024, viewDist: 300, antialias: true },
-  high: { pixelRatio: 2, shadows: true, shadowSize: 2048, viewDist: 380, antialias: true },
+  // monsterDist: wild monsters farther away than this are not drawn (with 50
+  // on every island there can be dozens in view)
+  low: { pixelRatio: 1, shadows: false, shadowSize: 0, viewDist: 230, antialias: false, monsterDist: 80 },
+  medium: { pixelRatio: 1.25, shadows: true, shadowSize: 1024, viewDist: 300, antialias: true, monsterDist: 110 },
+  high: { pixelRatio: 2, shadows: true, shadowSize: 2048, viewDist: 380, antialias: true, monsterDist: 150 },
 };
 
 export class SceneView {

@@ -17,7 +17,7 @@ export const CONFIG = {
   startingMoney: 1000,     // granted once, only when a brand-new profile is created
   startingSword: 'wooden',
   startingItems: { knockback: 1, sticky_trap: 2 },
-  startingSlots: 4,
+  startingSlots: 15,       // monster pads in a new base (floor 1 full + 5 on floor 2)
 
   // --- player ------------------------------------------------------------
   player: {
@@ -67,9 +67,9 @@ export const CONFIG = {
 
   // --- monsters in the world ---------------------------------------------
   monsters: {
-    baseCap: 70,             // max wild monsters (scaled up by world expansion)
-    perPlayerCap: 12,
-    hardCap: 180,
+    perRegion: 50,           // wild monsters on every island/region while a player is there
+    neighbourRegion: 20,     // regions a player is close to, but not in, get this many (near them)
+    hardCap: 720,            // safety limit for the whole server (14 regions x 50 + extras)
     activationRadius: 190,   // regions with a player this close spawn and think
     spawnMinPlayerDist: 32,  // never pop in right next to someone
     spawnMaxPlayerDist: 165,
@@ -88,14 +88,15 @@ export const CONFIG = {
   bases: {
     ringRadius: 98,
     size: 26,                // square footprint (wall to wall)
-    wallHeight: 8,
+    floors: 5,               // a tower: every floor holds padsPerFloor monsters
+    floorHeight: 7,
+    padsPerFloor: 10,
     doorWidth: 10,
-    maxSlots: 12,
-    slotUpgrades: [         // price to go from (index*2 + startingSlots) to +2 slots
-      { slots: 6, price: 1500, level: 2 },
-      { slots: 8, price: 6000, level: 5 },
-      { slots: 10, price: 20000, level: 9, gems: 3 },
-      { slots: 12, price: 60000, level: 14, gems: 8 },
+    maxSlots: 45,
+    slotUpgrades: [         // each upgrade adds 10 pads (one more floor's worth)
+      { slots: 25, price: 6000, level: 4 },
+      { slots: 35, price: 30000, level: 9, gems: 3 },
+      { slots: 45, price: 90000, level: 14, gems: 8 },
     ],
     incomeAccumulateCap: 3600, // seconds of income a base can hold before collecting
     offlineIncomeRate: 0.5,

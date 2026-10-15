@@ -12,7 +12,7 @@ There was no real GPU, phone, Safari or Firefox available.
 ## 1. Automated tests — executed, all passing
 
 ```bash
-npm test          # 51 tests, ~3 s, also runs in CI (.github/workflows/ci.yml)
+npm test          # 56 tests, ~3 s, also runs in CI (.github/workflows/ci.yml)
 ```
 
 They run the real server code: the `Game` class with a controllable clock and an
@@ -22,11 +22,13 @@ Socket.IO server with real socket clients.
 | Suite | Tests | Covers |
 |---|---|---|
 | `profile.test.js` | 8 | 1,000 Money exactly once (new profile only); no re-grant on reconnect/refresh/respawn; token hashing; save survives a server restart; corrupt save → backup restore, both broken → login refused (no fresh bonus); save retries; schema migration (1 → 2) and repair of forged data; coming back after a minute pays a minute of offline income (timestamps survive a reload) |
-| `combat.test.js` | 6 | all 44 species build a distinct 3D model in Node; sword reach/facing/cooldown, server-side damage only; monsters attack, knock out, respawn at home; dodge immunity; defeat → recruitment offers only to real fighters; AI behaviour (shy flee, territorial, region bounds) |
+| `combat.test.js` | 6 | all 57 species build a distinct 3D model in Node; sword reach/facing/cooldown, server-side damage only; monsters attack, knock out, respawn at home; dodge immunity; defeat → recruitment offers only to real fighters; AI behaviour (shy flee, territorial, region bounds) |
 | `recruitment.test.js` | 9 | not enough Money → nothing changes; extra recruit conditions on rare monsters (sword tier, discoveries); exact price deducted once; no double recruit (retries, double clicks, two players racing); fighter priority + base capacity; decline; one pad per monster; passive income, collect, offline cap; disconnect with an open offer |
 | `stealing.test.js` | 11 | lasers block entry and theft; lasers switching on eject intruders and make a thief drop; steal → carry → deliver, ownership moves exactly once; duplicate/invalid steal requests; an aborted grab tells the owner it is safe; gadget hit releases the monster (both drop rules); dropped monsters fly home; disconnects during theft; H teleport rules (own base only, cooldown, not while carrying); gadget range/facing/cooldown/shields; shop prices, proximity, idempotency |
 | `world.test.js` | 8 | deterministic world, 12 flat bases, spots inside their regions; region unlocks refused by the server; expansion regions open/close with hysteresis; closed portals; Lucky Blocks open once, only up close, server-rolled rewards; LUCKY LUCKY lifecycle; forged messages can't create Money/ownership/teleports; hidden/night spawns and the ruins vault puzzle |
 | `gems.test.js` | 4 | Monster Gems drop by rarity (plus the Volcanic bonus) and can't be forged; Gem Geodes pay out once and only in gem regions; gem-priced swords and upgrades take Money and Gems together or nothing; decorations are bought only at your own base, placed/moved/cleared on valid spots, visible to other players, trophies only from milestones |
+| `tower.test.js` | 4 | base capacity 15 → 25 → 35 → 45 (10 pads per floor); the inside stairs connect every floor with steps a player can climb, and every pad has a floor under it; a player walks up the stairs with ordinary server-checked moves, and a thief standing under a floor-2 pad can't steal it; the server refuses moves through a tower wall (also at a faked upper-floor height), while the door works |
+| `population.test.js` | 1 | a region fills to 50 wild monsters while a player is on it, spread over the whole region (not only around the player); nearby regions get a smaller group; the region empties after the player leaves |
 | `multiplayer.test.js` | 5 | HTTP serves the game, shared modules, three.js and Socket.IO; two clients get different bases and see each other move; LUCKY LUCKY is identical for both; malformed/forged socket messages are rejected; every message the game handles is reachable over the socket |
 
 The README's "Testing" section maps the 24 required checks to these suites.
@@ -96,39 +98,49 @@ Not verified: the live github.io site itself (this workspace cannot reach it).
 ### Server load test — `npm run test:load`
 
 12 simulated players (real Socket.IO clients, the server's player cap) walk out
-of their bases, wander the plains and swing swords for 40 s while the server
-ticks are timed. On this 4-core container the 20 Hz tick used about 2.5 ms of
-its 50 ms budget at the 95th percentile, and each client received about
-19 KB/s (the event-loop lag figures are at the monitor's 10 ms resolution):
+of their tower bases through the door, round the towers into the plains and
+swing swords for 60 s while the server ticks are timed. The bots slide around
+trees and walls like the real client, and the server refused none of their
+moves (0 corrections). On this 4-core container the 20 Hz tick used about
+1.5 ms of its 50 ms budget at the 95th percentile, and each client received
+about 20 KB/s (the event-loop lag figures are at the monitor's 10 ms resolution):
 
 ```
 {
   "players": 12,
-  "seconds": 40,
-  "monsters": 141,
-  "ticks": 799,
-  "tickMs": {
-    "avg": 1.26,
-    "p50": 1.2,
-    "p95": 2.56,
-    "p99": 4.63,
-    "max": 7.35
-  },
+  "seconds": 60,
+  "monsters": 135,
+  "ticks": 1198,
+  "tickMs": { "avg": 0.77, "p50": 0.84, "p95": 1.53, "p99": 2.26, "max": 9.4 },
   "budgetMs": 50,
-  "eventLoopLagMs": {
-    "p50": 10.2,
-    "p99": 12.7
-  },
-  "downKBps": {
-    "avg": 18.6,
-    "max": 21.6
-  },
+  "eventLoopLagMs": { "p50": 10.2, "p99": 11.6 },
+  "downKBps": { "avg": 20.3, "max": 22.6 },
   "corrections": 0,
   "rssMB": 111
 }
 
-LOAD OK: p95 tick 2.56 ms of a 50 ms budget
+LOAD OK: p95 tick 1.53 ms of a 50 ms budget
 ```
+
+All 12 bots stay in the plains here (new players can't enter the other regions
+yet), so the plains has its 50 monsters and the regions next to it 20 each.
+
+### Worst-case monster population — `npm run bench:population`
+
+12 players, each on a different region/island, so 12 regions fill to 50
+monsters at once (605 wild monsters). The real `Game` runs in-process with a
+simulated clock; every tick (AI, attacks, snapshots for all 12 players) is
+timed after the regions have filled:
+
+```
+monsters: 605 (50 or 51 in each of the 12 regions; the extra one is a hidden-spot monster)
+tickMs:   avg 0.47, p50 0.51, p95 0.88, p99 1.39, max 4.78  (budget 50)
+download: about 26 KB/s per player (max 33.5)
+```
+
+The players in this benchmark walk slowly and don't fight, so it measures the
+cost of the population itself; a client only receives the monsters within
+135 m of it.
 
 ### Phone-sized touch check — `node scripts/mobile-check.mjs ./shots`
 
@@ -164,6 +176,13 @@ and clouds, distance-culled labels):
 | High (incl. shadow pass) | 470–630 | 230–320 K |
 
 Before the pass: 430–980 draw calls and 430–830 K triangles at Low.
+
+With **50 wild monsters on every island** the client receives 45–60 monsters
+at a time. Far-away monsters are not drawn (Low: beyond 80 m, Medium: 110 m,
+High: 150 m; one that is chasing you is always drawn). Measured in the
+single-player build after the islands filled up, in the plains meadow and the
+jungle: Low 160–260 draw calls, 170–205 K triangles; High 690–750 draw calls,
+330 K triangles. Without the distance limit Low was 470–540 draw calls.
 Press **F3** in the game to see these numbers live.
 
 Lucky Blocks, Gem Geodes and glowing swords used to carry their own point
@@ -178,7 +197,7 @@ frame during the event dropped from about 300 ms to about 11 ms.
 ## 3. Checked by hand in a browser (screenshots reviewed)
 
 - Title screen, name/color picker, joining, HUD, tutorial steps.
-- All 44 monsters in the gallery (`/gallery.html`): every one renders, looks
+- All 57 monsters in the gallery (`/gallery.html`): every one renders, looks
   distinct, has eyes/face in the right place, and plays idle/quirk animations.
 - World: plaza, shops, bases, every region's look, water, lava, fog per region,
   day/night, LUCKY LUCKY sky and banner, region barriers and portals.
@@ -198,6 +217,11 @@ frame during the event dropped from about 300 ms to about 11 ms.
   card showing its sword condition with the Recruit button disabled.
 - Decorations bought through the real client actions, rendered on the wall
   spots of the base, and the Base panel's decoration list.
+- Tower bases (scripted in the single-player build): walked up the inside
+  stairs to floor 2 and floor 3 with the normal controls, the in-page server
+  agreed on the height, monsters on floor-2 pads; screenshots from inside each
+  floor and from outside (dark block walls, white window frames, name board,
+  laser door).
 
 ---
 

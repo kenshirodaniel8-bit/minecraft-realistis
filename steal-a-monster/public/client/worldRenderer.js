@@ -17,9 +17,12 @@ const DETAIL_PROPS = new Set(['flowers', 'fern', 'bush', 'bones', 'coral', 'fenc
 // ------------------------------------------------------------------ materials
 
 const STRUCT_MATS = {
-  base_wall: { color: 0xf3f1ea },
-  base_trim: { color: 0x9aa4b8 },
-  base_floor: { color: 0xdedad0 },
+  // the base towers: studded blocks like the toy bricks in the reference
+  base_wall: { color: 0x4a4c55, studs: true },
+  base_trim: { color: 0xd7dae2, studs: true },
+  base_floor: { color: 0x8a8d96, studs: true },
+  stairs: { color: 0x9a9da6, studs: true },
+  stairs_dark: { color: 0x82858e, studs: true },
   cave_rock: { color: 0x7d6e60 },
   ice_rock: { color: 0xc6e6fa },
   crystal_rock: { color: 0x8b7cd8, emissive: 0x2a1a5a },
@@ -370,17 +373,29 @@ export class WorldRenderer {
     const groups = new Map();
     const door = [];
     for (const b of this.world.boxes) {
+      if (b.invisible) continue; // collision-only (e.g. the glass in base windows)
       const geo = g(BOX, b.x, b.y, b.z, b.hw * 2, b.hh * 2, b.hd * 2, 0, -b.rot, 0);
       if (b.door) {
         door.push(geo);
         continue;
       }
-      if (!groups.has(b.mat)) groups.set(b.mat, []);
-      groups.get(b.mat).push(geo);
+      // one mesh per material per base, so whole towers can be culled
+      const key = `${b.mat}|${b.base ?? ''}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(geo);
     }
-    for (const [name, list] of groups) {
+    for (const [key, list] of groups) {
+      const name = key.split('|')[0];
       const def = STRUCT_MATS[name] || { color: 0xcccccc };
-      const mesh = new THREE.Mesh(merge(list), lambert(def.color, { flat: true, emissive: def.emissive }));
+      const geo = merge(list);
+      let material;
+      if (def.studs) {
+        boxUV(geo, 1.25);
+        material = studMaterial(def.color);
+      } else {
+        material = lambert(def.color, { flat: true, emissive: def.emissive });
+      }
+      const mesh = new THREE.Mesh(geo, material);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.root.add(mesh);
@@ -642,6 +657,64 @@ export class WorldRenderer {
     for (const fn of this.animated) fn(t);
     if (this.lavaMat) this.lavaMat.emissiveIntensity = 1.2 + Math.sin(t * 2) * 0.3;
   }
+}
+
+// Studded toy-brick texture (grey, tinted by the material colour).
+let studTex = null;
+const studMats = new Map();
+function studMaterial(color) {
+  if (!studTex) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#d4d4d4';
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = '#b8b8b8'; // seams between bricks
+    ctx.fillRect(0, 62, 64, 2);
+    ctx.fillRect(62, 0, 2, 64);
+    const g = ctx.createRadialGradient(28, 28, 2, 32, 32, 17);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.7, '#e2e2e2');
+    g.addColorStop(1, '#9a9a9a');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(32, 32, 16, 0, Math.PI * 2);
+    ctx.fill();
+    studTex = new THREE.CanvasTexture(c);
+    studTex.wrapS = studTex.wrapT = THREE.RepeatWrapping;
+    studTex.colorSpace = THREE.SRGBColorSpace;
+    studTex.anisotropy = 4;
+  }
+  if (!studMats.has(color)) studMats.set(color, new THREE.MeshLambertMaterial({ color, map: studTex }));
+  return studMats.get(color);
+}
+
+// Box-projected UVs from world positions, so the stud pattern has the same
+// size on every wall, floor and step however the boxes are scaled.
+function boxUV(geo, size) {
+  const pos = geo.attributes.position;
+  const nor = geo.attributes.normal;
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const ax = Math.abs(nor.getX(i));
+    const ay = Math.abs(nor.getY(i));
+    const az = Math.abs(nor.getZ(i));
+    let a;
+    let b;
+    if (ay >= ax && ay >= az) {
+      a = pos.getX(i);
+      b = pos.getZ(i);
+    } else if (ax >= az) {
+      a = pos.getZ(i);
+      b = pos.getY(i);
+    } else {
+      a = pos.getX(i);
+      b = pos.getY(i);
+    }
+    uv[i * 2] = a / size;
+    uv[i * 2 + 1] = b / size;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
 function regionOf(p) {

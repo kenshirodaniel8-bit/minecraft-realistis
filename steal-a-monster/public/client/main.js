@@ -118,7 +118,10 @@ class App {
     if (k === 'sensitivity') this.input.sensitivity = v;
     if (k === 'invertY' && this.cam) this.cam.invertY = v;
     if (k === 'touch') this.applyTouch();
-    if (k === 'quality' && this.sceneView) this.sceneView.setQuality(v);
+    if (k === 'quality' && this.sceneView) {
+      this.sceneView.setQuality(v);
+      if (this.monsters) this.monsters.setQuality(this.sceneView.quality);
+    }
   }
 
   // ---------------------------------------------------------------- title
@@ -226,6 +229,7 @@ class App {
     this.worldView.build();
     this.effects = new Effects(scene, this.sceneView.camera);
     this.monsters = new MonstersView(scene, this.world, this.effects, this.audio);
+    this.monsters.setQuality(this.sceneView.quality);
     this.basesView = new BasesView(scene, this.world, this.effects, this.audio);
     this.items = new WorldItems(scene, this.world, this.effects, this.audio);
     this.preview = new MonsterPreview();
@@ -612,6 +616,18 @@ class App {
 
   flashScreen() {
     document.body.animate([{ boxShadow: 'inset 0 0 0 0 rgba(255,0,40,0)' }, { boxShadow: 'inset 0 0 120px 20px rgba(255,0,40,.55)' }, { boxShadow: 'inset 0 0 0 0 rgba(255,0,40,0)' }], { duration: 350 });
+  }
+
+  // Which base tower (and floor) the player is inside, for the camera.
+  indoorView() {
+    const p = this.player.pos;
+    const B = CONFIG.bases;
+    for (const b of this.world.bases) {
+      if (!isInsideBase(b, p.x, p.z, 0.4)) continue;
+      const f = Math.max(0, Math.min(B.floors - 1, Math.floor((p.y - b.y + 0.5) / B.floorHeight)));
+      return { base: b, floorY: b.y + f * B.floorHeight, floorHeight: B.floorHeight };
+    }
+    return null;
   }
 
   // On-screen 🏠 pointer to your base with the distance (hidden when close).
@@ -1092,7 +1108,7 @@ class App {
     for (const pl of everyone) pl.update(dt, this.t, renderT, this.effects, everyone.filter((o) => o !== pl).map((o) => o.pos));
     const camPos = this.sceneView.camera.position;
     this.monsters.update(dt, renderT, this.t, camPos, this.player.pos);
-    const near = [{ x: this.player.pos.x, z: this.player.pos.z }, ...[...this.players.values()].map((pl) => pl.pos)];
+    const near = [{ x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z }, ...[...this.players.values()].map((pl) => pl.pos)];
     this.basesView.update(dt, this.t, near, camPos);
     this.items.update(dt, this.t);
     this.effects.update(dt, serverNow);
@@ -1114,7 +1130,7 @@ class App {
         this.cam.yaw += d * Math.min(1, dt * 1.3);
       }
     }
-    this.cam.update(dt, this.player.pos, look, zoom);
+    this.cam.update(dt, this.player.pos, look, zoom, this.indoorView());
     this.updateBaseMarker(panelOpen);
     const lucky = this.events?.some((e) => e.phase === 'active');
     this.sceneView.update(dt, this.t, this.dayT(), this.player.pos, this.region, lucky);

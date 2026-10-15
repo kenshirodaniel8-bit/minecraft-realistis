@@ -124,7 +124,8 @@ test('12. a recruited monster can be placed on a free pad — never two pads, ne
   assert.equal(o1.slot, s2);
   assert.equal(o2.slot, s1);
   // locked pads and nonsense slots are refused
-  assert.equal(a.send('place', { ownedId: o1.id, slot: 11 }).error, 'locked_slot');
+  assert.equal(a.send('place', { ownedId: o1.id, slot: CONFIG.startingSlots }).error, 'locked_slot');
+  assert.equal(a.send('place', { ownedId: o1.id, slot: CONFIG.bases.maxSlots }).ok, false);
   assert.equal(a.send('place', { ownedId: o1.id, slot: -1 }).ok, false);
   assert.equal(a.send('place', { ownedId: 'not-mine', slot: 0 }).error, 'not_owned');
   const slots = a.profile.monsters.map((m) => m.slot);

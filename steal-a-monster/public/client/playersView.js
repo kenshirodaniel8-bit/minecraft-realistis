@@ -200,7 +200,7 @@ export class PlayerAvatar {
     if ((fx & FX.speed) && effects && Math.random() < dt * 30) effects.spawn(this.pos.x, this.pos.y + 0.5, this.pos.z, { color: [0xffd23a, 0xffffff], speed: 0.5, vy: 0.5, grav: 0, life: 0.4 });
     if ((fx & FX.burning) && effects && Math.random() < dt * 20) effects.aura('ember', this.pos.x, this.pos.y + 2, this.pos.z);
     if ((fx & FX.stunned) && effects && Math.random() < dt * 10) effects.spawn(this.pos.x, this.pos.y + 5.2, this.pos.z, { color: 0xffe14a, speed: 2, vy: 0.3, grav: 0, life: 0.5 });
-    const gy = Math.max(this.world.groundHeight(this.pos.x, this.pos.z), 0);
+    const gy = Math.max(this.world.surfaceHeight(this.pos.x, this.pos.z, this.pos.y + 0.5), 0);
     this.shadow.position.set(this.pos.x, gy + 0.05, this.pos.z);
     // remote health bar
     if (!this.isLocal) {
@@ -249,7 +249,7 @@ export class PlayerAvatar {
         f.yaw += (this.yaw - f.yaw) * Math.min(1, dt * 2);
       }
       const fly = ['fly', 'flutter', 'serpent', 'float'].includes(f.species.ai.move);
-      const g = this.world.groundHeight(f.pos.x, f.pos.z);
+      const g = this.world.surfaceHeight(f.pos.x, f.pos.z, f.pos.y + 0.5);
       f.pos.y = Math.max(g, fly ? 0 : g) + (fly ? 1.5 : 0);
       f.root.position.copy(f.pos);
       f.root.rotation.y = f.yaw;

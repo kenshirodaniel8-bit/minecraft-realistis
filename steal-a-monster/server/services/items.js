@@ -100,7 +100,7 @@ export class ItemSystem {
     if (mine.length >= item.maxActive) this.removeGround(mine[0]);
     const g = {
       id: this.nextGround++, item: item.id, owner: s.id, ownerPn: s.pn,
-      x: s.pos.x, y: game.world.groundHeight(s.pos.x, s.pos.z), z: s.pos.z,
+      x: s.pos.x, y: game.world.surfaceHeight(s.pos.x, s.pos.z, s.pos.y), z: s.pos.z,
       until: now + item.durationMs, r: item.triggerRadius, hitAt: new Map(),
     };
     this.ground.set(g.id, g);

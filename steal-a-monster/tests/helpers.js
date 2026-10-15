@@ -94,7 +94,7 @@ export async function makeGame(opts = {}) {
         h.advance(stepMs, stepMs);
         const nx = s.pos.x + (dx / d) * step;
         const nz = s.pos.z + (dz / d) * step;
-        const r = game.handle(client.sid, 'move', { x: nx, y: game.world.groundHeight(nx, nz), z: nz, yaw: Math.atan2(dx, dz), a: 1, tp: s.teleportSeq });
+        const r = game.handle(client.sid, 'move', { x: nx, y: game.world.surfaceHeight(nx, nz, s.pos.y), z: nz, yaw: Math.atan2(dx, dz), a: 1, tp: s.teleportSeq });
         if (r && r.ok === false) return r;
       }
       return { ok: false, error: 'guard' };

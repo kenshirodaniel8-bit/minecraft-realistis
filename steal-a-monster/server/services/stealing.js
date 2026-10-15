@@ -52,8 +52,7 @@ export class Stealing {
     if (this.isAway(m.id)) return fail('busy', 'Someone else is already stealing it.');
     if (game.security.isLocked(owner.baseIndex)) return fail('lasers', 'The security lasers are on!');
     if (CONFIG.stealing.victimProtectionMs && now - owner.joinedAt < CONFIG.stealing.victimProtectionMs) return fail('protected', 'That player just arrived.');
-    const slot = game.world.bases[owner.baseIndex].slots[m.slot];
-    if (Math.hypot(s.pos.x - slot.x, s.pos.z - slot.z) > CONFIG.stealing.maxDistance) return fail('too_far', 'Get closer.');
+    if (this.padDistance(s, owner.baseIndex, m.slot) > CONFIG.stealing.maxDistance) return fail('too_far', 'Get closer.');
     if (s.profile.monsters.length >= s.profile.base.slots) return fail('base_full', 'Your base is full — no room for a stolen monster!');
     for (const o of game.players.values()) {
       if (o !== s && o.stealPending && o.stealPending.ownedId === m.id) return fail('busy', 'Someone else is grabbing it.');
@@ -62,6 +61,14 @@ export class Stealing {
     const sp = SPECIES_BY_ID[m.species];
     game.send(owner, 'theft', { stage: 'grab', thief: s.profile.name, species: m.species, name: sp.name });
     return { ok: true, holdMs: CONFIG.stealing.holdMs };
+  }
+
+  // Distance from a player to a pad; a pad on another floor is out of reach.
+  padDistance(s, baseIndex, slotIndex) {
+    const b = this.game.world.bases[baseIndex];
+    const slot = b.slots[slotIndex];
+    if (Math.abs(s.pos.y - (b.y + slot.y)) > 3) return Infinity;
+    return Math.hypot(s.pos.x - slot.x, s.pos.z - slot.z);
   }
 
   handleConfirm(s, p) {
@@ -83,8 +90,7 @@ export class Stealing {
     const { owner, m } = found;
     if (this.isAway(m.id)) return abort('busy');
     if (game.security.isLocked(owner.baseIndex)) return abort('lasers', 'The security lasers switched on!');
-    const slot = game.world.bases[owner.baseIndex].slots[m.slot];
-    if (Math.hypot(s.pos.x - slot.x, s.pos.z - slot.z) > CONFIG.stealing.maxDistance + 1) return abort('too_far');
+    if (this.padDistance(s, owner.baseIndex, m.slot) > CONFIG.stealing.maxDistance + 1) return abort('too_far');
     if (s.profile.monsters.length >= s.profile.base.slots) return abort('base_full');
     s.stealPending = null;
     s.carrying = { ownedId: m.id, victimId: owner.id, baseIndex: owner.baseIndex, species: m.species, level: m.level, since: now };
@@ -170,7 +176,7 @@ export class Stealing {
       const now = game.now();
       const d = {
         ownedId: c.ownedId, victimId: c.victimId, baseIndex: c.baseIndex, species: c.species, level: c.level,
-        x: s.pos.x, y: game.world.groundHeight(s.pos.x, s.pos.z), z: s.pos.z,
+        x: s.pos.x, y: game.world.surfaceHeight(s.pos.x, s.pos.z, s.pos.y), z: s.pos.z,
         until: now + CONFIG.stealing.dropRecoverMs, regrabAt: now + CONFIG.stealing.regrabCooldownMs, by: s.id,
       };
       this.dropped.set(c.ownedId, d);

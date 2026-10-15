@@ -141,7 +141,8 @@ try {
 
   console.log('Alice walks out and fights');
   const b = srv.game.world.bases[A.base];
-  await walkTo(alice, b.outside.x, b.outside.z, 2, 20000);
+  const wOut = await walkTo(alice, b.outside.x, b.outside.z, 2, 20000);
+  if (process.env.E2E_DEBUG) console.log('   debug: left base, distance left', wOut.toFixed(1));
   // out between two bases into the meadow
   const gap = b.angle + Math.PI / 12;
   await walkTo(alice, Math.cos(gap) * 74, Math.sin(gap) * 74, 3, 20000);
@@ -159,7 +160,9 @@ try {
   });
   check(target !== null, 'a Chompkin is visible on the client');
   await shot(alice, '02-alice-sees-monster');
+  if (process.env.E2E_DEBUG) console.log('   debug: before fight', JSON.stringify((await state(alice)).pos), await alice.evaluate((id) => { const m = window.__app.monsters.get(id); return m && JSON.stringify({ x: m.pos.x, z: m.pos.z, s: m.state }); }, target));
   const result = await fight(alice, target);
+  if (process.env.E2E_DEBUG) console.log('   debug: after fight', JSON.stringify((await state(alice)).pos), await alice.evaluate((id) => { const m = window.__app.monsters.get(id); return m && JSON.stringify({ x: m.pos.x, z: m.pos.z, s: m.state, gone: m.gone }); }, target));
   check(result === 7, `Alice defeated it with her sword (state ${result})`);
   await alice.waitForTimeout(1000);
   A = await state(alice);

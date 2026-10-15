@@ -87,6 +87,8 @@ kbd { display: inline-block; min-width: 22px; padding: 1px 6px; border: 2px soli
 .pc-stats { font: 700 13px var(--font); color: var(--ink-2); }
 .gems { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; font: 900 16px var(--font); color: #b03ad8; -webkit-text-stroke: 0; background: #f6e6ff; border: 2px solid #c88af0; border-radius: 10px; padding: 1px 7px; }
 .gem-price { color: #b03ad8; font-weight: 900; }
+.floor-title { margin: 12px 0 6px; font: 900 15px var(--font); color: var(--ink); }
+.floor-title small { font: 700 12px var(--font); color: var(--ink-2); margin-left: 6px; }
 .decor-spots { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px 10px; margin: 6px 0 12px; }
 .decor-spot { display: flex; flex-direction: column; font: 800 12px var(--font); color: var(--ink-2); }
 .decor-spot select { font: 700 14px var(--font); padding: 5px 6px; border: 3px solid var(--ink); border-radius: 10px; background: #fff; color: var(--ink); }

@@ -26,7 +26,9 @@ export class ThirdPersonCamera {
     this.shake = Math.min(1.5, this.shake + amount);
   }
 
-  update(dt, focus, look, zoom) {
+  // indoor: { base, floorY } while the player is inside a base tower: the
+  // camera then stays inside the walls and under the ceiling of that floor.
+  update(dt, focus, look, zoom, indoor = null) {
     this.yaw -= look.x * 0.0042;
     this.pitch += (this.invertY ? -1 : 1) * look.y * 0.0036;
     this.pitch = Math.max(-0.35, Math.min(1.35, this.pitch));
@@ -54,6 +56,7 @@ export class ThirdPersonCamera {
     }
     const g = Math.max(this.world.groundHeight(pos.x, pos.z), WATER_Y - 0.5) + 1.2;
     if (pos.y < g) pos.y = g;
+    if (indoor) this.keepInside(pos, indoor);
     if (this.shake > 0) {
       pos.x += (Math.random() - 0.5) * this.shake * 0.5;
       pos.y += (Math.random() - 0.5) * this.shake * 0.5;
@@ -61,5 +64,18 @@ export class ThirdPersonCamera {
     }
     this.camera.position.copy(pos);
     this.camera.lookAt(this.smoothed);
+  }
+
+  keepInside(pos, { base, floorY, floorHeight }) {
+    const lim = base.half - 1.4;
+    const dx = pos.x - base.x;
+    const dz = pos.z - base.z;
+    let u = dx * base.tu.x + dz * base.tu.z;
+    let v = dx * base.tv.x + dz * base.tv.z;
+    u = Math.max(-lim, Math.min(lim, u));
+    v = Math.max(-lim, Math.min(lim, v));
+    pos.x = base.x + base.tu.x * u + base.tv.x * v;
+    pos.z = base.z + base.tu.z * u + base.tv.z * v;
+    pos.y = Math.max(floorY + 1.2, Math.min(floorY + floorHeight - 0.9, pos.y));
   }
 }

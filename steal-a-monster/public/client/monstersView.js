@@ -8,6 +8,7 @@ import { buildMonster, setRigMaterial, setRigDetail, FLASH_MAT } from './monster
 import { animateMonster } from './animationSystem.js';
 import { InterpBuffer } from './net.js';
 import { makeLabel, disposeLabel } from './labels.js';
+import { QUALITY } from './scene.js';
 
 const POSES = ['idle', 'move', 'move', 'windup', 'strike', 'flee', 'stunned', 'defeated', 'sleep', 'recover', 'move', 'quirk'];
 export const MSTATE = { idle: 0, wander: 1, chase: 2, windup: 3, strike: 4, flee: 5, stunned: 6, defeated: 7, sleep: 8, recover: 9, return: 10, quirk: 11 };
@@ -78,12 +79,17 @@ export class MonstersView {
     this.effects = effects;
     this.audio = audio;
     this.map = new Map();
+    this.drawDist = QUALITY.high.monsterDist;
     this.tmp = {};
     this.frame = 0;
   }
 
   get(id) {
     return this.map.get(id);
+  }
+
+  setQuality(name) {
+    this.drawDist = (QUALITY[name] || QUALITY.high).monsterDist;
   }
 
   // Near monsters use the detailed rig; far ones a low-poly copy (built on
@@ -357,7 +363,7 @@ export class MonstersView {
       if (v.st.hurtT !== undefined) v.st.hurtT += dt;
       // animate (cheaper when far away)
       if (dist < 90 || (this.frame + v.id) % 3 === 0) animateMonster(v.rig, v.st, dist < 90 ? dt : dt * 3, time);
-      root.visible = dist < 170;
+      root.visible = dist < this.drawDist || (v.flags & 32) !== 0; // always draw one that is after you
       // hit flash
       if (v.flashT > 0) {
         v.flashT -= dt;

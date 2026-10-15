@@ -77,20 +77,20 @@ test('top swords and base upgrades cost Gems as well as Money, all or nothing', 
   assert.equal(r2.ok, true);
   assert.equal(p.money, 100000 - 70000);
   assert.equal(p.gems, 5 - 3);
-  // base pads 8 -> 10 need 3 gems
-  p.base.slots = 8;
+  // base pads 25 -> 35 (the third floor and a half) need 3 gems
+  p.base.slots = 25;
   p.money = 50000;
   p.gems = 2;
   const base = h.game.world.bases[a.s.baseIndex];
   h.place(a, base.spawn.x, base.spawn.z);
   assert.equal(a.send('buyUpgrade', { kind: 'slots', reqId: 'u1' }).error, 'gems');
-  assert.equal(p.base.slots, 8);
+  assert.equal(p.base.slots, 25);
   assert.equal(p.money, 50000);
   p.gems = 3;
   assert.equal(a.send('buyUpgrade', { kind: 'slots', reqId: 'u2' }).ok, true);
-  assert.equal(p.base.slots, 10);
+  assert.equal(p.base.slots, 35);
   assert.equal(p.gems, 0);
-  assert.equal(p.money, 50000 - 20000);
+  assert.equal(p.money, 50000 - 30000);
 });
 
 test('decorations: bought at your own base, placed on spots, moved, shown to everyone, trophies only from milestones', async () => {

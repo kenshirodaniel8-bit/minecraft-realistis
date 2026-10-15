@@ -126,6 +126,40 @@ export class ColliderGrid {
     }
     return hit;
   }
+
+  // True if a circle of radius r moving in a straight line from (x0, z0) to
+  // (x1, z1) runs into a collider that it was not already touching at the
+  // start (so you can always step out of something). y0..y1 is the height
+  // range of the moving body. Used by the server to check player moves.
+  segmentBlocked(x0, z0, x1, z1, r, y0, y1) {
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    const steps = Math.max(1, Math.ceil(len / 0.3));
+    let blocked = false;
+    this.query((x0 + x1) / 2, (z0 + z1) / 2, len / 2 + r + 0.5, (c) => {
+      if (blocked || !c.enabled || y1 < c.y0 || y0 > c.y1) return;
+      if (overlaps(c, x0, z0, r)) return;
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        if (overlaps(c, x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, r)) {
+          blocked = true;
+          return;
+        }
+      }
+    });
+    return blocked;
+  }
+}
+
+// Does a circle of radius r at (x, z) overlap collider c (ignoring height)?
+function overlaps(c, x, z, r) {
+  const dx = x - c.x;
+  const dz = z - c.z;
+  if (c.kind === 'circle') return dx * dx + dz * dz < (r + c.r) * (r + c.r);
+  const lu = dx * c.ax + dz * c.az;
+  const lv = -dx * c.az + dz * c.ax;
+  const nu = lu - Math.max(-c.hw, Math.min(c.hw, lu));
+  const nv = lv - Math.max(-c.hd, Math.min(c.hd, lv));
+  return nu * nu + nv * nv < r * r;
 }
 
 export function boxCollider(x, z, hw, hd, angle, y0, y1, extra = {}) {

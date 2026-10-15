@@ -34,10 +34,6 @@ export class WorldExpansion {
     return REGIONS.filter((r) => r.expansion && this.active.has(r.id)).length;
   }
 
-  spawnScale() {
-    return 1 + 0.15 * this.tier();
-  }
-
   state() {
     return {
       active: [...this.active],

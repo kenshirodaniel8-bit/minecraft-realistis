@@ -12,6 +12,7 @@ import { CONFIG, WORLD_SEED } from './config.js';
 import { ColliderGrid, boxCollider, circleCollider } from './collision.js';
 
 export const CELL = 4;          // terrain grid spacing
+export const STEP_UP = 0.95; // highest ledge you can walk up without jumping
 export const WATER_Y = 0;
 export const VOID_Y = -14;      // sea floor beyond the edge of the world
 export const PLAZA = { r: 38, y: 3.6 };
@@ -146,8 +147,16 @@ function makeBases() {
     const tu = { x: -Math.sin(angle), z: Math.cos(angle) };
     const tv = { x: -Math.cos(angle), z: -Math.sin(angle) };
     const toWorld = (u, v) => ({ x: cx + tu.x * u + tv.x * v, z: cz + tu.z * u + tv.z * v });
+    // monster pads: 10 per floor (two rows of five), floor 1 first
+    const B = CONFIG.bases;
     const slots = [];
-    for (const v of [-8.5, -4, 0.5]) for (const u of [-7.5, -2.5, 2.5, 7.5]) slots.push(toWorld(u, v));
+    for (let f = 0; f < B.floors; f++) {
+      for (let j = 0; j < B.padsPerFloor && slots.length < B.maxSlots; j++) {
+        const p = toWorld(-8 + 4 * (j % 5), j < 5 ? -8 : -3.5);
+        slots.push({ ...p, y: f * B.floorHeight, floor: f });
+      }
+    }
+    const faceIn = (u) => (u < 0 ? Math.atan2(tu.x, tu.z) : Math.atan2(-tu.x, -tu.z));
     bases.push({
       index: i,
       x: cx,
@@ -166,8 +175,10 @@ function makeBases() {
       outside: toWorld(0, half + 6),   // where intruders are pushed when lasers switch on
       spawn: toWorld(0, 4),
       sign: toWorld(-9, half + 4),
-      // decoration spots along the side walls, facing into the base
-      decor: [-10.5, -5, 0.5, 5.5].flatMap((v) => [-11, 11].map((u) => ({ ...toWorld(u, v), yaw: u < 0 ? Math.atan2(tu.x, tu.z) : Math.atan2(-tu.x, -tu.z) }))),
+      // decoration spots on the ground floor along the walls (clear of the
+      // stairs on the right), facing into the base
+      decor: [[-11, -10.5], [-11, -5], [-11, 0.5], [-11, 5.5], [-11, 11], [11, -11], [11, 5.5], [11, 11]]
+        .map(([u, v]) => ({ ...toWorld(u, v), yaw: faceIn(u) })),
       y: 0,
     });
   }
@@ -531,27 +542,127 @@ function addBox(list, x, y, z, hw, hh, hd, rot, mat, solid = true, extra = {}) {
   list.push({ x, y, z, hw, hh, hd, rot, mat, solid, ...extra });
 }
 
-function buildBaseBoxes(b, out) {
-  const H = CONFIG.bases.wallHeight;
+// The base is a tower of CONFIG.bases.floors floors. Inside, flights of
+// stairs alternate between the right and the left wall; each floor has a
+// hole above the flight that arrives on it (with a railing). The only way in
+// is the front door on the ground floor (guarded by the lasers).
+//   flight f (floor f -> f+1) runs along side stairSide(f), rising from the
+//   front (v = STAIR_V0) to the back (v = STAIR_V1).
+export const STAIR = { u0: 9.8, u1: 12.4, v0: 3, v1: -9, steps: 12 };
+export const stairSide = (f) => (f % 2 === 0 ? 1 : -1);
+
+function buildBaseBoxes(b, out, platforms) {
+  const B = CONFIG.bases;
+  const FH = B.floorHeight;
+  const top = B.floors * FH;
   const h = b.half;
-  const door = CONFIG.bases.doorWidth / 2;
+  const door = B.doorWidth / 2;
+  const doorH = 6.2;
   const rot = Math.atan2(b.tu.z, b.tu.x); // width axis along u
   const at = (u, v) => b.toWorld(u, v);
-  const wall = (u, v, hw, hd, mat = 'base_wall') => {
+  const box = (u, v, y0, y1, hw, hd, mat, solid = false, extra = {}) => {
     const p = at(u, v);
-    addBox(out, p.x, b.y + H / 2, p.z, hw, H / 2, hd, rot, mat, true, { base: b.index });
+    addBox(out, p.x, b.y + (y0 + y1) / 2, p.z, hw, (y1 - y0) / 2, hd, rot, mat, solid, { base: b.index, ...extra });
   };
-  wall(0, -h, h + 0.6, 0.6);                    // back
-  wall(-h, 0, 0.6, h + 0.6);                    // left
-  wall(h, 0, 0.6, h + 0.6);                     // right
+  const platform = (u0, u1, v0, v1, topY) => {
+    const p = at((u0 + u1) / 2, (v0 + v1) / 2);
+    platforms.push({ x: p.x, z: p.z, hw: Math.abs(u1 - u0) / 2, hd: Math.abs(v1 - v0) / 2, rot, top: b.y + topY });
+  };
+  const W = 0.6; // wall half-thickness
+
+  // --- collision: solid walls the full height (windows are glass), the
+  // front wall is open only at the ground-floor door
+  const solidWall = (u, v, hw, hd, y0 = -0.5, y1 = top + 1.5) => box(u, v, y0, y1, hw, hd, 'base_wall', true, { invisible: true, colY0: y0 > 0 ? b.y + y0 : undefined });
+  solidWall(0, -h, h + W, W);
+  solidWall(-h, 0, W, h + W);
+  solidWall(h, 0, W, h + W);
   const sideLen = (h - door) / 2;
-  wall(-(door + sideLen), h, sideLen, 0.6);     // front left
-  wall(door + sideLen, h, sideLen, 0.6);        // front right
-  // door frame posts (visual + solid)
-  wall(-door - 0.4, h, 0.6, 0.9, 'base_trim');
-  wall(door + 0.4, h, 0.6, 0.9, 'base_trim');
-  // floor (visual only)
-  addBox(out, b.x, b.y - 0.25, b.z, h, 0.3, h, rot, 'base_floor', false, { base: b.index });
+  solidWall(-(door + sideLen), h, sideLen, W);
+  solidWall(door + sideLen, h, sideLen, W);
+  solidWall(0, h, door, W, doorH, top + 1.5);
+
+  // --- looks: dark block walls with light window frames on every floor
+  for (let f = 0; f < B.floors; f++) {
+    const y0 = f * FH;
+    const sill = y0 + 1.6;
+    const lintel = y0 + FH - 1.3;
+    for (const side of ['back', 'left', 'right', 'front']) {
+      // a wall runs along t in [-h, h]; place(t, ...) maps to (u, v)
+      const place = (t, ya, yb, halfLen, mat) => {
+        if (side === 'back') box(t, -h, ya, yb, halfLen, W, mat);
+        else if (side === 'front') box(t, h, ya, yb, halfLen, W, mat);
+        else box(side === 'left' ? -h : h, t, ya, yb, W, halfLen, mat);
+      };
+      const isDoor = side === 'front' && f === 0;
+      if (isDoor) {
+        place(-(door + sideLen), y0, y0 + FH, sideLen, 'base_wall');
+        place(door + sideLen, y0, y0 + FH, sideLen, 'base_wall');
+        place(0, doorH, y0 + FH, door, 'base_wall');
+        place(-door - 0.35, y0, doorH, 0.45, 'base_trim');
+        place(door + 0.35, y0, doorH, 0.45, 'base_trim');
+        continue;
+      }
+      place(0, y0, sill, h + W, 'base_wall');            // below the windows
+      place(0, lintel, y0 + FH, h + W, 'base_wall');     // above the windows
+      for (const t of [-h, -h / 3, h / 3, h]) place(t, sill, lintel, 1.1, 'base_wall'); // pillars
+      // window frames (light trim), and dark glass you can see through a bit
+      for (const c of [-(2 * h) / 3, (2 * h) / 3, 0]) {
+        if (c === 0 && side !== 'front' && side !== 'back') continue;
+        const half = c === 0 ? h / 3 - 1.1 : h / 3 - 1.1;
+        place(c, sill, sill + 0.35, half, 'base_trim');
+        place(c, lintel - 0.35, lintel, half, 'base_trim');
+        place(c - half + 0.2, sill + 0.35, lintel - 0.35, 0.2, 'base_trim');
+        place(c + half - 0.2, sill + 0.35, lintel - 0.35, 0.2, 'base_trim');
+      }
+    }
+  }
+  // corner columns and the roof edge
+  for (const [u, v] of [[-h, -h], [h, -h], [-h, h], [h, h]]) box(u, v, -0.5, top + 1.6, 1.2, 1.2, 'base_trim');
+  box(0, 0, top, top + 0.6, h + W, h + W, 'base_wall');
+  for (const [u, v, hw, hd] of [[0, -h, h + W, W], [0, h, h + W, W], [-h, 0, W, h + W], [h, 0, W, h + W]]) box(u, v, top + 0.6, top + 1.6, hw, hd, 'base_trim');
+
+  // --- ground floor (visual; the terrain under the base is flat)
+  box(0, 0, -0.55, 0.05, h, h, 'base_floor');
+  platform(-h, h, -h, h, 0);
+
+  // --- upper floors with a hole over the arriving flight, and railings
+  const S = STAIR;
+  for (let f = 1; f < B.floors; f++) {
+    const y = f * FH;
+    const hole = stairSide(f - 1);
+    const holeIn = hole * (S.u0 - 0.2);   // inner edge of the hole
+    const slab = (u0, u1, v0, v1) => {
+      box((u0 + u1) / 2, (v0 + v1) / 2, y - 0.5, y, Math.abs(u1 - u0) / 2, Math.abs(v1 - v0) / 2, 'base_floor');
+      platform(u0, u1, v0, v1, y);
+    };
+    slab(-h, h, S.v0 + 0.2, h);                       // front
+    slab(-h, h, -h, S.v1);                            // back (landing)
+    if (hole > 0) slab(-h, holeIn, S.v1, S.v0 + 0.2); // middle, minus the hole
+    else slab(holeIn, h, S.v1, S.v0 + 0.2);
+    // railing along the hole (open at the back where the stairs arrive)
+    const railLen = (S.v0 + 0.2 - S.v1) / 2;
+    box(holeIn, (S.v0 + 0.2 + S.v1) / 2, y, y + 1.2, 0.15, railLen, 'base_trim', true);
+    box(hole * (S.u0 + S.u1) / 2 - hole * 0.05, S.v0 + 0.2, y, y + 1.2, (S.u1 - S.u0) / 2 + 0.3, 0.15, 'base_trim', true);
+  }
+
+  // --- stairs: one flight per floor, alternating sides
+  const run = (S.v0 - S.v1) / S.steps;
+  for (let f = 0; f < B.floors - 1; f++) {
+    const side = stairSide(f);
+    const uc = side * (S.u0 + S.u1) / 2;
+    const hw = (S.u1 - S.u0) / 2;
+    for (let i = 0; i < S.steps; i++) {
+      const vMid = S.v0 - (i + 0.5) * run;
+      const y0 = f * FH;
+      const stepTop = y0 + ((i + 1) * FH) / S.steps;
+      // the step (solid from the floor below, so you can't walk under it;
+      // its collision stops a little under the tread so you can step up)
+      box(uc, vMid, y0, stepTop, hw, run / 2, i % 2 ? 'stairs_dark' : 'stairs', false);
+      const p = at(uc, vMid);
+      out.push({ stairStep: true, x: p.x, z: p.z, hw, hd: run / 2, rot, y0: b.y + y0, y1: b.y + stepTop - 0.62, base: b.index });
+      platform(uc - hw, uc + hw, vMid - run / 2, vMid + run / 2, stepTop);
+    }
+  }
 }
 
 function buildCave(s, out, mat = 'cave_rock') {
@@ -818,7 +929,8 @@ export function buildWorld() {
 
   // boxes for structures
   const boxes = [];
-  for (const b of bases) buildBaseBoxes(b, boxes);
+  const platforms = [];
+  for (const b of bases) buildBaseBoxes(b, boxes, platforms);
   for (const s of world.shops) buildShop(s, boxes, PLAZA.y);
   for (const s of SPOTS) {
     if (s.kind === 'cave') buildCave(s, boxes, s.region === 'frozen' ? 'ice_rock' : s.region === 'crystal' ? 'crystal_rock' : s.region === 'legendary' ? 'gold_stone' : 'cave_rock');
@@ -829,15 +941,22 @@ export function buildWorld() {
     else if (s.id === 'shipwreck') buildShipwreck(s, boxes);
     else if (s.id === 'broken_arch') buildArch(s, boxes);
   }
-  world.boxes = boxes;
+  // stair steps are collision-only entries (their looks are normal boxes)
+  world.boxes = boxes.filter((b) => !b.stairStep);
+  const stairSteps = boxes.filter((b) => b.stairStep);
 
   world.props = buildProps(world);
 
   // colliders
   const grid = new ColliderGrid(16);
-  for (const b of boxes) {
+  for (const st of stairSteps) {
+    grid.add(boxCollider(st.x, st.z, st.hw, st.hd, st.rot, st.y0, st.y1, { base: st.base }));
+  }
+  for (const b of world.boxes) {
     if (!b.solid) continue;
-    const c = boxCollider(b.x, b.z, b.hw, b.hd, b.rot, b.y - b.hh - 2, b.y + b.hh, {});
+    // (boxes reach a little below their bottom for uneven ground, except ones
+    // that start in the air on purpose, like the wall above a door)
+    const c = boxCollider(b.x, b.z, b.hw, b.hd, b.rot, b.colY0 ?? b.y - b.hh - 2, b.y + b.hh, {});
     if (b.door) c.door = b.door;
     if (b.base !== undefined) c.base = b.base;
     b.collider = c;
@@ -856,6 +975,24 @@ export function buildWorld() {
     }
   }
   world.colliders = grid;
+
+  // walkable surfaces above the terrain: base floors and stair treads
+  const pgrid = new ColliderGrid(16);
+  for (const pl of platforms) pgrid.add(boxCollider(pl.x, pl.z, pl.hw, pl.hd, pl.rot, pl.top, pl.top, { top: pl.top }));
+  world.platforms = pgrid;
+  // Height of the ground or floor under (x, z) for something whose feet are
+  // at y: the highest surface no more than STEP_UP above the feet.
+  world.surfaceHeight = (x, z, y = Infinity) => {
+    let best = world.groundHeight(x, z);
+    const limit = y + STEP_UP;
+    pgrid.query(x, z, 0, (c) => {
+      if (c.top <= best || c.top > limit) return;
+      const dx = x - c.x;
+      const dz = z - c.z;
+      if (Math.abs(dx * c.ax + dz * c.az) <= c.hw && Math.abs(-dx * c.az + dz * c.ax) <= c.hd) best = c.top;
+    });
+    return best;
+  };
 
   world.isLava = (x, z, y) => {
     for (const p of LAVA_POOLS) {

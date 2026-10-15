@@ -129,8 +129,8 @@ export class LocalPlayer {
     // props and structures
     this.world.colliders.resolve(this.pos, P.radius, P.height);
     if (opts.resolveDynamic) opts.resolveDynamic(this.pos);
-    // ground
-    const g = this.world.groundHeight(this.pos.x, this.pos.z);
+    // ground (or a base floor / stair tread under the feet)
+    const g = this.world.surfaceHeight(this.pos.x, this.pos.z, this.pos.y);
     if (this.pos.y <= g) {
       this.pos.y = g;
       if (this.vel.y < 0) this.vel.y = 0;

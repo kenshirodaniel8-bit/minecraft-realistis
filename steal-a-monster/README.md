@@ -18,7 +18,7 @@ Socket.IO** (server). Not a Roblox game: no Roblox Studio, APIs or Luau.
 | ![A base full of monsters earning Money](docs/screenshots/base.jpg) | ![LUCKY LUCKY event with Lucky Blocks](docs/screenshots/lucky-lucky.jpg) |
 | ![Monster inspector](docs/screenshots/inspect.jpg) | ![World map](docs/screenshots/map.jpg) |
 
-![Five of the 44 monsters up close](docs/screenshots/gallery-closeup.jpg)
+![Five of the 57 monsters up close](docs/screenshots/gallery-closeup.jpg)
 
 *Screenshots are from headless Chromium with software rendering
 (`node scripts/screenshots.mjs`).*
@@ -50,7 +50,7 @@ npm start
 
 Open **http://localhost:3000**, type a name, pick an outfit colour and press
 **PLAY**. New players start with **1,000 Money**, a Wooden Sword, a Boing Glove,
-two Sticky Traps and a base with 4 monster pads. A short quest on the left
+two Sticky Traps and a base tower with room for 15 monsters. A short quest on the left
 teaches the loop.
 
 **Play with friends on the same Wi-Fi:** the terminal prints an address like
@@ -94,7 +94,8 @@ top; tap the hotbar for gadgets. Settings → *Touch controls* can force them on
 1. **Explore.** The world is a ring of regions around the starter hub. The
    plaza in the middle has the **Sword Shop**, the **Gadget Shop**, the
    **Lucky Board** and the portals to the expansion islands. The 12 player bases
-   ring the plaza.
+   ring the plaza. Every region (island) holds **50 wild monsters** while
+   someone is on it — 57 species in all, each with its own 3D model.
 2. **Battle.** Monsters roam their home territories. Some are shy and run, some
    ignore you until hit, territorial ones defend their home, aggressive ones
    chase you. Attacks are telegraphed with red areas on the ground.
@@ -105,15 +106,19 @@ top; tap the hotbar for gadgets. Settings → *Touch controls* can force them on
    **condition** shown on the card (for example owning a Tier 7 sword, or
    having discovered 20 species).
 4. **Bring it home.** Recruited monsters follow you. Walk into your base (or press
-   **H**) and they hop onto free pads automatically. Rearrange them, send one to
-   follow you, or release one from the **Monsters** panel.
+   **H**) and they hop onto free pads automatically. Your base is a block tower:
+   every floor has 10 pads, and the floors are joined by **stairs inside the
+   tower** (there are no outside stairs, so a thief has to come in through your
+   front door and lasers). Rearrange monsters, send one to follow you, or
+   release one from the **Monsters** panel.
 5. **Earn.** Every monster on a pad earns Money per second (rarer = more) and gives
    a **perk** (more income, speed, XP, max HP, regen, Lucky Block luck, recruit
    discounts, radar range, longer lasers or sword damage). Step on the gold **$**
    pad to collect. While you're offline your base keeps earning at half rate
    (up to 8 hours).
 6. **Upgrade.** Better swords (10 tiers, from Wooden to Celestial — some need a
-   level or a discovered region), more pads (4 → 12) and longer-lasting lasers.
+   level or a discovered region), more pads (15 → 25 → 35 → 45: each upgrade adds
+   10, opening the next floor) and longer-lasting lasers.
    Levels come from XP and unlock new regions. The top swords and upgrades also
    cost **💎 Monster Gems**, the rare material: rare and stronger monsters drop
    them, the Volcanic Kingdom drops extra, **Gem Geodes** in the Volcanic Kingdom
@@ -275,7 +280,9 @@ ownership, base locks and events.
 
 - **Movement** is predicted on the client for responsiveness and **validated**
   on the server: maximum speed (with tolerance for lag and knockback), height
-  above ground, the world edge, locked regions, closed expansion islands, other
+  above ground, walls (a move through a base tower wall, a shop or a cave wall
+  is refused, so the upper floors of a base can only be reached by its inside
+  stairs), the world edge, locked regions, closed expansion islands, other
   players' locked bases and the sealed ruins vault. Invalid moves are snapped back.
   Teleports (H, portals, respawn) only go to server-chosen destinations and carry
   a sequence number so late packets can't undo them.
@@ -323,7 +330,8 @@ two profile writes during a theft can neither duplicate nor lose a monster.
 - **Swords / gadgets / Lucky rewards / cosmetics:** `shared/weapons.js`,
   `shared/items.js`, `shared/lucky.js`.
 - **A region:** add it to `REGIONS` (shape, levels, unlock, `minPopulation`,
-  terrain style, colours, props, spawn cap) and optional spots in `shared/world.js`.
+  terrain style, colours, props) and optional spots in `shared/world.js`; every
+  region gets `CONFIG.monsters.perRegion` wild monsters.
 - **An event:** add a definition to `EVENT_DEFS` in `server/services/events.js`
   (`onStart`, `onEnd`, `spawnTick`); the lifecycle and client sync are generic.
 - **Balance:** `shared/config.js`.
@@ -357,7 +365,7 @@ Socket.IO server with real socket clients. Requirement → test:
 | 1 | New player gets exactly 1,000 Money | `profile.test.js` |
 | 2 | Reconnect/refresh/respawn gives no second bonus | `profile.test.js` |
 | 3, 4 | Two clients on one server, different bases, see each other move | `multiplayer.test.js` |
-| 5 | Monsters have distinct real 3D models and working health | `combat.test.js` (builds all 44 models in Node) |
+| 5 | Monsters have distinct real 3D models and working health | `combat.test.js` (builds all 57 models in Node) |
 | 6 | Sword attacks apply valid damage (reach, facing, cooldown, no client damage) | `combat.test.js` |
 | 7 | Monsters attack and can knock out players; respawn at own base | `combat.test.js` |
 | 8 | Defeated monsters enter the recruitment state | `combat.test.js` |
@@ -388,8 +396,9 @@ Known limitations:
 
 - **Not verified on real hardware**: no real GPU, phone, Safari or Firefox was
   available while building this; frame rates on real devices are unmeasured.
-- **Bases** have upgradeable pads, lasers, income, a collector and 8 fixed
-  decoration spots; decorations can't be placed anywhere else, and they have no
+- **Bases** are 5-floor towers with upgradeable pads (up to 45), lasers at the
+  ground-floor door, income, a collector and 8 fixed ground-floor decoration
+  spots; decorations can't be placed anywhere else, and they have no
   collision (you walk through them).
 - **Movement** is predicted by the client and validated by the server (speed,
   terrain, walls, region locks, lasers); the server does not re-simulate every
