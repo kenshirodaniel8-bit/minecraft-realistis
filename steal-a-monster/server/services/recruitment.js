@@ -30,6 +30,7 @@ export class Recruitment {
   onDefeated(m, killer) {
     const game = this.game;
     const now = game.now();
+    if (m.challengeFor) return this.onChallengeDefeated(m);
     m.defeatedAt = now;
     m.deadline = now + CONFIG.combat.defeatedWindowMs;
     const min = CONFIG.combat.assistShare * m.maxHp;
@@ -60,6 +61,26 @@ export class Recruitment {
       game.send(s, 'reward', { xp, money: rewards.money, gems, monsterId: m.id });
       game.send(s, 'recruitOffer', this.offerFor(s, m));
     }
+  }
+
+  // A Moon Sky Arena monster: the challenger gets the usual rewards, but it is
+  // never recruited (the prize is the secret monster at the end).
+  onChallengeDefeated(m) {
+    const game = this.game;
+    m.defeatedAt = game.now();
+    m.deadline = Infinity;
+    m.eligible = null;
+    const s = game.byProfile.get(m.challengeFor);
+    if (s) {
+      const rewards = defeatRewards(m.species, m.level);
+      const xp = game.addXp(s, rewards.xp);
+      game.economy.credit(s, rewards.money, 'defeat');
+      const gems = game.economy.creditGems(s, this.rollGems(m), 'defeat');
+      s.profile.stats.defeated++;
+      this.discover(s, m.sp);
+      game.send(s, 'reward', { xp, money: rewards.money, gems, monsterId: m.id });
+    }
+    game.moonSecret.onDefeated(m);
   }
 
   // Monster Gems from a defeat: by rarity, plus a bonus in gem-rich regions.

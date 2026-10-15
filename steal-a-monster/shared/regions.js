@@ -11,6 +11,7 @@
 // Angles are measured with atan2(z, x) in degrees, 0..360.
 
 import { islandRegions } from './islands.js';
+import { arenaRegionDef } from './moonSecret.js';
 
 export const RING = {
   hub: 150,
@@ -195,6 +196,9 @@ export const REGIONS = [
 
 // the seven monster islands (islands.js), reached through the Island Gate
 REGIONS.push(...islandRegions());
+// and the Moon Sky Arena, only reached through the secret portal on Cute
+// Monster Island (moonSecret.js)
+REGIONS.push(arenaRegionDef());
 
 export const REGION_BY_ID = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
 export const REGION_INDEX = Object.fromEntries(REGIONS.map((r, i) => [r.id, i]));

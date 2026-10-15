@@ -16,7 +16,8 @@ test('every island has its own 50 species: 16 Common, 13 Uncommon, 10 Rare, 6 Ep
   assert.equal(ids.size, SPECIES.length, 'species ids are unique');
   for (const isl of ISLANDS) {
     assert.ok(REGION_BY_ID[isl.id], `${isl.id} is a region`);
-    const list = SPECIES.filter((s) => s.island === isl.id);
+    // (plus the moon secret on Cute Monster Island, see moon.test.js)
+    const list = SPECIES.filter((s) => s.island === isl.id && !s.moonSecret);
     assert.equal(list.length, 50, `${isl.id} has 50 species`);
     for (const [r, n] of Object.entries(RARITY_SLOTS)) {
       assert.equal(list.filter((s) => s.rarity === r).length, n, `${isl.id}: ${n} ${r}`);

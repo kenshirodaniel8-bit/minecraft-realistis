@@ -500,9 +500,9 @@ export class UI {
     const g = this.app.world.gate;
     const pos = this.app.player.pos;
     const near = Math.hypot(pos.x - g.x, pos.z - g.z) < g.range + 1;
-    const rows = REGIONS.filter((r) => r.shape.kind === 'island').map((r) => {
+    const rows = REGIONS.filter((r) => r.shape.kind === 'island' && !r.arena).map((r) => {
       const lock = regionLockReason(r, progress, active);
-      const species = SPECIES.filter((sp) => sp.island === r.id || (!sp.island && sp.spawn.regions?.[0] === r.id && !sp.spawn.event));
+      const species = SPECIES.filter((sp) => (sp.island === r.id && !sp.moonSecret) || (!sp.island && sp.spawn.regions?.[0] === r.id && !sp.spawn.event));
       const found = species.filter((sp) => seen[sp.id]).length;
       const here = s.region === r.id;
       const btn = here ? '<button class="btn sm" disabled>You are here</button>'
@@ -512,7 +512,7 @@ export class UI {
       return `<div class="row-item">
         <div class="icon island-icon" style="background:radial-gradient(circle at 40% 35%, ${swatch}, #${(r.colors.accent ?? 0x8888ff).toString(16).padStart(6, '0')})">🏝</div>
         <div class="info"><h4>${esc(r.name)}</h4><p>${esc(r.blurb || '')}</p>
-          <div class="stats-row"><span>Lv ${r.levels[0]}–${r.levels[1]}</span><span>🐾 ${species.length} species</span><span>📖 ${found} found</span>${r.monsterIsland ? '<span>👑 Legendary lair · 🔥 Mythic shrine</span>' : ''}</div>
+          <div class="stats-row"><span>Lv ${r.levels[0]}–${r.levels[1]}</span><span>🐾 ${species.length} species</span><span>📖 ${found} found</span>${r.monsterIsland ? '<span>👑 Legendary lair · 🔥 Mythic shrine</span>' : ''}${r.id === 'cute' ? '<span>🌙 + a secret…</span>' : ''}</div>
         </div>${btn}</div>`;
     }).join('');
     return `${near ? '' : '<p class="note">📍 Walk up to the Island Gate in the plaza to travel.</p>'}<p>Each monster island has 50 monsters of its own, from Common to Mythic. A portal on every island brings you back to the plaza.</p>${rows}`;

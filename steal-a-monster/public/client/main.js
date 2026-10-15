@@ -380,6 +380,7 @@ class App {
     for (const g of w.traps) this.items.addGround(g);
     this.onPuzzle(w.puzzle);
     this.onWorld(w.world);
+    this.onMoon(w.moon, false);
   }
 
   addPlayer(info) {
@@ -453,6 +454,9 @@ class App {
       if (d.reason === 'home' || d.reason === 'portal' || d.reason === 'respawn') {
         this.audio.play('teleport');
         this.effects.burst(d.x, d.y + 2, d.z, 30, { color: [0x7af0ff, 0xffffff], speed: 6 });
+      } else if (d.reason?.startsWith('moon')) {
+        this.audio.play('teleport');
+        this.effects.burst(d.x, d.y + 2, d.z, 36, { color: [0x8fb8ff, 0xfff3a8, 0xffffff], speed: 7 });
       }
       if (d.message) this.blockedToast(d.message);
     });
@@ -604,6 +608,26 @@ class App {
     });
     n.on('world', (w) => this.onWorld(w));
     n.on('puzzle', (p) => this.onPuzzle(p));
+    n.on('moon', (m) => this.onMoon(m, true));
+    n.on('moonButton', (d) => {
+      const b = this.world.moon.buttons[d.id];
+      this.ui.regionBanner(`🌙 ${d.found}/${d.total}`, d.found >= d.total ? 'All moon buttons found! Follow the arrow to the portal!' : 'You found a moon button!');
+      this.audio.play(d.found >= d.total ? 'levelup' : 'discover');
+      if (b) this.effects.burst(b.x, b.y + 1.2, b.z, 30, { color: [0x4a9aff, 0xbfe0ff, 0xffffff], speed: 6 });
+    });
+    n.on('moonRound', (d) => {
+      const sp = SPECIES_BY_ID[d.species];
+      const r = RARITIES[d.rarity];
+      this.ui.regionBanner(`Round ${d.round + 1}!`, `Defeat the ${r.name} ${sp.name}!`);
+      this.audio.play('event');
+    });
+    n.on('moonWin', (d) => {
+      const sp = SPECIES_BY_ID[d.species];
+      if (d.first) this.ui.regionBanner(`🌕 SECRET: ${sp.name}!`, 'You won all four rounds! It is waiting in your base.');
+      else this.ui.regionBanner('🌕 Arena cleared!', `+${fmt(d.money)} Money · +${d.gems} 💎`);
+      this.audio.play('levelup');
+      this.effects.confetti(this.player.pos.x, this.player.pos.y + 4, this.player.pos.z, 90);
+    });
     n.on('time', (d) => { this.dayEpoch = d.dayEpoch; });
     n.on('radar', (d) => { this.radar = d; });
     n.on('clue', (d) => {
@@ -701,6 +725,48 @@ class App {
     this.worldView?.setPuzzleState(p, this.serverNow());
   }
 
+  onMoon(m, live) {
+    if (!m) return;
+    this.moon = m;
+    this.worldView?.setMoonState(m, live);
+  }
+
+  // Arrow to the next goal of the moon secret: the portal once all five
+  // buttons are lit, and in the arena the platform of the current round.
+  moonGoal() {
+    const m = this.moon;
+    const moon = this.world.moon;
+    if (!m) return null;
+    if (this.region === 'moonsky' && m.run && !m.run.done) {
+      if (m.run.monster) return null;
+      const pl = moon.platforms[m.run.round];
+      if (!pl) return null;
+      return { x: pl.x, y: pl.top, z: pl.z, text: `⚔️ Round ${m.run.round + 1}`, min: pl.half };
+    }
+    if (this.region === 'cute' && m.found.length >= moon.buttons.length) {
+      const p = moon.portal;
+      return { x: p.x, y: p.y, z: p.z, text: '🌙 Portal', min: 5 };
+    }
+    return null;
+  }
+
+  updateMoonHud() {
+    const el = this.moonHudEl || (this.moonHudEl = $('moon-hud'));
+    const m = this.moon;
+    const show = m && (this.region === 'cute' || this.region === 'moonsky');
+    el.hidden = !show;
+    if (!show) return;
+    const total = this.world.moon.buttons.length;
+    let text;
+    if (this.region === 'moonsky' && m.run) {
+      text = m.run.done ? '🌕 Arena cleared!' : `🌙 Moon Sky Arena · Round ${m.run.round + 1}/4`;
+    } else {
+      const dots = this.world.moon.buttons.map((b) => (m.found.includes(b.id) ? '🔵' : '⚪')).join('');
+      text = m.found.length >= total ? `🌕 Portal open! ${m.won ? '(secret found)' : ''}` : `🌙 Moon buttons ${m.found.length}/${total} ${dots}`;
+    }
+    setTextOnce(el, text);
+  }
+
   onItemUsed(d) {
     const src = d.pn === this.pn ? this.me : this.players.get(d.pn);
     if (!src) return;
@@ -749,11 +815,22 @@ class App {
     const b = this.world.bases[this.myBase];
     const p = this.player.pos;
     const dist = b ? Math.hypot(b.x - p.x, b.z - p.z) : 0;
-    if (!b || hide || dist < 32) {
+    // on the islands (and in the arena) the base is far away; the moon goal
+    // marker takes its place there
+    const goal = this.moonGoal();
+    const goalEl = this.goalMarkerEl || (this.goalMarkerEl = $('goal-marker'));
+    if (goal && !hide && Math.hypot(goal.x - p.x, goal.z - p.z) > goal.min) {
+      this.placeMarker(goalEl, goal.x, goal.y + 8, goal.z, `${goal.text} ${Math.round(Math.hypot(goal.x - p.x, goal.z - p.z))} m`);
+    } else goalEl.hidden = true;
+    if (!b || hide || dist < 32 || goal) {
       el.hidden = true;
       return;
     }
-    const v = (this.tmpMarker || (this.tmpMarker = new THREE.Vector3())).set(b.x, b.y + 10, b.z).project(this.sceneView.camera);
+    this.placeMarker(el, b.x, b.y + 10, b.z, `🏠 ${Math.round(dist)} m`);
+  }
+
+  placeMarker(el, wx, wy, wz, text) {
+    const v = (this.tmpMarker || (this.tmpMarker = new THREE.Vector3())).set(wx, wy, wz).project(this.sceneView.camera);
     let x = v.x;
     let y = v.y;
     const behind = v.z > 1;
@@ -776,7 +853,7 @@ class App {
     const arrow = el.firstElementChild;
     arrow.hidden = !off;
     if (off) arrow.style.transform = `rotate(${Math.atan2(-y, x)}rad)`;
-    setTextOnce(el.lastElementChild, `🏠 ${Math.round(dist)} m`);
+    setTextOnce(el.lastElementChild, text);
   }
 
   // Camera looking into your base from the door, so you see your pads and
@@ -1266,6 +1343,7 @@ class App {
       this.mapRenderer.drawMini($('minimap'), this.mapState());
       if (this.ui.panelName === 'map') this.drawFullMap($('map-canvas'));
       if (this.puzzle) this.worldView.setPuzzleState(this.puzzle, serverNow);
+      this.updateMoonHud();
       const open = this.puzzle && this.puzzle.openUntil > serverNow;
       for (const c of this.vaultColliders) c.enabled = !open;
       this.updateDebug(serverNow);

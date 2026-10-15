@@ -98,6 +98,10 @@ export class MonsterManager {
       spot: opts.spot || null,
       event: opts.event || null,
       clueFor: opts.clueFor || null,
+      // Moon Sky Arena: a round's monster fights only the player who called
+      // it and stays on its floating platform
+      challengeFor: opts.challengeFor || null,
+      plat: opts.plat || null,
       stunnedUntil: 0,
       burn: null,
       slowUntil: 0,
@@ -113,6 +117,7 @@ export class MonsterManager {
   }
 
   groundY(m, x, z) {
+    if (m.plat) return m.plat.top + (m.hover || 0);
     const g = this.world.groundHeight(x, z);
     if (m.fly) return Math.max(g, WATER_Y) + m.hover;
     if (m.swims && g < WATER_Y - 0.6) return WATER_Y - 0.5 + (m.hover || 0);
@@ -204,8 +209,9 @@ export class MonsterManager {
       if (!active.has(regionId)) continue;
       const inside = occupied.has(regionId);
       const target = inside ? C.perRegion : C.neighbourRegion;
-      // fill quickly when a region is mostly empty, then top up slowly
-      let groups = (counts[regionId] || 0) < target * 0.6 ? 6 : 1;
+      // fill quickly when a region is mostly empty, then top up more slowly
+      const have = counts[regionId] || 0;
+      let groups = have < target * 0.6 ? 6 : have < target * 0.9 ? 3 : 1;
       if (now < (this.regionSpawnAt[regionId] || 0)) continue;
       this.regionSpawnAt[regionId] = now + 700;
       const region = REGION_BY_ID[regionId];
@@ -330,11 +336,16 @@ export class MonsterManager {
     return m.state !== MS.defeated && m.state !== MS.recover;
   }
 
-  findInArc(pos, yaw, reach, arcDeg, max) {
+  // May this player hit this monster? (Another player's arena monster: no.)
+  canHit(s, m) {
+    return !s || !m.challengeFor || m.challengeFor === s.id;
+  }
+
+  findInArc(pos, yaw, reach, arcDeg, max, who = null) {
     const out = [];
     const half = (arcDeg / 2) * (Math.PI / 180);
     for (const m of this.list.values()) {
-      if (!this.isAlive(m)) continue;
+      if (!this.isAlive(m) || !this.canHit(who, m)) continue;
       const dx = m.x - pos.x;
       const dz = m.z - pos.z;
       const dy = m.y - pos.y;
@@ -348,11 +359,11 @@ export class MonsterManager {
     return out.slice(0, max).map((o) => o.m);
   }
 
-  nearestTo(m0, range, exclude) {
+  nearestTo(m0, range, exclude, who = null) {
     let best = null;
     let bd = range * range;
     for (const m of this.list.values()) {
-      if (exclude.has(m) || !this.isAlive(m)) continue;
+      if (exclude.has(m) || !this.isAlive(m) || !this.canHit(who, m)) continue;
       const d = (m.x - m0.x) ** 2 + (m.z - m0.z) ** 2;
       if (d < bd) {
         bd = d;
@@ -460,6 +471,7 @@ export class MonsterManager {
 
   playerTargetable(s, m) {
     if (s.dead) return false;
+    if (m.challengeFor) return m.challengeFor === s.id;
     if (s.pos.x * s.pos.x + s.pos.z * s.pos.z < (PLAZA.r + 2) ** 2) return false; // the plaza is a safe zone
     if (s.inBases.size) return false;                                              // so are bases
     const dy = s.pos.y - m.y;
@@ -529,6 +541,14 @@ export class MonsterManager {
       if (!s || !this.playerTargetable(s, m) || homeD > leash || (now > (m.aggroUntil || 0) && ai.temper !== 'aggressive' && ai.temper !== 'territorial')) {
         m.target = null;
         m.state = MS.return;
+      }
+    }
+    if (m.target === null && m.challengeFor) {
+      // an arena monster always comes back for its challenger
+      const s = this.game.byProfile.get(m.challengeFor);
+      if (s && this.playerTargetable(s, m)) {
+        m.target = s.pn;
+        m.aggroUntil = now + 1e9;
       }
     }
     if (m.target === null && m.state !== MS.return) {
@@ -651,6 +671,15 @@ export class MonsterManager {
   }
 
   stepTo(m, nx, nz) {
+    if (m.plat) {
+      // never off the edge of its floating platform
+      const lim = m.plat.half - m.radius * 0.6;
+      if (Math.abs(nx - m.plat.x) > lim || Math.abs(nz - m.plat.z) > lim) return false;
+      m.x = nx;
+      m.z = nz;
+      m.y = this.groundY(m, nx, nz);
+      return true;
+    }
     if (regionIdAt(nx, nz) !== m.region) return false;
     if (nx * nx + nz * nz < (PLAZA.r + 6) ** 2) return false;
     for (const b of this.world.bases) if (isInsideBase(b, nx, nz, 2)) return false;
@@ -812,7 +841,7 @@ export class MonsterManager {
       }
       if (!end) {
         for (const s of this.game.players.values()) {
-          if (s.dead) continue;
+          if (s.dead || !this.canHit(s, p.m)) continue;
           const dx = s.pos.x - p.x;
           const dz = s.pos.z - p.z;
           const dy = s.pos.y + 2 - p.y;

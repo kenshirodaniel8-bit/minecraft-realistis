@@ -36,12 +36,12 @@ export class Combat {
     game.broadcastNear(s.pos.x, s.pos.z, 120, 'swing', { pn: s.pn, combo: comboHit }, s);
 
     const reach = sword.range + CONFIG.player.radius + CONFIG.combat.rangeTolerance;
-    const targets = game.monsters.findInArc(s.pos, p.yaw, reach, sword.arc + 20, sword.maxTargets);
+    const targets = game.monsters.findInArc(s.pos, p.yaw, reach, sword.arc + 20, sword.maxTargets, s);
     const hits = [];
     for (const m of targets) hits.push(this.hitMonster(s, m, sword, comboHit, 1, now));
     const sp = sword.special;
     if (sp && sp.kind === 'chain' && targets.length) {
-      const extra = game.monsters.nearestTo(targets[0], sp.range, new Set(targets));
+      const extra = game.monsters.nearestTo(targets[0], sp.range, new Set(targets), s);
       if (extra) hits.push(this.hitMonster(s, extra, sword, false, sp.share, now, true));
     }
     // Galaxy Sword: every third hit sets off a star nova around the target
@@ -51,7 +51,7 @@ export class Combat {
       nova = { x: Math.round(c.x * 10) / 10, z: Math.round(c.z * 10) / 10, r: sp.radius };
       const done = new Set(targets);
       for (let i = 0; i < sp.maxTargets; i++) {
-        const m = game.monsters.nearestTo(c, sp.radius, done);
+        const m = game.monsters.nearestTo(c, sp.radius, done, s);
         if (!m) break;
         done.add(m);
         const h = this.hitMonster(s, m, sword, false, sp.share, now, true);

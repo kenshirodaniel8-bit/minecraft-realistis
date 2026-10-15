@@ -1545,7 +1545,42 @@ const BASE_SPECIES = [
 
 // ...plus the 50 species of each of the seven monster islands (islands.js),
 // generated from the hand-made ones (speciesGen.js).
-export const SPECIES = [...BASE_SPECIES, ...generateIslandSpecies(BASE_SPECIES)];
+// The secret of Cute Monster Island (moonSecret.js): it never spawns in the
+// wild and is only given to whoever wins all four rounds of the Moon Sky Arena.
+const LUNAMOCHI = {
+  id: 'cute_lunamochi', name: 'Lunamochi', title: 'Secret Moon Mochi Bunny', element: 'cosmic', rarity: 'secret', category: 'secret',
+  island: 'cute', moonSecret: true,
+  description: 'A squishy mochi bunny that fell from the moon. It only shows itself to heroes who light all five moon buttons and win the Moon Sky Arena.',
+  spawn: { regions: [], weight: 0 },
+  stats: { hp: 900, atk: 21, def: 12, speed: 15 }, size: 1.45,
+  ai: { temper: 'neutral', detect: 16, territory: 12, move: 'hop', boss: true },
+  attacks: [
+    shot('Moonbeam', { color: '#bfe3ff', radius: 1.2, power: 1.3, speed: 30 }),
+    slam('Mochi Bounce', { color: '#ffe8a8', radius: 7, power: 1.5, effect: 'stun' }),
+    lunge('Crescent Dash', { color: '#9ab8ff', power: 1.6, dashSpeed: 42 }),
+  ],
+  price: 220000, income: 720, perk: { kind: 'luck', value: 0.32 },
+  personality: { idles: ['bounce', 'preen', 'lookaround'], cry: 1.9 },
+  model: {
+    colors: { body: 0xfff8ec, belly: 0xffffff, accent: 0x8fb8ff, accent2: 0xffe27a, inner: 0xffc2dc, cheek: 0xffa8c8, glow: 0xfff3a8, dark: 0x2a2450 },
+    body: { shape: 'cloud', size: [1.25, 1.0, 1.2], y: 0.72 },
+    head: { shape: 'ellipsoid', size: [1.4, 1.22, 1.2], pos: [0, 1.5, 0.2] },
+    face: {
+      eyes: { size: 0.3, gap: 0.44, y: 0.08, style: 'sparkle', color: 0x4a6aff },
+      mouth: { style: 'cat', size: 0.13, y: -0.22 },
+      cheeks: { size: 0.17, gap: 0.56, y: -0.14 },
+      mark: { kind: 'crescent', color: 'accent2', y: 0.44, size: 0.22, glow: true },
+    },
+    ears: { style: 'bunny', size: [0.32, 1.3, 0.16], color: 'body', inner: 'inner', tip: 'accent', gap: 0.32, tilt: 0.3 },
+    legs: { count: 4, style: 'paw', size: [0.24, 0.26], color: 'body', gapX: 0.38, gapZ: 0.34, tip: 'accent' },
+    tail: { style: 'comet', size: 0.8, color: 'accent2', color2: 'accent' },
+    back: { style: 'stars', color: 'accent2', count: 5 },
+    extras: [{ kind: 'halo', color: 'glow' }, { kind: 'satellites', color: 'accent2', count: 3 }],
+    aura: { kind: 'star', color: 0xbfe3ff },
+  },
+};
+
+export const SPECIES = [...BASE_SPECIES, ...generateIslandSpecies(BASE_SPECIES), LUNAMOCHI];
 
 export const SPECIES_BY_ID = Object.fromEntries(SPECIES.map((s) => [s.id, s]));
 export const SPECIES_INDEX = Object.fromEntries(SPECIES.map((s, i) => [s.id, i]));

@@ -32,6 +32,7 @@ import { LuckyBlocks } from './services/luckyBlocks.js';
 import { EventManager } from './services/events.js';
 import { WorldExpansion } from './services/worldExpansion.js';
 import { Puzzles } from './services/puzzles.js';
+import { MoonSecret } from './services/moonSecret.js';
 
 export { fail };
 
@@ -130,6 +131,7 @@ export class Game {
     this.events = new EventManager(this);
     this.expansion = new WorldExpansion(this, opts.expansionThresholds);
     this.puzzles = new Puzzles(this);
+    this.moonSecret = new MoonSecret(this);
 
     this.handlers = {
       move: (s, p) => this.handleMove(s, p),
@@ -241,6 +243,7 @@ export class Game {
       event: this.events.state(),
       lucky: this.lucky.list(),
       puzzle: this.puzzles.state(),
+      moon: this.moonSecret.state(s),
       dropped: this.stealing.droppedList(),
       traps: this.items.groundList(),
     };
@@ -277,6 +280,7 @@ export class Game {
     this.stealing.onLeave(s);
     this.recruitment.onLeave(s);
     this.items.onLeave(s);
+    this.moonSecret.onLeave(s);
     this.players.delete(sid);
     if (this.byProfile.get(s.id) === s) this.byProfile.delete(s.id);
     this.bases.release(s.baseIndex);
@@ -457,6 +461,7 @@ export class Game {
     if (s.carrying && s.inBases.has(s.baseIndex)) this.stealing.completeTheft(s);
     this.bases.checkPads(s);
     this.puzzles.checkPlates(s);
+    this.moonSecret.afterMove(s);
     this.items.checkGround(s);
     this.economy.checkPortals(s);
   }
@@ -567,6 +572,7 @@ export class Game {
       discoveries: p.discoveries,
       regionsVisited: p.regionsVisited,
       tutorial: p.tutorial,
+      moon: p.moon,
       cosmetics: p.cosmetics,
       coupons: p.coupons,
       stats: p.stats,
@@ -691,6 +697,7 @@ export class Game {
     this.events.tick(dt, now);
     this.expansion.tick(dt, now);
     this.puzzles.tick(dt, now);
+    this.moonSecret.tick(dt, now);
     for (const s of this.players.values()) {
       if (s.profile.tutorial.step === 0 && !s.inBases.has(s.baseIndex) && Math.hypot(s.pos.x, s.pos.z) > 45) {
         this.tutorialEvent(s, 'explore');

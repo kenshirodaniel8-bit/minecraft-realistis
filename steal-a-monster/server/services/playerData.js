@@ -9,6 +9,7 @@ import { ITEM_BY_ID } from '#shared/items.js';
 import { COSMETIC_BY_ID } from '#shared/lucky.js';
 import { DECOR_BY_ID, DECOR_SPOTS, DECOR_MAX_OWNED } from '#shared/decor.js';
 import { REGION_BY_ID } from '#shared/regions.js';
+import { MOON } from '#shared/moonSecret.js';
 import { randomId } from '#shared/rng.js';
 import { sha256Hex } from '#shared/sha256.js';
 
@@ -43,6 +44,7 @@ export function newProfile(id, name, now) {
     discoveries: { species: {}, spots: {} },
     regionsVisited: ['plains'],
     tutorial: { step: 0, done: false },
+    moon: { found: [], won: false }, // the moon buttons of Cute Monster Island
     cosmetics: { owned: [], equipped: null },
     coupons: { recruitDiscount: 0 },
     stats: { defeated: 0, recruited: 0, stolen: 0, lost: 0, luckyOpened: 0, deaths: 0 },
@@ -163,6 +165,8 @@ export function sanitizeProfile(p, id, now = Date.now()) {
   out.regionsVisited = Array.isArray(p.regionsVisited) ? [...new Set(p.regionsVisited.filter((r) => REGION_BY_ID[r]))] : ['plains'];
   if (!out.regionsVisited.includes('plains')) out.regionsVisited.unshift('plains');
   out.tutorial = { step: Math.floor(num(p.tutorial?.step, 0, 0, 20)), done: !!p.tutorial?.done };
+  const found = Array.isArray(p.moon?.found) ? p.moon.found.filter((i) => Number.isInteger(i) && i >= 0 && i < MOON.buttons.length) : [];
+  out.moon = { found: [...new Set(found)], won: !!p.moon?.won };
   const owned = Array.isArray(p.cosmetics?.owned) ? p.cosmetics.owned.filter((c) => COSMETIC_BY_ID[c]) : [];
   out.cosmetics = { owned: [...new Set(owned)], equipped: owned.includes(p.cosmetics?.equipped) ? p.cosmetics.equipped : null };
   out.coupons = { recruitDiscount: num(p.coupons?.recruitDiscount, 0, 0, 0.5) };

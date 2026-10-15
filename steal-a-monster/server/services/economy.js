@@ -167,7 +167,7 @@ export class Economy {
     if ((s.pos.x - gate.x) ** 2 + (s.pos.z - gate.z) ** 2 > (gate.range + 2) ** 2) return fail('too_far', 'Walk up to the Island Gate in the plaza.');
     if (s.carrying) return fail('carrying', 'The gate refuses monster thieves!');
     const region = REGION_BY_ID[p.region];
-    if (!region || region.shape.kind !== 'island') return fail('bad_region', 'Unknown island.');
+    if (!region || region.shape.kind !== 'island' || region.arena) return fail('bad_region', 'Unknown island.');
     const reason = regionLockReason(region, game.playerProgress(s), game.expansion.active);
     if (reason) return fail('locked', reason);
     const dest = game.world.islandArrival[region.id] || game.world.portals.find((pt) => pt.region === region.id)?.to;

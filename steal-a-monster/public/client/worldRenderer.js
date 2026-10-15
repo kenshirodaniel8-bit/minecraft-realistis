@@ -7,6 +7,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CELL, WATER_Y, terrainColor, PLAZA, PROP_TYPES } from '#shared/world.js';
 import { REGIONS, REGION_BY_ID, RING, regionLockReason, regionIdAt } from '#shared/regions.js';
 import { makeLabel } from './labels.js';
+import { ARENA } from '#shared/moonSecret.js';
+import { RARITIES } from '#shared/monsters.js';
 
 const DEG = Math.PI / 180;
 const CHUNK_CELLS = 32;
@@ -38,6 +40,14 @@ const STRUCT_MATS = {
   awning_blue: { color: 0x4a8af0 },
   awning_gold: { color: 0xf3c234 },
   wood_dark: { color: 0x5c3c22 },
+  // the Moon Sky Arena
+  moon_stone: { color: 0xdcd6f6, emissive: 0x1c1844 },
+  moon_rock: { color: 0x6a6490 },
+  moon_arena: { color: 0xf0ecff, emissive: 0x242050 },
+  moon_rim_0: { color: 0x4fc8ff, emissive: 0x2a8acc },
+  moon_rim_1: { color: 0x6b7bff, emissive: 0x3a46cc },
+  moon_rim_2: { color: 0xc46bff, emissive: 0x8a3acc },
+  moon_rim_3: { color: 0xffb12a, emissive: 0xcc7a10 },
 };
 
 const matCache = new Map();
@@ -205,6 +215,7 @@ export class WorldRenderer {
     this.buildPortals();
     this.buildBarriers();
     this.buildSpots();
+    this.buildMoon();
     onProgress(1);
   }
 
@@ -661,8 +672,135 @@ export class WorldRenderer {
     this.setVaultOpen(open);
   }
 
+  // ---------------------------------------------------------------- the moon secret
+
+  buildMoon() {
+    const moon = this.world.moon;
+    // the five small moon buttons on Cute Monster Island
+    const tex = moonButtonTexture();
+    const rimMat = lambert(0xf3ead2, { flat: true });
+    this.moonButtons = moon.buttons.map((b) => {
+      const grp = new THREE.Group();
+      grp.position.set(b.x, b.y, b.z);
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.35, 0.32, 20), rimMat);
+      rim.position.y = 0.12;
+      rim.receiveShadow = true;
+      const face = new THREE.MeshLambertMaterial({ map: tex, color: 0xfff3c4, emissive: 0x000000 });
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.98, 0.98, 0.14, 24), [rimMat, face, rimMat]);
+      top.position.y = 0.32;
+      top.rotation.y = b.id;
+      grp.add(rim, top);
+      this.root.add(grp);
+      return { grp, face, top, found: false, pop: 0 };
+    });
+
+    // the secret portal (appears when all five are lit)
+    const p = moon.portal;
+    const portal = new THREE.Group();
+    portal.position.set(p.x, p.y, p.z);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(3.4, 0.38, 10, 40), new THREE.MeshLambertMaterial({ color: 0xfff3c4, emissive: 0x6a7aff }));
+    ring.position.y = 4.2;
+    const swirl = new THREE.Mesh(new THREE.CircleGeometry(3.1, 40), swirlMaterial(0x8fb8ff));
+    swirl.position.y = 4.2;
+    const crescent = makeLabel('☾', { font: '900 120px system-ui', scale: 0.03, color: '#fff3a8' });
+    crescent.position.y = 9;
+    const lbl = makeLabel('🌙 Moon Portal', { scale: 0.026, color: '#cfe0ff' });
+    lbl.position.y = 10.6;
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 4, 0.4, 28), lambert(0xd8d2ff, { flat: true, emissive: 0x2a2a6a }));
+    pad.position.y = 0.2;
+    portal.add(pad, ring, swirl, crescent, lbl);
+    portal.visible = false;
+    this.root.add(portal);
+    this.moonPortal = { group: portal, swirl, appear: 0 };
+    this.animated.push((t) => {
+      swirl.material.uniforms.uTime.value = t;
+      ring.rotation.y = swirl.rotation.y = Math.sin(t * 0.4) * 0.6;
+    });
+
+    // the Moon Sky Arena: a giant moon, stars, clouds below and round signs
+    const arena = new THREE.Group();
+    const bigMoon = new THREE.Mesh(new THREE.SphereGeometry(46, 32, 20), new THREE.MeshBasicMaterial({ color: 0xfff6d0, fog: false }));
+    bigMoon.position.set(ARENA.cx - 90, 150, ARENA.cz - 230);
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(58, 24, 16), new THREE.MeshBasicMaterial({ color: 0xbfc8ff, transparent: true, opacity: 0.18, fog: false, depthWrite: false }));
+    glow.position.copy(bigMoon.position);
+    const starPos = [];
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 700; i++) {
+      const a = rnd() * Math.PI * 2;
+      const e = rnd() * 1.2 - 0.1;
+      const r = 240 + rnd() * 60;
+      starPos.push(ARENA.cx + Math.cos(a) * Math.cos(e) * r, 20 + Math.sin(e) * r, ARENA.cz + Math.sin(a) * Math.cos(e) * r);
+    }
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, fog: false, sizeAttenuation: true }));
+    const clouds = new THREE.Mesh(new THREE.CircleGeometry(170, 48), new THREE.MeshBasicMaterial({ color: 0x8a7ad8, transparent: true, opacity: 0.85, fog: false }));
+    clouds.rotation.x = -Math.PI / 2;
+    clouds.position.set(ARENA.cx, -2, ARENA.cz);
+    arena.add(bigMoon, glow, stars, clouds);
+    for (let k = 0; k < 18; k++) {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(10 + rnd() * 10, 10, 8), lambert(0xb8aaf0, { flat: true, emissive: 0x2a2060 }));
+      const a = rnd() * Math.PI * 2;
+      const r = 40 + rnd() * 110;
+      puff.scale.y = 0.4;
+      puff.position.set(ARENA.cx + Math.cos(a) * r, -1 + rnd() * 2, ARENA.cz + Math.sin(a) * r);
+      arena.add(puff);
+    }
+    const s0 = moon.start;
+    const startLbl = makeLabel('🌙 Moon Sky Arena\nJump across the stones!', { scale: 0.03, color: '#ffffff', bg: 'rgba(40,30,90,0.8)' });
+    startLbl.position.set(s0.x, s0.y + 7, s0.z - 3);
+    arena.add(startLbl);
+    moon.platforms.forEach((pl, k) => {
+      const r = RARITIES[moon.rounds[k]];
+      const l = makeLabel(`Round ${k + 1}\n${r.name}`, { scale: 0.032, colors: ['#ffffff', r.color], bg: 'rgba(30,24,70,0.82)', border: r.color });
+      l.position.set(pl.x, pl.top + 8, pl.z);
+      arena.add(l);
+    });
+    this.root.add(arena);
+    this.moonArena = arena;
+  }
+
+  // found: ids of the buttons this player has lit; portal shows at 5/5
+  setMoonState(state, burst) {
+    if (!this.moonButtons || !state) return;
+    const found = new Set(state.found);
+    for (let i = 0; i < this.moonButtons.length; i++) {
+      const b = this.moonButtons[i];
+      const on = found.has(i);
+      if (on && !b.found && burst) b.pop = 1;
+      b.found = on;
+      b.face.color.setHex(on ? 0x8fc4ff : 0xfff3c4);
+      b.face.emissive.setHex(on ? 0x2a6cff : 0x000000);
+    }
+    const open = found.size >= this.moonButtons.length;
+    const g = this.moonPortal.group;
+    if (open && !g.visible) {
+      g.visible = true;
+      this.moonPortal.appear = burst ? 0.01 : 1;
+    } else if (!open) g.visible = false;
+  }
+
+  updateMoon(dt, camPos) {
+    if (!this.moonButtons) return;
+    for (const b of this.moonButtons) {
+      if (b.pop > 0) {
+        b.pop = Math.max(0, b.pop - dt * 1.6);
+        b.top.position.y = 0.32 + Math.sin(b.pop * Math.PI) * 0.6;
+      }
+    }
+    const mp = this.moonPortal;
+    if (mp.group.visible && mp.appear < 1) {
+      mp.appear = Math.min(1, mp.appear + dt * 0.8);
+      const k = mp.appear;
+      mp.group.scale.setScalar(k < 0.7 ? (k / 0.7) * 1.15 : 1.15 - ((k - 0.7) / 0.3) * 0.15);
+    }
+    if (camPos) this.moonArena.visible = Math.hypot(camPos.x - ARENA.cx, camPos.z - ARENA.cz) < 520;
+  }
+
   update(dt, t, camPos) {
     this.time = t;
+    this.updateMoon(dt, camPos);
     if (camPos && this.propMeshes) this.cullProps(camPos);
     for (const fn of this.animated) fn(t);
     if (this.lavaMat) this.lavaMat.emissiveIntensity = 1.2 + Math.sin(t * 2) * 0.3;
@@ -725,6 +863,55 @@ function boxUV(geo, size) {
     uv[i * 2 + 1] = b / size;
   }
   geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+// A small round button face with a crescent moon on it.
+let moonTex = null;
+function moonButtonTexture() {
+  if (moonTex) return moonTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillStyle = '#e8e2ff';
+  ctx.beginPath();
+  ctx.arc(64, 64, 60, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffd84a';
+  ctx.beginPath();
+  ctx.arc(64, 64, 38, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(80, 52, 32, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#ffe98a';
+  for (const [x, y, r] of [[92, 88, 5], [100, 66, 3], [38, 30, 3]]) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  moonTex = new THREE.CanvasTexture(c);
+  moonTex.colorSpace = THREE.SRGBColorSpace;
+  return moonTex;
+}
+
+function swirlMaterial(hex) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(hex) } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: `uniform float uTime; uniform vec3 uColor; varying vec2 vUv;
+      void main(){ vec2 c = vUv - 0.5; float r = length(c); float a = atan(c.y, c.x);
+        float s = 0.5 + 0.5 * sin(a * 5.0 + r * 22.0 - uTime * 5.0);
+        vec3 col = mix(uColor, vec3(1.0, 0.97, 0.8), s * 0.55);
+        float alpha = smoothstep(0.5, 0.3, r) * (0.6 + 0.35 * s);
+        gl_FragColor = vec4(col, alpha); }`,
+  });
 }
 
 function regionOf(p) {

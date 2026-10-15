@@ -125,12 +125,15 @@ export class LocalPlayer {
     } else {
       this.vel.x = this.vel.z = 0;
     }
+    const yBefore = this.pos.y;
     this.pos.y += this.vel.y * dt;
     // props and structures
     this.world.colliders.resolve(this.pos, P.radius, P.height);
     if (opts.resolveDynamic) opts.resolveDynamic(this.pos);
     // ground (or a base floor / stair tread under the feet)
-    const g = this.world.surfaceHeight(this.pos.x, this.pos.z, this.pos.y);
+    // (measured from the higher of the old and new height, so a fast fall
+    // can't pass through a thin floating platform in one frame)
+    const g = this.world.surfaceHeight(this.pos.x, this.pos.z, Math.max(this.pos.y, yBefore));
     if (this.pos.y <= g) {
       this.pos.y = g;
       if (this.vel.y < 0) this.vel.y = 0;

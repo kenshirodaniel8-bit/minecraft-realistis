@@ -12,6 +12,7 @@ import { CONFIG, WORLD_SEED } from './config.js';
 import { ColliderGrid, boxCollider, circleCollider } from './collision.js';
 
 import { ISLANDS, islandPoint } from './islands.js';
+import { MOON, ARENA_START, ARENA_PLATFORMS, ARENA_STONES } from './moonSecret.js';
 export const CELL = 4;          // terrain grid spacing
 export const STEP_UP = 0.95; // highest ledge you can walk up without jumping
 export const WATER_Y = 0;
@@ -788,6 +789,26 @@ function buildShop(shop, out, y) {
   addBox(out, roof.x, y + 7.4, roof.z, 6.2, 0.35, 3.6, rot, shop.kind === 'swords' ? 'awning_red' : shop.kind === 'items' ? 'awning_blue' : 'awning_gold', false);
 }
 
+// The Moon Sky Arena: floating stone platforms. They are walk-on surfaces
+// (platforms) rather than walls, so a missed jump falls past them.
+function buildMoonArena(out, platforms) {
+  const slab = (p, mat, thick) => {
+    addBox(out, p.x, p.top - thick / 2, p.z, p.half, thick / 2, p.half, 0, mat, false);
+    platforms.push({ x: p.x, z: p.z, hw: p.half, hd: p.half, rot: 0, top: p.top });
+  };
+  slab(ARENA_START, 'moon_stone', 1.6);
+  addBox(out, ARENA_START.x, ARENA_START.top - 2.2, ARENA_START.z, ARENA_START.half * 0.7, 0.8, ARENA_START.half * 0.7, 0, 'moon_rock', false);
+  for (const p of ARENA_PLATFORMS) {
+    slab(p, 'moon_arena', 1.8);
+    // a smaller rocky underside, and a rim the colour of the round's rarity
+    addBox(out, p.x, p.top - 2.6, p.z, p.half * 0.72, 1, p.half * 0.72, 0.4, 'moon_rock', false);
+    for (const [u, v, hw, hd] of [[0, p.half, p.half, 0.25], [0, -p.half, p.half, 0.25], [p.half, 0, 0.25, p.half], [-p.half, 0, 0.25, p.half]]) {
+      addBox(out, p.x + u, p.top + 0.12, p.z + v, hw, 0.14, hd, 0, `moon_rim_${p.round}`, false);
+    }
+  }
+  for (const st of ARENA_STONES) slab(st, 'moon_stone', 1.1);
+}
+
 function buildShipwreck(s, out) {
   const rot = 0.6;
   addBox(out, s.x, s.y + 1.5, s.z, 9, 2, 3.2, rot, 'wood_dark');
@@ -813,6 +834,8 @@ function buildProps(world) {
   for (const p of PORTALS) exclusions.push({ x: p.x, z: p.z, r: 8 });
   for (const p of LAVA_POOLS) exclusions.push({ x: p.x, z: p.z, r: p.r + 3 });
   for (const p of RUINS_PUZZLE.plates) exclusions.push({ x: p.x, z: p.z, r: 6 });
+  for (const b of MOON.buttons) exclusions.push({ x: b.x, z: b.z, r: 4 });
+  exclusions.push({ x: MOON.portal.x, z: MOON.portal.z, r: 8 }, { x: MOON.returnTo.x, z: MOON.returnTo.z, r: 5 });
   exclusions.push({ x: SPOT_BY_ID.volcano_crater.x, z: SPOT_BY_ID.volcano_crater.z, r: 28 });
 
   for (const s of SPOTS) if (s.kind === 'clearing') buildClearing(s, props);
@@ -940,6 +963,14 @@ export function buildWorld() {
   }
   world.lavaPools = LAVA_POOLS;
   world.puzzle = { ...RUINS_PUZZLE, plates: RUINS_PUZZLE.plates.map((p) => ({ ...p, y: world.groundHeight(p.x, p.z) })) };
+  world.moon = {
+    ...MOON,
+    buttons: MOON.buttons.map((b) => ({ ...b, y: world.groundHeight(b.x, b.z) })),
+    portal: { ...MOON.portal, y: world.groundHeight(MOON.portal.x, MOON.portal.z) },
+    returnTo: { ...MOON.returnTo, y: world.groundHeight(MOON.returnTo.x, MOON.returnTo.z) },
+    start: { x: ARENA_START.x, y: ARENA_START.top, z: ARENA_START.z },
+    platforms: ARENA_PLATFORMS,
+  };
 
   // boxes for structures
   const boxes = [];
@@ -955,6 +986,7 @@ export function buildWorld() {
     else if (s.id === 'shipwreck') buildShipwreck(s, boxes);
     else if (s.id === 'broken_arch') buildArch(s, boxes);
   }
+  buildMoonArena(boxes, platforms);
   // stair steps are collision-only entries (their looks are normal boxes)
   world.boxes = boxes.filter((b) => !b.stairStep);
   const stairSteps = boxes.filter((b) => b.stairStep);

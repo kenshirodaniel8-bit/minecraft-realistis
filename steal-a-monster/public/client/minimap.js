@@ -14,7 +14,7 @@ export class MapRenderer {
   constructor(world) {
     this.world = world;
     this.image = this.renderTerrain(-WORLD_EXTENT, -WORLD_EXTENT, WORLD_EXTENT * 2, IMG);
-    this.islands = REGIONS.filter((r) => r.shape.kind === 'island').map((r) => {
+    this.islands = REGIONS.filter((r) => r.shape.kind === 'island' && !r.arena).map((r) => {
       const m = r.shape.r + 30;
       return { region: r, x0: r.shape.cx - m, z0: r.shape.cz - m, size: m * 2, img: this.renderTerrain(r.shape.cx - m, r.shape.cz - m, m * 2, 220) };
     });
