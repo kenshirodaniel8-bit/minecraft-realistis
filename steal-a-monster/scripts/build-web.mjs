@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.resolve(root, process.argv[2] || 'dist-web');
@@ -77,6 +78,9 @@ if (bad.length) {
   console.error('Imports a static site cannot load:\n  ' + bad.join('\n  '));
   process.exit(1);
 }
+// the whole source in one html page for other AIs (source.html)
+execFileSync(process.execPath, [path.join(root, 'scripts', 'build-handoff-html.mjs'), path.join(out, 'source.html')], { stdio: 'ignore' });
+
 let files = 0;
 let bytes = 0;
 const count = (dir) => {

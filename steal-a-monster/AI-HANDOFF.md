@@ -9,7 +9,10 @@
 >
 > **Untuk pemilik game (Bahasa Indonesia):** berikan file ini (atau seluruh
 > folder `steal-a-monster`, atau link GitHub-nya) ke AI lain, lalu tulis
-> permintaanmu seperti biasa. Bilang ke AI itu: *"Baca AI-HANDOFF.md dulu, dan
+> permintaanmu seperti biasa. Untuk AI yang hanya menerima upload file, unduh
+> **satu file HTML berisi seluruh game**:
+> https://kenshirodaniel8-bit.github.io/minecraft-realistis/source.html
+> (selalu versi terbaru; klik kanan → *Save as*), lalu upload ke AI itu. Bilang ke AI itu: *"Baca AI-HANDOFF.md dulu, dan
 > perbarui file itu setelah selesai."*
 
 ---
@@ -87,7 +90,8 @@ npm install
 npm start                      # http://localhost:3000
 npm test                       # 86 unit/integration tests (node --test), must stay green
 npm run test:e2e               # 2 real browsers vs the Node server (Playwright + Chromium)
-node scripts/build-web.mjs     # web build -> dist-web/ (what GitHub Pages serves)
+node scripts/build-web.mjs     # web build -> dist-web/ (what GitHub Pages serves, incl. source.html)
+node scripts/build-handoff-html.mjs   # ONE html file with these docs + all source -> steal-a-monster-for-ai.html
 
 # Online rooms / accounts against the official Firebase emulators (needs Java):
 npx firebase-tools@13 emulators:start --only auth,database --project demo-sam &
@@ -124,6 +128,9 @@ meaningless; to inspect visuals, freeze effects and take screenshots.
 7. Commit messages: plain English, describe what changed for players. Push
    with `git push -u origin claude/steal-a-monster-game-mjo51w`.
 8. Update `README.md` / `TESTING.md` / this file when features change.
+9. If you work from the single HTML file (`source.html`) instead of the
+   repository, give the owner back **complete files with their paths**, so
+   they (or the next AI with GitHub access) can put them in place.
 
 ## 5. Firebase (online rooms and accounts)
 
@@ -148,7 +155,7 @@ meaningless; to inspect visuals, freeze effects and take screenshots.
 
 ## 6. Current state (keep this updated)
 
-**Last updated:** 2026-10-15, after commit "Nadine's account "naddd" is an admin too".
+**Last updated:** 2026-10-15, after adding the one-file HTML for other AIs (`source.html`).
 
 Everything listed in README "How to play" works and is tested. Features, in
 the order the owner asked for them:
@@ -180,6 +187,7 @@ in Firebase), more costumes, rebalancing prices.
 
 ## 7. Change log (newest first — add yours on top)
 
+- 2026-10-15 — `scripts/build-handoff-html.mjs`: the whole source + docs in one HTML file for AIs that only take uploads; published with the site as `source.html`.
 - 2026-10-15 — `naddd` added as admin (Nadine registered with that name). Rules updated; owner must re-publish.
 - 2026-10-15 — Login: typing an email or a non-existent name shows a clear hint to use "Create account" with the game name.
 - 2026-10-15 — Legend Master price 200,000,000 → 11,000,000.
