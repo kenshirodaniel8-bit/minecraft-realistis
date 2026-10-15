@@ -102,7 +102,9 @@ top; tap the hotbar for gadgets. Settings → *Touch controls* can force them on
 3. **Defeat ≠ ownership.** A defeated monster sits dazed for 35 s and everyone
    who helped defeat it gets a **recruitment card** with its stats, perk, income
    and **fee**. The top fighter gets 12 s of priority. Pay the fee (R) to recruit
-   it; if nobody does, it recovers and runs away. A few rare monsters add a
+   it and watch the **capture**: a ring of light lifts it up, it spins into a
+   glowing orb, the orb flies to you and it hops out as your new follower.
+   If nobody recruits it, it recovers and runs away. A few rare monsters add a
    **condition** shown on the card (for example owning a Tier 7 sword, or
    having discovered 20 species).
 4. **Bring it home.** Recruited monsters follow you. Walk into your base (or press

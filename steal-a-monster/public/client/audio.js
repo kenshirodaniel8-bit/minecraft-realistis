@@ -96,6 +96,8 @@ export class Audio {
       case 'jump': this.tone(300, 0.12, { type: 'sine', vol: 0.08, slide: 1.8 }); break;
       case 'coin': this.tone(988, 0.08, { type: 'square', vol: 0.08 }); this.tone(1319, 0.2, { type: 'square', vol: 0.08, delay: 0.07 }); break;
       case 'recruit': [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.22, { type: 'triangle', vol: 0.14, delay: i * 0.09 })); break;
+      case 'capture': this.tone(260, 0.9, { type: 'sine', vol: 0.1, slide: 4 }); this.noise(0.8, { vol: 0.06, freq: 3000, sweep: 3, q: 3 }); break;
+      case 'caught': this.tone(1047, 0.12, { type: 'square', vol: 0.08 }); [784, 1047, 1319, 1568].forEach((f, i) => this.tone(f, 0.25, { type: 'triangle', vol: 0.12, delay: 0.08 + i * 0.07 })); break;
       case 'levelup': [392, 523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.25, { type: 'square', vol: 0.08, delay: i * 0.08 })); break;
       case 'lucky': [784, 988, 1175, 1568, 1976].forEach((f, i) => this.tone(f, 0.18, { type: 'triangle', vol: 0.1, delay: i * 0.06 })); this.noise(0.4, { vol: 0.08, freq: 6000, delay: 0.1 }); break;
       case 'laser': this.tone(110, 0.5, { type: 'sawtooth', vol: 0.08, slide: 2 }); break;

@@ -22,6 +22,7 @@ import { Net } from './net.js';
 import { LocalNet } from './localNet.js';
 import { Audio } from './audio.js';
 import { Effects } from './effects.js';
+import { CaptureFx } from './captureFx.js';
 import { MonstersView, MSTATE } from './monstersView.js';
 import { PlayerAvatar, FX } from './playersView.js';
 import { BasesView } from './basesView.js';
@@ -228,8 +229,24 @@ class App {
     this.worldView = new WorldRenderer(scene, this.world);
     this.worldView.build();
     this.effects = new Effects(scene, this.sceneView.camera);
+    this.capture = new CaptureFx(scene, this.effects, this.audio);
     this.monsters = new MonstersView(scene, this.world, this.effects, this.audio);
     this.monsters.setQuality(this.sceneView.quality);
+    // recruiting plays the capture animation towards whoever recruited it
+    this.monsters.onCapture = (v, pn) => {
+      const av = pn === this.pn ? this.me : this.players.get(pn);
+      if (!av) return;
+      av.catchMonster();
+      this.capture.start({
+        from: v.pos.clone(),
+        height: v.rig.height * v.species.size,
+        color: v.rarity.color,
+        target: () => (av.disposed ? null : av.pos),
+        name: v.species.name,
+        mine: pn === this.pn,
+        onLand: () => av.cheer(),
+      });
+    };
     this.basesView = new BasesView(scene, this.world, this.effects, this.audio);
     this.items = new WorldItems(scene, this.world, this.effects, this.audio);
     this.preview = new MonsterPreview();
@@ -385,7 +402,6 @@ class App {
     n.on('mRecover', (d) => this.monsters.onRecover(d));
     n.on('mGone', (d) => {
       this.monsters.onGone(d);
-      if (d.reason === 'recruited' && d.by === this.pn) this.audio.play('recruit');
     });
     n.on('proj', (d) => {
       this.effects.projectile(d, this.serverNow());
@@ -1113,6 +1129,7 @@ class App {
     this.basesView.update(dt, this.t, near, camPos);
     this.items.update(dt, this.t);
     this.effects.update(dt, serverNow);
+    this.capture.update(dt);
     this.worldView.update(dt, this.t, camPos);
     if (this.preview) this.preview.update(dt);
 

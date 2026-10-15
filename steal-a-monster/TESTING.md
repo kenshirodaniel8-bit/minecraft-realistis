@@ -218,6 +218,14 @@ frame during the event dropped from about 300 ms to about 11 ms.
   card showing its sword condition with the Recruit button disabled.
 - Decorations bought through the real client actions, rendered on the wall
   spots of the base, and the Base panel's decoration list.
+- The capture animation after pressing R (scripted in the single-player build,
+  stepped frame by frame because software rendering is slow): the ring and
+  light beam around the monster, the monster spinning and shrinking, the orb
+  flying in an arc to the player, the sparkles and cheer when it lands, and
+  the new follower appearing next to the player; the Money and the monster
+  were in the profile afterwards.
+- The new swords in the sword shop (icons, stats, special labels, gem prices).
+- The 13 new monsters in the gallery.
 - Tower bases (scripted in the single-player build): walked up the inside
   stairs to floor 2 and floor 3 with the normal controls, the in-page server
   agreed on the height, monsters on floor-2 pads; screenshots from inside each

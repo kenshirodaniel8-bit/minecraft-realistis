@@ -131,6 +131,7 @@ export class PlayerAvatar {
       this.followerRig.st = { pose: 'idle', poseT: 0, speed: 0 };
       this.followerRig.pos = this.pos.clone().add(new THREE.Vector3(2, 0, -2));
       this.followerRig.yaw = 0;
+      this.followerRig.appearAt = Math.max(performance.now(), this.followerHoldUntil || 0);
       this.scene.add(this.followerRig.root);
       this.followerShadow = blobShadow();
       this.followerShadow.scale.setScalar(this.followerRig.width * s);
@@ -253,6 +254,11 @@ export class PlayerAvatar {
       f.pos.y = Math.max(g, fly ? 0 : g) + (fly ? 1.5 : 0);
       f.root.position.copy(f.pos);
       f.root.rotation.y = f.yaw;
+      // pop out with a little bounce (after a capture)
+      const pop = Math.min(1, Math.max(0, (performance.now() - (f.appearAt || 0)) / 350));
+      const bounce = pop < 1 ? 1 + Math.sin(pop * Math.PI) * 0.35 : 1;
+      f.root.scale.setScalar(Math.max(0.001, f.followScale * pop * bounce));
+      f.root.visible = pop > 0;
       const pose = f.st.speed > 1 ? 'move' : stranger ? 'quirk' : 'idle';
       if (pose !== f.st.pose) {
         f.st.pose = pose;
@@ -265,6 +271,7 @@ export class PlayerAvatar {
       }
       animateMonster(f, f.st, dt, t);
       this.followerShadow.position.set(f.pos.x, Math.max(g, 0) + 0.05, f.pos.z);
+      this.followerShadow.visible = f.root.visible;
     }
   }
 
@@ -272,7 +279,25 @@ export class PlayerAvatar {
     this.h.startSwing(combo);
   }
 
+  // a capture started: point at it, and keep the new follower hidden until
+  // the orb lands (cheer), or a few seconds at most
+  catchMonster() {
+    this.h.startCatch();
+    this.followerHoldUntil = performance.now() + 4000;
+    if (this.followerRig) this.followerRig.appearAt = this.followerHoldUntil;
+  }
+
+  cheer() {
+    this.h.startCheer();
+    this.followerHoldUntil = performance.now();
+    if (this.followerRig) {
+      this.followerRig.appearAt = this.followerHoldUntil;
+      this.followerRig.pos.set(this.pos.x, this.pos.y, this.pos.z);
+    }
+  }
+
   dispose() {
+    this.disposed = true;
     this.scene.remove(this.group, this.shadow, this.bar.group);
     if (this.followerRig) this.scene.remove(this.followerRig.root, this.followerShadow);
     if (this.label) disposeLabel(this.label);

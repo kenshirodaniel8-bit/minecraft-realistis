@@ -324,6 +324,15 @@ export class Humanoid {
     this.dodge = 1;
   }
 
+  // capture: point at the monster, then cheer when the orb arrives
+  startCatch() {
+    this.catchT = 0;
+  }
+
+  startCheer() {
+    this.cheerT = 0;
+  }
+
   // anim: ANIM code. speed: horizontal speed. carrying: bool.
   update(dt, anim, speed, carrying, t) {
     const legs = this.legs;
@@ -359,6 +368,22 @@ export class Humanoid {
       leftX = rightX = -2.9;
       leftZ = 0.25;
       rightZ = -0.25;
+    }
+    if (this.catchT !== undefined && this.catchT < 0.75) {
+      this.catchT += dt;
+      const k = Math.min(1, this.catchT / 0.15);
+      rightX = -0.5 - k * 1.1;
+      rightZ = -0.08;
+      leftX = -0.3 * k;
+    }
+    if (this.cheerT !== undefined && this.cheerT < 0.9) {
+      this.cheerT += dt;
+      const w = Math.sin(this.cheerT * 22) * 0.2;
+      leftX = -2.9 + w;
+      rightX = -2.9 - w;
+      leftZ = 0.45;
+      rightZ = -0.45;
+      this.body.position.y += Math.abs(Math.sin(this.cheerT * Math.PI * 2)) * 0.6;
     }
     if (this.swing > 0) {
       const p = 1 - this.swing; // 0 -> 1

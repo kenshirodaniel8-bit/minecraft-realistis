@@ -9,6 +9,7 @@ import { animateMonster } from './animationSystem.js';
 import { InterpBuffer } from './net.js';
 import { makeLabel, disposeLabel } from './labels.js';
 import { QUALITY } from './scene.js';
+import { CAPTURE_SHRINK } from './captureFx.js';
 
 const POSES = ['idle', 'move', 'move', 'windup', 'strike', 'flee', 'stunned', 'defeated', 'sleep', 'recover', 'move', 'quirk'];
 export const MSTATE = { idle: 0, wander: 1, chase: 2, windup: 3, strike: 4, flee: 5, stunned: 6, defeated: 7, sleep: 8, recover: 9, return: 10, quirk: 11 };
@@ -297,10 +298,13 @@ export class MonstersView {
     const v = this.map.get(d.id);
     if (!v) return;
     if (d.reason === 'recruited') {
-      v.gone = { t: 0, dur: 1.8, kind: 'recruited' };
+      // captured: it spins and shrinks into an orb (captureFx does the rest)
+      v.gone = { t: 0, dur: CAPTURE_SHRINK, kind: 'recruited' };
       v.st.pose = 'celebrate';
       v.st.poseT = 0;
-      this.effects.confetti(v.pos.x, v.pos.y + 1.5, v.pos.z, 50);
+      if (v.label) v.label.visible = false;
+      v.bar.group.visible = false;
+      if (this.onCapture) this.onCapture(v, d.by);
     } else {
       v.gone = { t: 0, dur: 0.5, kind: d.reason };
       this.effects.burst(v.pos.x, v.pos.y + 1, v.pos.z, 16, { color: [0xffffff, 0xd8d8ff], speed: 3, up: 0.8, life: 0.6 });
@@ -337,9 +341,12 @@ export class MonstersView {
         v.gone.t += dt;
         const k = v.gone.t / v.gone.dur;
         if (v.gone.kind === 'recruited') {
-          v.rig.root.scale.setScalar(v.species.size * Math.max(0.01, 1 - Math.max(0, k - 0.6) * 2.5));
-          v.rig.root.position.y += dt * (k > 0.6 ? 6 : 0);
-          if (Math.random() < 0.4) this.effects.spawn(v.pos.x, v.pos.y + 1, v.pos.z, { color: [0xff9fd8, 0xffe14a], speed: 3 });
+          // lifted up, spinning faster and faster, shrinking into a point
+          const root = v.rig.root;
+          root.rotation.y += dt * (4 + k * 22);
+          root.position.y = v.pos.y + k * k * v.rig.height * v.species.size * 0.6;
+          root.scale.setScalar(v.species.size * Math.max(0.01, 1 - k ** 1.6));
+          v.shadow.scale.setScalar(Math.max(0.01, 1 - k));
         } else {
           v.rig.root.scale.setScalar(v.species.size * Math.max(0.01, 1 - k));
         }
