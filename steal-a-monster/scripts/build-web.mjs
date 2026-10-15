@@ -54,6 +54,8 @@ for (const page of ['index.html', 'gallery.html']) {
   let html = fs.readFileSync(path.join(root, 'public', page), 'utf8');
   html = html.replace(/<script type="importmap">[\s\S]*?<\/script>/, `<script type="importmap">\n${importMap}\n</script>`);
   if (page === 'index.html') html = html.replace('<script type="module"', '<script>window.SAM_SOLO = true;</script>\n  <script type="module"');
+  // a download link for the one-file source (for other AIs), web build only
+  if (page === 'index.html') html = html.replace('<button id="controls-btn"', '<a href="source.html" download="steal-a-monster-for-ai.html">⬇ Download game for AI</a>\n        <button id="controls-btn"');
   fs.writeFileSync(path.join(out, page), html);
 }
 fs.writeFileSync(path.join(out, '.nojekyll'), '');

@@ -71,6 +71,7 @@ const html = `<!doctype html>
   body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 system-ui, sans-serif; }
   main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
   h1 { margin: 0 0 4px; } h2 { font-size: 16px; margin: 32px 0 8px; padding-top: 12px; border-top: 2px solid var(--line); color: var(--accent); }
+  #dl { font: 700 18px system-ui, sans-serif; padding: 12px 22px; border-radius: 12px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
   .note { background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin: 16px 0; }
   pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; font: 12.5px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre; }
   a { color: var(--accent); } small { color: var(--muted); }
@@ -80,10 +81,11 @@ const html = `<!doctype html>
 <body>
 <main>
 <h1>STEAL A MONSTER — full source for AI</h1>
+<p><button id="dl" type="button">⬇ Download this file</button> <small>(simpan sebagai <b>steal-a-monster-for-ai.html</b>, lalu upload ke AI lain)</small></p>
 <p><small>Version: ${esc(commit)} · ${entries.length} files · ${totalLines.toLocaleString('en-US')} lines</small></p>
 <div class="note">
 <p><b>To the AI reading this:</b> this one file contains the whole game: <code>AI-HANDOFF.md</code> (read it first: what the game is, how it is built and tested, the rules for changing it, the Firebase setup and the current state), the other docs, and every source file of the <code>steal-a-monster/</code> folder as plain text, each under a heading <code>FILE: path</code>. When you change the game, give back complete files with their paths, and update <code>AI-HANDOFF.md</code> (Current state + Change log). Not included: the bundled Firebase SDK (<code>public/vendor/firebase.js</code>, rebuilt with <code>node scripts/build-firebase.mjs</code>), <code>package-lock.json</code> and screenshots.</p>
-<p><b>Untuk pemilik game:</b> upload file ini ke AI lain, lalu tulis permintaanmu. Bilang: <i>"Baca AI-HANDOFF.md di dalam file ini dulu. Setelah selesai, berikan file lengkap yang diubah beserta path-nya, dan perbarui AI-HANDOFF.md."</i> Versi terbaru file ini selalu ada di https://kenshirodaniel8-bit.github.io/minecraft-realistis/source.html</p>
+<p><b>Untuk pemilik game:</b> upload file ini ke AI lain, lalu tulis permintaanmu. Bilang: <i>"Baca AI-HANDOFF.md di dalam file ini dulu. Setelah selesai, berikan file lengkap yang diubah beserta path-nya, dan perbarui AI-HANDOFF.md."</i> Versi terbaru file ini selalu ada di https://kenshirodaniel8-bit.github.io/minecraft-realistis/source.html (tekan tombol <b>⬇ Download this file</b> di atas), atau di layar awal game: <b>⬇ Download game for AI</b>.</p>
 </div>
 <h2>Files</h2>
 <ol>
@@ -91,6 +93,25 @@ ${toc}
 </ol>
 ${body}
 </main>
+<script>
+// saves this very page as a file (works on phones too)
+document.getElementById('dl').onclick = async () => {
+  const name = 'steal-a-monster-for-ai.html';
+  let url;
+  try {
+    const blob = new Blob(['<!doctype html>' + document.documentElement.outerHTML], { type: 'text/html' });
+    url = URL.createObjectURL(blob);
+  } catch {
+    url = location.href;
+  }
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+};
+</script>
 </body>
 </html>
 `;
