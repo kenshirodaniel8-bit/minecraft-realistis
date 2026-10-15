@@ -83,7 +83,7 @@ on one device.
 
 ### The admins: Daniel, Nadine, Prabu and Shallom
 
-The accounts named **Daniel**, **Nadine**, **Prabu** and **Shallom** are the
+The accounts named **Daniel**, **Nadine** (also **naddd**, her account), **Prabu** and **Shallom** are the
 admins of **every** server and room (register them first so nobody else takes
 the names; capitals don't matter). Only the admins get a
 **🛡 Player** button. It lists everyone in the server, which monsters they stole

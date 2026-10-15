@@ -190,7 +190,8 @@ test('only a real account can be the admin: typing "daniel" as a name is not eno
 
 test('four admins: Daniel, Nadine, Prabu and Shallom; admins cannot ban each other', async () => {
   const h = await makeGame({ accounts: true });
-  assert.deepEqual(ADMIN_NAMES, ['daniel', 'nadine', 'prabu', 'shallom']);
+  assert.deepEqual(ADMIN_NAMES, ['daniel', 'nadine', 'naddd', 'prabu', 'shallom']);
+  assert.equal(isAdminName('Naddd'), true);
   for (const n of ['Daniel', 'NADINE', 'prabu', 'Shallom']) assert.equal(isAdminName(n), true, n);
   assert.equal(isAdminName('Danielle'), false);
   const admins = [];

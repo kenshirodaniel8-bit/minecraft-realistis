@@ -2,14 +2,14 @@
 //
 // Names are unique: "Mira Fox", "mira fox" and "Mira   Fox" are the same name
 // (nameKey). Spaces are allowed. The accounts named "daniel", "nadine",
-// "prabu" and "shallom" are the admins of every server (server/services/admin.js).
+// "naddd" (Nadine's account), "prabu" and "shallom" are the admins of every server (server/services/admin.js).
 // The same list is in firebase-database.rules.json (keep them in step).
 //
 // Online (Firebase) accounts sign in with Firebase Authentication using an
 // email made from the name, so the name is also unique there and the
 // database rules can check who is who (firebase-database.rules.json).
 
-export const ADMIN_NAMES = ['daniel', 'nadine', 'prabu', 'shallom'];
+export const ADMIN_NAMES = ['daniel', 'nadine', 'naddd', 'prabu', 'shallom'];
 export const ACCOUNT_EMAIL_DOMAIN = 'players.steal-a-monster.game';
 export const PASSWORD_MIN = 6;
 

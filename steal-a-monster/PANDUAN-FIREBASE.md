@@ -14,7 +14,7 @@ Kamu cukup melakukannya **satu kali**. Gratis, tanpa kartu kredit.
 >    `firebase-database.rules.json`. Aturan lama tidak mengizinkan akun, jadi
 >    tanpa ini login/simpan progres akan ditolak (*permission denied*).
 > 2. **Langkah 3b** — nyalakan login **Email/Password** di *Authentication*.
-> 3. **Langsung buat akun admin** di game: **Daniel**, **Nadine**, **Prabu**
+> 3. **Langsung buat akun admin** di game: **Daniel**, **Nadine** (akun `naddd`), **Prabu**
 >    dan **Shallom** (lihat bagian *Akun dan admin*). Siapa pun yang pertama
 >    membuat akun dengan nama itu menjadi admin semua server, jadi jangan
 >    sampai keduluan orang lain.
@@ -195,7 +195,7 @@ Selesai. Kalau langkah ini terlewat, pemain akan melihat tulisan
   lain. Progres disimpan otomatis kira-kira setiap 10 detik.
 - **Main tanpa akun** tetap bisa untuk main sendiri (progres disimpan di
   browser itu saja). Untuk main online harus login.
-- **Admin:** akun bernama **Daniel**, **Nadine**, **Prabu** dan **Shallom**
+- **Admin:** akun bernama **Daniel**, **Nadine** (akun `naddd`), **Prabu** dan **Shallom**
   adalah admin di **semua** room (huruf besar/kecil tidak berpengaruh). Hanya
   admin yang punya tombol **🛡 Player**, dan admin tidak bisa mem-ban admin
   lain. Di situ muncul semua pemain di
