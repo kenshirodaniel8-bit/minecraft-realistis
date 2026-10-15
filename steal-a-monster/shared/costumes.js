@@ -74,7 +74,7 @@ export const COSTUMES = [
   },
 ];
 
-// The Legend Master (200,000,000): right after buying it you choose its
+// The Legend Master (11,000,000): right after buying it you choose its
 // power. The power decides its colours, its glow, its animations, the
 // effects of its 10 different sword moves (one after the other, then again)
 // and its master power on Z. You can change the power later in the shop.
@@ -115,7 +115,7 @@ COSTUMES.push({
   id: 'legend_master',
   name: 'Legend Master',
   icon: '👑',
-  price: 200_000_000,
+  price: 11_000_000,
   blurb: 'The strongest costume: a glowing armoured hero with a crown and a long cape. Choose its power when you buy it — the power changes its colours, every animation, 10 different sword moves and its master power.',
   style: 'legend',
   choosePower: true,

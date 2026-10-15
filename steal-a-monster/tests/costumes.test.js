@@ -131,18 +131,18 @@ test('other costume powers: fire ring, freezing blizzard, chain lightning, heali
   assert.ok(hug.ok && a.s.hp > 10, 'the hug heals');
 });
 
-test('Legend Master: 200,000,000, choose a power, 1200 damage, the power sets its look and 10 sword moves', async () => {
+test('Legend Master: 11,000,000, choose a power, 1200 damage, the power sets its look and 10 sword moves', async () => {
   const h = await makeGame();
   const a = await h.join(TOKEN_A, 'Alice');
   const b = await h.join(TOKEN_B, 'Bob');
   const legend = COSTUME_BY_ID.legend_master;
-  assert.equal(legend.price, 200_000_000);
+  assert.equal(legend.price, 11_000_000);
   assert.equal(legend.choosePower, true);
   at(h, a, 'costumes');
-  a.profile.money = 200_000_000 - 1;
+  a.profile.money = 11_000_000 - 1;
   assert.equal(a.send('buyCostume', { id: 'legend_master' }).error, 'money');
   assert.equal(a.send('choosePower', { power: 'ice' }).error, 'not_owned');
-  a.profile.money = 200_000_000;
+  a.profile.money = 11_000_000;
   assert.equal(a.send('buyCostume', { id: 'legend_master', reqId: 'l1' }).ok, true);
   assert.equal(a.profile.money, 0);
   // no power chosen yet: Z asks for one

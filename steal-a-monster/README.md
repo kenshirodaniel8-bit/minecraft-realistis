@@ -286,7 +286,7 @@ and gives you its own **idle, attack, dodge and teleport animations** and a
 | ❄️ Frost Knight | 45,000 | Blizzard Nova: 260 to everything around you and freezes them, 5.5 s |
 | ⚡ Thunder Hero | 90,000 | Thunder Strike: 420, lightning that jumps between 3 monsters, 5.5 s |
 | 🐰 Bunny Hoodie | 25,000 | Sweet Hug: 180 around you and heals you 40%, 7 s |
-| 👑 **Legend Master** — glowing armour, a crown, a long cape, glowing lines and three orbs circling you. **Choose its power** right after buying it. | **200,000,000** | Depends on the power, **1,200** damage, 6 s (see below) |
+| 👑 **Legend Master** — glowing armour, a crown, a long cape, glowing lines and three orbs circling you. **Choose its power** right after buying it. | **11,000,000** | Depends on the power, **1,200** damage, 6 s (see below) |
 
 **Legend Master.** Right after you buy it a **"Choose your power"** window
 opens (change it later with *Change power* in the Costume Shop). The power
@@ -591,7 +591,7 @@ Socket.IO server with real socket clients. Requirement → test:
 | — | Moon buttons, portal, arena rounds, the secret monster | `moon.test.js` |
 | — | Five companions follow, pop back, defend you, X calls them | `companions.test.js` |
 | — | Costumes, Spy Sword, 583 master power, +130 power upgrades | `costumes.test.js` |
-| — | Legend Master: 200,000,000, choose a power, 1,200 damage, 10 sword moves in a row | `costumes.test.js` |
+| — | Legend Master: 11,000,000, choose a power, 1,200 damage, 10 sword moves in a row | `costumes.test.js` |
 | — | Accounts, unique names, start over / continue, admins Daniel, Nadine, Prabu and Shallom (Player list, return, ban) | `accounts.test.js` |
 | — | Guards: 420,000,000, upgrades to 24 guards + 4 helicopters, thief alerts, can be beaten | `guards.test.js` |
 
