@@ -261,7 +261,7 @@ export class Game {
     const now = this.now();
     const s = new Session(sid, pn, profile, transport, now);
     s.account = ident ? ident.account : null;
-    s.admin = !!ident && isAdminName(ident.name); // the account named "daniel"
+    s.admin = !!ident && isAdminName(ident.name); // daniel, nadine, prabu or shallom
     s.baseIndex = baseIndex;
     this.players.set(sid, s);
     this.byProfile.set(pid, s);

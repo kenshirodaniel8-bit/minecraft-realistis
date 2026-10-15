@@ -14,9 +14,14 @@ Kamu cukup melakukannya **satu kali**. Gratis, tanpa kartu kredit.
 >    `firebase-database.rules.json`. Aturan lama tidak mengizinkan akun, jadi
 >    tanpa ini login/simpan progres akan ditolak (*permission denied*).
 > 2. **Langkah 3b** — nyalakan login **Email/Password** di *Authentication*.
-> 3. **Langsung buat akun bernama `daniel`** di game (lihat bagian
->    *Akun dan admin "daniel"*). Siapa pun yang pertama membuat akun dengan
->    nama itu menjadi admin semua server, jadi jangan sampai keduluan orang lain.
+> 3. **Langsung buat akun admin** di game: **Daniel**, **Nadine**, **Prabu**
+>    dan **Shallom** (lihat bagian *Akun dan admin*). Siapa pun yang pertama
+>    membuat akun dengan nama itu menjadi admin semua server, jadi jangan
+>    sampai keduluan orang lain.
+>
+> Kalau sebelum ini kamu sudah mencoba *Create account* dan gagal, tidak
+> apa-apa: setelah langkah 1 dan 2 selesai, coba **Create account** lagi
+> dengan nama dan password yang sama.
 
 ## Cara kerjanya (singkat)
 
@@ -63,9 +68,9 @@ Aturan ini mengatur:
 
 - **Akun** (`sam/accounts/...`): hanya pemilik akun yang bisa menulis
   akunnya sendiri, dan nama di akun harus sama dengan nama yang dipakai
-  untuk login (jadi tidak ada yang bisa menyamar jadi "daniel").
+  untuk login (jadi tidak ada yang bisa menyamar jadi admin).
 - **Ban dan pengembalian monster** (`sam/bans`, `sam/returns`): hanya akun
-  `daniel` yang bisa menulisnya.
+  admin (Daniel, Nadine, Prabu, Shallom) yang bisa menulisnya.
 - **Room** (`sam/rooms/KODE`): harus login; pemain yang di-ban tidak bisa
   membuat atau masuk room; tidak ada yang bisa mengirim pesan atas nama orang
   lain; hanya pembuat room yang bisa menutupnya. Daftar room tidak bisa dibaca.
@@ -81,7 +86,8 @@ menjadi `mira.fox@players.steal-a-monster.game`. Pemain cukup mengisi **nama**
 dan **password** (minimal 6 karakter).
 
 1. Di menu kiri pilih **Build → Authentication**.
-2. Klik **Get started** (kalau muncul).
+2. Klik **Get started**. **Wajib** kalau tombol ini muncul: tanpa ini semua
+   pendaftaran ditolak (error `CONFIGURATION_NOT_FOUND`).
 3. Buka tab **Sign-in method**.
 4. Di daftar *Native providers* pilih **Email/Password**.
 5. Nyalakan tombol **Enable** yang pertama (Email/Password). Yang kedua,
@@ -172,7 +178,7 @@ Selesai. Kalau langkah ini terlewat, pemain akan melihat tulisan
 
 ---
 
-## Akun dan admin "daniel"
+## Akun dan admin
 
 - **Nama tidak boleh sama.** "Mira Fox", "mira fox" dan "Mira   Fox"
   dianggap nama yang sama. Spasi boleh. Nama 2–16 huruf/angka/spasi/`_`/`-`.
@@ -182,8 +188,10 @@ Selesai. Kalau langkah ini terlewat, pemain akan melihat tulisan
   lain. Progres disimpan otomatis kira-kira setiap 10 detik.
 - **Main tanpa akun** tetap bisa untuk main sendiri (progres disimpan di
   browser itu saja). Untuk main online harus login.
-- **Admin `daniel`:** akun bernama `daniel` adalah admin di **semua** room.
-  Hanya daniel yang punya tombol **🛡 Player**. Di situ muncul semua pemain di
+- **Admin:** akun bernama **Daniel**, **Nadine**, **Prabu** dan **Shallom**
+  adalah admin di **semua** room (huruf besar/kecil tidak berpengaruh). Hanya
+  admin yang punya tombol **🛡 Player**, dan admin tidak bisa mem-ban admin
+  lain. Di situ muncul semua pemain di
   room itu, monster apa yang sudah mereka curi dan dari siapa, dengan tombol:
   - **↩ Return to …** — monster curian dikembalikan ke pemiliknya (langsung
     masuk base kalau pemiliknya sedang online; kalau tidak, monsternya
@@ -235,7 +243,7 @@ Selesai. Kalau langkah ini terlewat, pemain akan melihat tulisan
 | *"Accounts are not switched on yet…"* | Login Email/Password belum dinyalakan (Langkah 3b). |
 | *"The account database refused this…"* atau *permission denied* saat login/simpan | Rules baru (Langkah 3) belum di-**Publish**. |
 | *"That name is already taken"* | Nama itu sudah dipakai orang lain (huruf besar/kecil dan spasi tidak membedakan). Pilih nama lain. |
-| *"This account is banned from online rooms."* | Akun itu di-ban oleh daniel. Lihat cara membatalkan ban di atas. |
+| *"This account is banned from online rooms."* | Akun itu di-ban oleh admin. Lihat cara membatalkan ban di atas. |
 | *"Not set up yet…"* di bawah tombol online | Config belum masuk, atau websitenya belum diperbarui. Cek tab Actions sudah hijau, lalu tekan Ctrl + F5. |
 | *"Room K7QZP was not found"* | Kodenya salah, atau pembuat room sudah menutup game-nya. Minta link baru. |
 | *"Your friend has a different version"* | Salah satu masih memakai versi lama. Kalian berdua tekan Ctrl + F5. |

@@ -12,7 +12,7 @@ There was no real GPU, phone, Safari or Firefox available.
 ## 1. Automated tests — executed, all passing
 
 ```bash
-npm test          # 85 tests, ~6 s, also runs in CI (.github/workflows/ci.yml)
+npm test          # 86 tests, ~6 s, also runs in CI (.github/workflows/ci.yml)
 ```
 
 They run the real server code: the `Game` class with a controllable clock and an
@@ -34,7 +34,7 @@ Socket.IO server with real socket clients.
 | `moon.test.js` | 3 | the five moon buttons count once each (1/5 … 5/5), are saved and repaired on load; the portal only opens at 5/5; the arena is not a travel destination; falling sends you back to the last platform; rounds 1–4 call an Uncommon, Rare, Epic and Legendary cute monster that only its challenger can hit or be hit by, that never leaves its platform and is never recruitable; winning gives the Secret Lunamochi once (later wins pay Money); a full base blocks the portal; going home ends the run |
 | `companions.test.js` | 3 | up to five companions (the sixth is refused), visible to everyone; they pop back when more than 9 feet away; a monster that bites you is attacked and defeated by the team, with the damage credited to you; X calls them (with a cooldown); your team stays with you at home while a fresh recruit moves into the base |
 | `costumes.test.js` | 4 | the Black Spy costs exactly 150,000 (a retried request is not charged twice), gives and equips the Spy Sword (which the sword shop does not sell), is visible to others and saved; Z deals exactly 583 to monsters in front only, then cools down; Upgrade your power adds +130 per level (583 → 843 at level 2); the other costumes' fire ring, freezing blizzard, chain lightning and healing hug; the Legend Master costs exactly 200,000,000, Z is refused until a power is chosen, an unknown power is refused, everyone sees the chosen power, Z deals exactly 1,200 to every monster the lightning chain reaches, changing to Ice freezes them, the power is saved (a forged one is dropped), and the sword moves go 1, 2 … 10 and start again, the same for the attacker and the people watching |
-| `accounts.test.js` | 8 | creating an account, logging in with the password or the remember key, wrong passwords; names are unique ignoring case and extra spaces, spaces allowed; an account name can't be used without logging in, nor twice at once; the same profile on another device; "start over" wipes the account's progress and its monsters leave the ownership ledger; an online (Firebase) profile is adopted as the truth and saved back through the account saver; "daniel" is the admin: the Player list shows who stole what from whom, returning a stolen monster (owner online or offline, delivered on the next join), banning (kicked, can't come back, saved), the admin can't ban himself and normal players can't use any of it |
+| `accounts.test.js` | 9 | creating an account, logging in with the password or the remember key, wrong passwords; names are unique ignoring case and extra spaces, spaces allowed; an account name can't be used without logging in, nor twice at once; the same profile on another device; "start over" wipes the account's progress and its monsters leave the ownership ledger; an online (Firebase) profile is adopted as the truth and saved back through the account saver; "daniel" is the admin: the Player list shows who stole what from whom, returning a stolen monster (owner online or offline, delivered on the next join), banning (kicked, can't come back, saved), the admin can't ban himself and normal players can't use any of it; Daniel, Nadine, Prabu and Shallom are all admins (any capitals, not "Danielle") and can't ban each other |
 | `guards.test.js` | 4 | guards cost 420,000,000 and only at your own base (a retried request is not charged twice), upgrades up to level 10 = 24 guards and 4 helicopters with much stronger swords, visible to everyone; the guards leave the owner alone and a passer-by outside, attack a thief who walks in, tag him (THIEF) and tell the owner (and the thief); a thief can knock out every guard, the owner is told, and they get back on duty later; guards stay on their floor; a helicopter shoots a hostile thief near the tower and stops once every guard is down |
 | `multiplayer.test.js` | 5 | HTTP serves the game, shared modules, three.js and Socket.IO; two clients get different bases and see each other move; LUCKY LUCKY is identical for both; malformed/forged socket messages are rejected; every message the game handles is reachable over the socket |
 
@@ -190,7 +190,7 @@ ROOM E2E PASSED
 The security rules are checked directly against the emulators by
 `node scripts/rules-check.mjs` (all PASS): a player writes only their own
 account and only under the name they logged in with (nobody else can take
-"daniel"), no extra fields; only "daniel" can ban or send returns; a banned
+"daniel"), no extra fields; only the admins (daniel and nadine were checked) can ban, unban or send returns; a banned
 player can't open or join a room; nobody can join, send or be written to as
 someone else; only the host closes the room; the list of rooms can't be read.
 

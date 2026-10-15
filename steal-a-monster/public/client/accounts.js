@@ -68,13 +68,14 @@ export class OnlineAccounts {
     return this.fb.ref(this.db, path);
   }
 
-  async loadName() {
+  // typed: the name as the player typed it when logging in (keeps its capitals)
+  async loadName(typed = null) {
     const snap = await this.fb.get(this.ref(`sam/accounts/${this.uid}/name`));
     this.name = snap.exists() ? snap.val() : null;
     // (an account whose name write failed: take it from the log-in email)
     if (!this.name && this.auth.currentUser?.email) {
       const local = this.auth.currentUser.email.split('@')[0].replace(/\./g, ' ');
-      this.name = cleanName(local);
+      this.name = typed && nameKey(typed) === nameKey(local) ? typed : cleanName(local);
       if (this.name) await this.fb.update(this.ref(`sam/accounts/${this.uid}`), { name: this.name, at: Date.now() }).catch(() => {});
     }
   }
@@ -85,6 +86,22 @@ export class OnlineAccounts {
     if (String(password || '').length < PASSWORD_MIN) throw new Error(`Use a password of at least ${PASSWORD_MIN} characters.`);
     try {
       await this.fb.createUserWithEmailAndPassword(this.auth, accountEmail(name), password);
+    } catch (e) {
+      // our own earlier try that stopped half way (e.g. before the database
+      // rules were published): the same name and password just log in
+      if (!String(e?.code || '').includes('email-already-in-use')) throw new Error(friendlyAuthError(e));
+      try {
+        await this.fb.signInWithEmailAndPassword(this.auth, accountEmail(name), password);
+      } catch {
+        throw new Error(friendlyAuthError(e));
+      }
+      const had = await this.fb.get(this.ref(`sam/accounts/${this.uid}/name`)).catch(() => null);
+      if (had?.exists()) {
+        this.name = had.val();
+        return this.name;
+      }
+    }
+    try {
       await this.fb.update(this.ref(`sam/accounts/${this.uid}`), { name, at: Date.now() });
     } catch (e) {
       throw new Error(friendlyAuthError(e));
@@ -98,7 +115,7 @@ export class OnlineAccounts {
     if (!name) throw new Error('Type your account name.');
     try {
       await this.fb.signInWithEmailAndPassword(this.auth, accountEmail(name), String(password || ''));
-      await this.loadName();
+      await this.loadName(name);
     } catch (e) {
       throw new Error(friendlyAuthError(e));
     }
@@ -198,7 +215,7 @@ export class OnlineAccounts {
     return this.tab;
   }
 
-  // ---- admin (the database rules only allow these for the "daniel" account)
+  // ---- admin (the database rules only allow these for the admin accounts)
 
   async ban(account, name) {
     if (!account) return;

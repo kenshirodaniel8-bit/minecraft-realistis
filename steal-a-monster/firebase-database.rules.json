@@ -27,7 +27,7 @@
       "bans": {
         ".read": "auth != null",
         "$uid": {
-          ".write": "auth != null && auth.token.email === 'daniel@players.steal-a-monster.game'",
+          ".write": "auth != null && (auth.token.email === 'daniel@players.steal-a-monster.game' || auth.token.email === 'nadine@players.steal-a-monster.game' || auth.token.email === 'prabu@players.steal-a-monster.game' || auth.token.email === 'shallom@players.steal-a-monster.game')",
           ".validate": "newData.hasChildren(['name', 'at'])"
         }
       },
@@ -35,7 +35,7 @@
         "$uid": {
           ".read": "auth != null && auth.uid === $uid",
           "$rid": {
-            ".write": "auth != null && ((auth.uid === $uid && !newData.exists()) || auth.token.email === 'daniel@players.steal-a-monster.game')",
+            ".write": "auth != null && ((auth.uid === $uid && !newData.exists()) || (auth.token.email === 'daniel@players.steal-a-monster.game' || auth.token.email === 'nadine@players.steal-a-monster.game' || auth.token.email === 'prabu@players.steal-a-monster.game' || auth.token.email === 'shallom@players.steal-a-monster.game'))",
             ".validate": "newData.child('j').isString() && newData.child('j').val().length < 20000"
           }
         }

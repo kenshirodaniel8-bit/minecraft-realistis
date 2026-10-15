@@ -81,10 +81,11 @@ on one device.
   (scrypt password hashes). The browser keeps a "remember me" key instead of the
   password.
 
-### The admin: "daniel"
+### The admins: Daniel, Nadine, Prabu and Shallom
 
-The account named **daniel** is the admin of **every** server and room
-(register it first so nobody else takes the name). Only daniel gets a
+The accounts named **Daniel**, **Nadine**, **Prabu** and **Shallom** are the
+admins of **every** server and room (register them first so nobody else takes
+the names; capitals don't matter). Only the admins get a
 **🛡 Player** button. It lists everyone in the server, which monsters they stole
 and **from whom**, with two buttons:
 
@@ -95,7 +96,9 @@ and **from whom**, with two buttons:
   can't come back (Node server: `DATA_DIR/bans.json`; online: `sam/bans/<uid>`).
 
 To lift a ban, delete the player's entry from `bans.json` (Node) or from
-`sam/bans` in the Firebase console (online). The admin can't ban themselves.
+`sam/bans` in the Firebase console (online). An admin can't ban themselves or another admin. The list is `ADMIN_NAMES` in
+`shared/names.js` and the same four emails in `firebase-database.rules.json`
+(change both together).
 
 ## Quick start (multiplayer server)
 
@@ -427,7 +430,7 @@ steal-a-monster/
       puzzles.js               Ancient Ruins plate puzzle and sealed vault
       costumes.js              Costume Shop, Legend Master powers, master power on Z
       guards.js                base guards and helicopters (AI, alerts, knock-outs)
-      admin.js                 the admin "daniel": Player list, return, ban
+      admin.js                 the admins (Daniel, Nadine, Prabu, Shallom): Player list, return, ban
   shared/                      identical on server and client
     config.js                  every gameplay number in one place
     regions.js, world.js       deterministic world: terrain, props, bases, caves, colliders
@@ -589,7 +592,7 @@ Socket.IO server with real socket clients. Requirement → test:
 | — | Five companions follow, pop back, defend you, X calls them | `companions.test.js` |
 | — | Costumes, Spy Sword, 583 master power, +130 power upgrades | `costumes.test.js` |
 | — | Legend Master: 200,000,000, choose a power, 1,200 damage, 10 sword moves in a row | `costumes.test.js` |
-| — | Accounts, unique names, start over / continue, admin "daniel" (Player list, return, ban) | `accounts.test.js` |
+| — | Accounts, unique names, start over / continue, admins Daniel, Nadine, Prabu and Shallom (Player list, return, ban) | `accounts.test.js` |
 | — | Guards: 420,000,000, upgrades to 24 guards + 4 helicopters, thief alerts, can be beaten | `guards.test.js` |
 
 See **[TESTING.md](TESTING.md)** for what was verified by hand in a browser and

@@ -1,4 +1,5 @@
-// The admin: the account named "daniel" (shared/names.js) runs every server.
+// The admins: the accounts named "daniel", "nadine", "prabu" and "shallom"
+// (shared/names.js) run every server.
 // In any server he joins he gets the "Player" button: everyone in the server,
 // the monsters they stole and from whom, and two actions:
 //   return - the stolen monster goes back to its owner (now if they are in
@@ -77,7 +78,7 @@ export class Admin {
     const game = this.game;
     const target = [...game.players.values()].find((o) => o.pn === p.pn);
     if (!target) return fail('gone', 'That player left.');
-    if (target === s || target.admin) return fail('no', 'You cannot ban the admin.');
+    if (target === s || target.admin) return fail('no', 'You cannot ban an admin.');
     const ban = { id: target.id, account: target.account, name: target.profile.name, by: s.profile.name, at: game.now() };
     game.addBan(ban);
     game.broadcast('announce', { text: `🛡 ${target.profile.name} was banned by the admin.`, kind: 'theft' });

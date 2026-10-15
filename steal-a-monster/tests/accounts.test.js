@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { makeGame, TOKEN_A, TOKEN_B, TOKEN_C, FIELD } from './helpers.js';
 import { CONFIG } from '../shared/config.js';
 import { MemoryStore } from '../server/storage.js';
-import { accountEmail, nameKey, cleanName } from '../shared/names.js';
+import { accountEmail, nameKey, cleanName, isAdminName, ADMIN_NAMES } from '../shared/names.js';
 import { accountProfileId } from '../server/services/playerData.js';
 
 const acct = (name, password, create = false) => ({ account: { name, password, create } });
@@ -186,4 +186,22 @@ test('only a real account can be the admin: typing "daniel" as a name is not eno
   h.game.leave(fake.sid);
   await h.join('test-token-daniel-0004', 'x', acct('Daniel', 'admin12', true));
   assert.equal((await h.join(TOKEN_B, 'daniel')).res.error, 'name_taken');
+});
+
+test('four admins: Daniel, Nadine, Prabu and Shallom; admins cannot ban each other', async () => {
+  const h = await makeGame({ accounts: true });
+  assert.deepEqual(ADMIN_NAMES, ['daniel', 'nadine', 'prabu', 'shallom']);
+  for (const n of ['Daniel', 'NADINE', 'prabu', 'Shallom']) assert.equal(isAdminName(n), true, n);
+  assert.equal(isAdminName('Danielle'), false);
+  const admins = [];
+  for (const [i, n] of ['Daniel', 'Nadine', 'Prabu', 'Shallom'].entries()) {
+    const c = await h.join(`test-token-admin-000${i}`, 'x', acct(n, 'admin12', true));
+    assert.equal(c.res.admin, true, `${n} is an admin`);
+    assert.equal(c.send('adminPlayers').ok, true, `${n} has the Player list`);
+    admins.push(c);
+  }
+  const bob = await h.join(TOKEN_B, 'Bob');
+  assert.equal(bob.res.admin, false);
+  assert.equal(admins[1].send('adminBan', { pn: admins[0].s.pn }).error, 'no', 'Nadine cannot ban Daniel');
+  assert.equal(admins[3].send('adminBan', { pn: bob.s.pn }).ok, true, 'Shallom bans Bob');
 });

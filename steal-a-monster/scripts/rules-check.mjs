@@ -1,13 +1,13 @@
 // Checks firebase-database.rules.json against the local Firebase emulators
 // (Auth on 127.0.0.1:9099, Realtime Database on 127.0.0.1:9000, started with
 // the rules file; see scripts/room-e2e.mjs): accounts can only be written by
-// their owner and only under their own name, only the admin "daniel" can ban
+// their owner and only under their own name, only the admins (daniel, nadine, prabu, shallom) can ban
 // or send returns, banned players can't join or open rooms, nobody can join
 // or talk as someone else, and only the host can close a room.
 //   node scripts/rules-check.mjs
 import { initializeApp } from 'firebase/app';
 import { getDatabase, connectDatabaseEmulator, ref, set, get, update, remove, push } from 'firebase/database';
-import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 const cfg = { apiKey: 'fake-key', authDomain: 'demo-sam.firebaseapp.com', projectId: 'demo-sam', databaseURL: 'http://127.0.0.1:9000?ns=demo-sam-default-rtdb' };
 let n = 0;
 async function user(email, password = 'secret123') {
@@ -16,7 +16,7 @@ async function user(email, password = 'secret123') {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   const db = getDatabase(app);
   connectDatabaseEmulator(db, '127.0.0.1', 9000);
-  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  const cred = await createUserWithEmailAndPassword(auth, email, password).catch(() => signInWithEmailAndPassword(auth, email, password));
   return { uid: cred.user.uid, db, r: (p) => ref(db, p) };
 }
 const results = [];
@@ -27,6 +27,7 @@ async function expect(label, ok, fn) {
 }
 const stamp = Date.now().toString(36);
 const d = await user('daniel@players.steal-a-monster.game', 'admin-pass-1').catch(async () => null);
+const nad = await user('nadine@players.steal-a-monster.game', 'admin-pass-1');
 const bob = await user(`bob${stamp}@players.steal-a-monster.game`);
 const eve = await user(`eve${stamp}@players.steal-a-monster.game`);
 await expect('bob writes his own account name', true, () => set(bob.r(`sam/accounts/${bob.uid}`), { name: `Bob${stamp}`, at: 1 }));
@@ -43,6 +44,11 @@ if (d) {
   await expect('bob reads his returns', true, () => get(bob.r(`sam/returns/${bob.uid}`)));
   await expect('eve cannot read bob\'s returns', false, () => get(eve.r(`sam/returns/${bob.uid}`)));
 } else results.push('SKIP daniel already registered in this emulator run');
+await expect('nadine (an admin too) sends a return to bob', true, () => push(nad.r(`sam/returns/${bob.uid}`), { j: '{"id":"m2"}' }));
+await expect('nadine bans and unbans a player', true, async () => {
+  await set(nad.r(`sam/bans/${bob.uid}`), { name: 'Bob', at: 1 });
+  await remove(nad.r(`sam/bans/${bob.uid}`));
+});
 const code = 'K7QZP';
 await expect('bob opens a room', true, () => set(bob.r(`sam/rooms/${code}/host`), { v: 1, at: 1, uid: bob.uid }));
 await expect('eve cannot take over bob\'s room', false, () => set(eve.r(`sam/rooms/${code}/host`), { v: 1, at: 1, uid: eve.uid }));
