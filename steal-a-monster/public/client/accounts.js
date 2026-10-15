@@ -19,6 +19,10 @@ import { firebase, firebaseConfig } from './fb.js';
 
 const SAVE_EVERY_MS = 10000; // account saves are batched (they go over the internet)
 
+// people sometimes type an email (or add users by email in the Firebase
+// console): game accounts use the game name, made with "Create account"
+const EMAIL_HINT = 'Type your game name (for example Daniel), not an email. Make the account here with "Create account" — users added by email in the Firebase console are not game accounts.';
+
 function friendlyAuthError(e) {
   const code = e?.code || '';
   if (code.includes('email-already-in-use')) return 'That name is already taken. Choose another one.';
@@ -81,6 +85,7 @@ export class OnlineAccounts {
   }
 
   async register(nameIn, password) {
+    if (String(nameIn).includes('@')) throw new Error(EMAIL_HINT);
     const name = cleanName(nameIn);
     if (!name) throw new Error('A name needs 2–16 letters, numbers or spaces.');
     if (String(password || '').length < PASSWORD_MIN) throw new Error(`Use a password of at least ${PASSWORD_MIN} characters.`);
@@ -111,13 +116,15 @@ export class OnlineAccounts {
   }
 
   async login(nameIn, password) {
+    if (String(nameIn).includes('@')) throw new Error(EMAIL_HINT);
     const name = cleanName(nameIn);
     if (!name) throw new Error('Type your account name.');
     try {
       await this.fb.signInWithEmailAndPassword(this.auth, accountEmail(name), String(password || ''));
       await this.loadName(name);
     } catch (e) {
-      throw new Error(friendlyAuthError(e));
+      const msg = friendlyAuthError(e);
+      throw new Error(msg === 'Wrong name or password.' ? 'Wrong name or password. New here? Use "Create account" first (with your game name, e.g. Daniel).' : msg);
     }
     return this.name;
   }
@@ -270,6 +277,7 @@ export class ServerAccounts {
 
   // checked by the server when joining (hello.account)
   async register(nameIn, password) {
+    if (String(nameIn).includes('@')) throw new Error(EMAIL_HINT);
     const name = cleanName(nameIn);
     if (!name) throw new Error('A name needs 2–16 letters, numbers or spaces.');
     if (String(password || '').length < PASSWORD_MIN) throw new Error(`Use a password of at least ${PASSWORD_MIN} characters.`);
@@ -279,6 +287,7 @@ export class ServerAccounts {
   }
 
   async login(nameIn, password) {
+    if (String(nameIn).includes('@')) throw new Error(EMAIL_HINT);
     const name = cleanName(nameIn);
     if (!name) throw new Error('Type your account name.');
     this.name = name;

@@ -94,6 +94,13 @@ dan **password** (minimal 6 karakter).
    *Email link (passwordless sign-in)*, **biarkan mati**.
 6. Klik **Save**.
 
+> **Jangan menambah pemain lewat tombol *Add user* di Firebase Console**
+> (misalnya dengan email Gmail). Akun game dibuat **di dalam game** lewat
+> **Create account** dengan nama game (misalnya `Daniel`). Di tab *Users*
+> akun itu akan muncul sebagai `daniel@players.steal-a-monster.game`. User
+> yang ditambah dengan email biasa bukan akun game dan tidak bisa dipakai
+> login di game (boleh dihapus).
+
 Selesai. Kalau langkah ini terlewat, pemain akan melihat tulisan
 *"Accounts are not switched on yet…"* saat mencoba membuat akun.
 
