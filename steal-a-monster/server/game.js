@@ -15,9 +15,10 @@ import { SWORD_BY_ID, SWORD_INDEX } from '#shared/weapons.js';
 import { SPECIES_INDEX } from '#shared/monsters.js';
 import { COSMETIC_INDEX } from '#shared/lucky.js';
 import { isObj, finite, int, sanitizeName, sanitizeText, color as isColor, fail } from './validate.js';
+import { nameKey, isAdminName } from '#shared/names.js';
 import { RateLimiter } from './rateLimit.js';
 import {
-  profileIdFromToken, newProfile, migrateProfile, sanitizeProfile, computePerks, playerMaxHp,
+  profileIdFromToken, accountProfileId, newProfile, migrateProfile, sanitizeProfile, computePerks, playerMaxHp,
   OwnershipLedger, xpProgress, levelForXp,
 } from './services/playerData.js';
 import { Economy } from './services/economy.js';
@@ -35,6 +36,7 @@ import { Puzzles } from './services/puzzles.js';
 import { MoonSecret } from './services/moonSecret.js';
 import { Companions } from './services/companions.js';
 import { CostumeShop } from './services/costumes.js';
+import { Admin } from './services/admin.js';
 
 export { fail };
 
@@ -136,6 +138,11 @@ export class Game {
     this.moonSecret = new MoonSecret(this);
     this.companions = new Companions(this);
     this.costumes = new CostumeShop(this);
+    this.admin = new Admin(this);
+    this.accounts = opts.accounts || null;     // server/accounts.js (Node server only)
+    this.accountSaver = opts.accountSaver || null; // saves online accounts (browser rooms)
+    this.bans = new Map();                     // profile id -> ban
+    this.pendingReturns = new Map();           // monster id -> admin return waiting for its owner
 
     this.handlers = {
       move: (s, p) => this.handleMove(s, p),
@@ -151,6 +158,9 @@ export class Game {
       equipCostume: (s, p) => this.costumes.handleEquip(s, p),
       buyPower: (s, p) => this.costumes.handleBuyPower(s, p),
       power: (s, p) => this.costumes.handlePower(s, p),
+      adminPlayers: (s) => this.admin.handlePlayers(s),
+      adminReturn: (s, p) => this.admin.handleReturn(s, p),
+      adminBan: (s, p) => this.admin.handleBan(s, p),
       release: (s, p) => this.bases.handleRelease(s, p),
       collect: (s) => this.bases.handleCollect(s),
       buyDecor: (s, p) => this.bases.handleBuyDecor(s, p),
@@ -178,19 +188,38 @@ export class Game {
 
   async init() {
     await this.ledger.load();
+    if (this.store.loadBans) {
+      for (const b of Object.values((await this.store.loadBans()) || {})) if (b && b.id) this.bans.set(b.id, b);
+    }
+    if (this.accounts) await this.accounts.load();
     this.events.init();
     this.expansion.update(true);
   }
 
   // ---------------------------------------------------------------- sessions
 
-  async join(sid, hello, transport) {
+  // trusted: an identity the caller has already checked (an online
+  // account signed in with Firebase, see client/rooms.js and localNet.js):
+  //   { account, name, profile (saved progress or null), external: true }
+  // Without it, hello.account logs in to an account of this server
+  // (server/accounts.js), or hello.token alone plays without an account.
+  async join(sid, hello, transport, trusted = null) {
     if (!isObj(hello)) return fail('bad_hello', 'Invalid hello');
     if (hello.protocol !== PROTOCOL_VERSION) return fail('protocol', 'The game was updated. Please refresh the page.');
-    const pid = profileIdFromToken(hello.token);
-    if (!pid) return fail('bad_token', 'Invalid player token');
     if (this.players.has(sid)) return fail('already_joined');
-    const name = sanitizeName(hello.name) || 'Player';
+    let ident = trusted;
+    if (!ident && isObj(hello.account)) {
+      if (!this.accounts) return fail('no_accounts', 'This server has no accounts.');
+      const r = await this.accounts.verify(hello.account, hello.token);
+      if (!r.ok) return r;
+      ident = r.ident;
+    }
+    const pid = ident ? ident.pid || accountProfileId(ident.account) : profileIdFromToken(hello.token);
+    if (!pid) return fail('bad_token', 'Invalid player token');
+    const name = ident ? ident.name : sanitizeName(hello.name) || 'Player';
+    // names are unique: account names belong to their account
+    if (!ident && this.accounts?.taken(name)) return fail('name_taken', `"${name}" is the name of an account. Log in, or choose another name.`);
+    if (this.isBanned(pid)) return fail('banned', 'You are banned from this server.');
     if (this.joining.has(pid)) {
       try { await this.joining.get(pid); } catch { /* ignore */ }
     }
@@ -199,7 +228,7 @@ export class Game {
     if (this.players.size >= CONFIG.maxPlayers) return fail('full', 'The server is full (12 players). Try again soon.');
 
     let loaded;
-    const p = this.loadOrCreate(pid, name);
+    const p = this.loadOrCreate(pid, name, ident, hello.fresh === true);
     this.joining.set(pid, p);
     try {
       loaded = await p;
@@ -211,8 +240,15 @@ export class Game {
     }
     if (transport.closed) return fail('gone');
     if (this.players.size >= CONFIG.maxPlayers) return fail('full', 'The server is full.');
+    for (const o of this.players.values()) {
+      if (o.id !== pid && nameKey(o.profile.name) === nameKey(name)) {
+        return fail('name_taken', `Someone here is already called "${o.profile.name}". Choose another name.`);
+      }
+    }
     const { profile, isNew } = loaded;
     if (!isNew && name && name !== profile.name) profile.name = name;
+    if (ident) profile.account = ident.account;
+    this.applyPendingReturns(profile);
     if (isColor(hello.color)) profile.color = hello.color;
 
     const baseIndex = this.bases.assign(pid);
@@ -220,6 +256,8 @@ export class Game {
     const pn = this.pnFree.length ? this.pnFree.pop() : this.pnNext++;
     const now = this.now();
     const s = new Session(sid, pn, profile, transport, now);
+    s.account = ident ? ident.account : null;
+    s.admin = !!ident && isAdminName(ident.name); // the account named "daniel"
     s.baseIndex = baseIndex;
     this.players.set(sid, s);
     this.byProfile.set(pid, s);
@@ -243,6 +281,8 @@ export class Game {
       dayEpoch: this.dayEpoch,
       dayLength: CONFIG.dayLengthMs,
       profile: this.clientProfile(s),
+      admin: s.admin,
+      remember: ident?.remember || null,
       pos: { ...s.pos, yaw: s.yaw },
       teleportSeq: s.teleportSeq,
       baseIndex,
@@ -263,9 +303,28 @@ export class Game {
     return welcome;
   }
 
-  async loadOrCreate(pid, name) {
+  async loadOrCreate(pid, name, ident = null, fresh = false) {
+    const now = this.now();
+    // starting over: a brand-new profile (the old monsters are let go)
+    if (fresh) {
+      this.profileCache.delete(pid);
+      this.ledger.removeOwner(pid);
+      const profile = newProfile(pid, name, now);
+      if (ident) profile.account = ident.account;
+      this.profileCache.set(pid, profile);
+      if (!ident?.external) await this.store.saveProfile(pid, profile);
+      return { profile, isNew: true };
+    }
     const cached = this.profileCache.get(pid);
     if (cached) return { profile: cached, isNew: false };
+    // an online account brings its own saved progress (from any room)
+    if (ident?.external) {
+      const profile = ident.profile ? sanitizeProfile(migrateProfile(ident.profile), pid, now) : newProfile(pid, name, now);
+      profile.account = ident.account;
+      this.ledger.adopt(profile);
+      this.profileCache.set(pid, profile);
+      return { profile, isNew: !ident.profile };
+    }
     const raw = await this.store.loadProfile(pid);
     if (raw === null) {
       const profile = newProfile(pid, name, this.now());
@@ -309,7 +368,7 @@ export class Game {
   kick(s, reason) {
     try { this.send(s, 'kicked', { reason }); } catch { /* ignore */ }
     this.leave(s.sid);
-    try { s.transport.disconnect?.(); } catch { /* ignore */ }
+    try { s.transport.disconnect?.(reason); } catch { /* ignore */ }
   }
 
   // ---------------------------------------------------------------- messages
@@ -482,6 +541,54 @@ export class Game {
     this.economy.checkPortals(s);
   }
 
+  // ---------------------------------------------------------------- admin
+
+  isBanned(pid) {
+    return this.bans.has(pid);
+  }
+
+  addBan(ban) {
+    this.bans.set(ban.id, ban);
+    if (this.store.saveBans) {
+      this.store.saveBans(Object.fromEntries(this.bans)).catch((e) => this.log('ban save failed', e.message));
+    }
+  }
+
+  // An admin return for an owner who is not in the server right now. A
+  // profile saved by this server gets it at once; an online account gets
+  // it through the admin's browser (sam/returns, see client/accounts.js).
+  async deliverLater(d) {
+    if (!d.profileId) return;
+    const cached = this.profileCache.get(d.profileId);
+    if (cached?.account && this.accountSaver) return;
+    this.pendingReturns.set(d.monster.id, d);
+    try {
+      let profile = cached;
+      if (!profile) {
+        const raw = await this.store.loadProfile(d.profileId);
+        if (!raw) return;
+        profile = sanitizeProfile(migrateProfile(raw), d.profileId, this.now());
+      }
+      if (this.byProfile.has(d.profileId)) return; // they came back meanwhile (applied at join)
+      if (this.applyPendingReturns(profile)) await this.saveProfile(profile);
+    } catch (e) {
+      this.log('return delivery failed', e.message);
+    }
+  }
+
+  applyPendingReturns(profile) {
+    let n = 0;
+    for (const [mid, d] of [...this.pendingReturns]) {
+      if (d.profileId !== profile.id) continue;
+      this.pendingReturns.delete(mid);
+      if (profile.monsters.some((m) => m.id === mid)) continue;
+      profile.monsters.push({ ...d.monster, slot: null, following: false });
+      this.ledger.set(mid, profile.id, d.monster.species, d.monster.level);
+      n++;
+    }
+    return n;
+  }
+
   playerProgress(s) {
     const sw = SWORD_BY_ID[s.profile.sword];
     return { level: s.profile.level, swordTier: Math.max(...s.profile.swords.map((id) => SWORD_BY_ID[id]?.tier || 1), sw?.tier || 1) };
@@ -538,7 +645,9 @@ export class Game {
 
   async writeProfile(profile) {
     try {
-      await this.store.saveProfile(profile.id, profile);
+      // online accounts are saved to the account (by its owner's browser)
+      if (profile.account && this.accountSaver) await this.accountSaver(profile);
+      else await this.store.saveProfile(profile.id, profile);
       return true;
     } catch (e) {
       this.saveFailures++;
@@ -610,6 +719,7 @@ export class Game {
       cosmetic: s.profile.cosmetics.equipped,
       costume: s.profile.costumes.equipped,
       sword: s.profile.sword,
+      admin: !!s.admin,
     };
   }
 

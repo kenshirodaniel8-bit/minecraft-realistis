@@ -8,22 +8,31 @@
 // The host's game stays the only authority: guests only send "I moved / I
 // swung / please recruit" messages, exactly like with the Node server.
 //
+// Everyone in a room is logged in to an online account (accounts.js); a
+// guest's id is their account id (uid), which the database rules check, so
+// the host knows who is who. The host reads each guest's name and saved
+// progress from their account, and sends their progress back to them
+// ('saveProfile') to save in their own account.
+//
 // Database layout, under sam/rooms/{CODE}:
-//   host                {v, at}         the host is online (removed when they leave)
-//   guests/{gid}        {at}            a guest is online
-//   up/{gid}/{push}     {j}             guest -> host messages (JSON text)
-//   down/{gid}/{push}   {j}             host -> guest messages (JSON text)
+//   host                {v, at, uid}    the host is online (removed when they leave)
+//   guests/{uid}        {at}            a guest is online
+//   up/{uid}/{push}     {j}             guest -> host messages (JSON text)
+//   down/{uid}/{push}   {j}             host -> guest messages (JSON text)
 // Messages travel as JSON text because the database drops nulls and empty
 // arrays inside stored objects. Every message is deleted once it is read.
 
 import { PROTOCOL_VERSION } from '#shared/config.js';
 import { randomId } from '#shared/rng.js';
-import { FIREBASE_CONFIG } from '../firebase-config.js';
 import { steadyInterval } from './steadyTimer.js';
+import { firebase, firebaseConfig } from './fb.js';
+
+export { firebaseConfig };
 
 const ROOT = 'sam/rooms';
 const DOWN_MS = 100; // host -> guest batches (10 a second)
 const UP_MS = 60;   // guest -> host batches
+const GUEST_SAVE_MS = 10000; // a guest's progress is sent to them to save at most this often
 const MOVE_MS = 50; // the host applies each guest's latest position this often
 const TRANSACTIONAL = new Set(['recruit', 'buySword', 'buyItem', 'buyUpgrade', 'buyDecor']);
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/L/O/0/1 mix-ups
@@ -39,36 +48,6 @@ export function cleanRoomCode(text) {
   return c.length === 5 && [...c].every((ch) => CODE_CHARS.includes(ch)) ? c : null;
 }
 
-// The config from firebase-config.js, or one saved in this browser (used by
-// the automated tests to point at the local Firebase emulator).
-export function firebaseConfig() {
-  try {
-    const o = JSON.parse(localStorage.getItem('sam_firebase') || 'null');
-    if (o && o.databaseURL) return o;
-  } catch { /* ignore */ }
-  return FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL ? FIREBASE_CONFIG : null;
-}
-
-let fbPromise = null;
-function firebase() {
-  if (!fbPromise) {
-    fbPromise = (async () => {
-      const cfg = firebaseConfig();
-      if (!cfg) throw new Error('Online play is not set up yet (firebase-config.js is empty).');
-      const fb = await import('../vendor/firebase.js');
-      const app = fb.initializeApp(cfg, 'steal-a-monster');
-      const db = fb.getDatabase(app);
-      if (cfg.emulator) {
-        const [host, port] = String(cfg.emulator).split(':');
-        fb.connectDatabaseEmulator(db, host, Number(port));
-      }
-      return { fb, db };
-    })();
-    fbPromise.catch(() => { fbPromise = null; });
-  }
-  return fbPromise;
-}
-
 const parse = (v) => {
   try {
     return v && typeof v.j === 'string' ? JSON.parse(v.j) : [];
@@ -80,8 +59,9 @@ const parse = (v) => {
 // ------------------------------------------------------------------ host
 
 export class RoomHost {
-  constructor(game) {
+  constructor(game, accounts) {
     this.game = game;
+    this.accounts = accounts;
     this.guests = new Map();
     this.code = null;
   }
@@ -93,9 +73,11 @@ export class RoomHost {
   }
 
   async open() {
-    const { fb, db } = await firebase();
+    const { fb, db, auth } = await firebase();
     this.fb = fb;
     this.db = db;
+    this.uid = auth.currentUser?.uid;
+    if (!this.uid) throw new Error('Log in to your account to open a room.');
     // pick a code nobody is using right now
     for (let tries = 0; tries < 6 && !this.code; tries++) {
       const code = makeRoomCode();
@@ -106,7 +88,7 @@ export class RoomHost {
     this.room = fb.ref(db, `${ROOT}/${this.code}`);
     // the whole room disappears when the host goes away
     await fb.onDisconnect(this.room).remove();
-    await fb.set(fb.child(this.room, 'host'), { v: PROTOCOL_VERSION, at: fb.serverTimestamp() });
+    await fb.set(fb.child(this.room, 'host'), { v: PROTOCOL_VERSION, at: fb.serverTimestamp(), uid: this.uid });
     const guestsRef = fb.child(this.room, 'guests');
     this.unsubs = [
       fb.onChildAdded(guestsRef, (snap) => this.addGuest(snap.key)),
@@ -130,7 +112,7 @@ export class RoomHost {
       closed: false,
       send: (e, d) => this.queue(g, e, d),
       sendVolatile: (e, d) => this.queue(g, e, d),
-      disconnect: () => this.kick(g),
+      disconnect: (reason) => this.kick(g, reason),
     };
     g.unsub = fb.onChildAdded(fb.child(this.room, `up/${gid}`), (snap) => {
       const list = parse(snap.val());
@@ -143,6 +125,8 @@ export class RoomHost {
   dropGuest(gid) {
     const g = this.guests.get(gid);
     if (!g) return;
+    this.sendSave(g);
+    this.flushGuest(g);
     this.guests.delete(gid);
     g.transport.closed = true;
     if (g.unsub) g.unsub();
@@ -151,9 +135,13 @@ export class RoomHost {
     this.fb.remove(this.fb.child(this.room, `down/${gid}`));
   }
 
-  kick(g) {
+  // The reason is written on the guest's entry first, so they always learn
+  // why (the messages channel is cleared when they are removed).
+  kick(g, reason = 'You were removed from the room.') {
     this.flush();
-    this.fb.remove(this.fb.child(this.room, `guests/${g.gid}`));
+    const me = this.fb.child(this.room, `guests/${g.gid}`);
+    this.fb.update(me, { kick: String(reason).slice(0, 200) }).catch(() => {});
+    setTimeout(() => this.fb.remove(me), 1500);
   }
 
   queue(g, event, data) {
@@ -169,7 +157,7 @@ export class RoomHost {
       const [kind, id, type, payload] = m;
       if (typeof type !== 'string') continue;
       if (kind === 'h') {
-        const res = await this.game.join(g.gid, payload, g.transport);
+        const res = await this.joinGuest(g, payload);
         g.joined = !!(res && res.ok);
         if (g.joined) {
           const s = this.game.players.get(g.gid);
@@ -195,6 +183,41 @@ export class RoomHost {
       if (kind === 'r') g.out.push(['__res', { id, res: res || { ok: true } }]);
     }
     if (g.out.some((m) => m[0] === '__res')) this.flushGuest(g);
+  }
+
+  // The guest's name and progress come from their own account; banned
+  // players can't come in.
+  async joinGuest(g, payload) {
+    let acct;
+    try {
+      acct = await this.accounts.readAccount(g.gid);
+    } catch (e) {
+      return { ok: false, error: 'account', message: `Could not read your account (${e.message}).` };
+    }
+    if (acct.banned) return { ok: false, error: 'banned', message: 'You are banned.' };
+    if (!acct.name) return { ok: false, error: 'account', message: 'Log in to your account first.' };
+    const ident = { account: g.gid, name: acct.name, profile: acct.profile, external: true };
+    return this.game.join(g.gid, payload, g.transport, ident);
+  }
+
+  // A guest's progress goes back to them to save in their account.
+  saveFor(profile) {
+    const g = this.guests.get(profile.account);
+    if (!g || !g.joined || g.transport.closed) return false;
+    g.savePending = profile;
+    const now = Date.now();
+    if (now - (g.lastSaveAt || 0) >= GUEST_SAVE_MS) this.sendSave(g);
+    else if (!g.saveTimer) g.saveTimer = setTimeout(() => this.sendSave(g), GUEST_SAVE_MS - (now - (g.lastSaveAt || 0)));
+    return true;
+  }
+
+  sendSave(g) {
+    clearTimeout(g.saveTimer);
+    g.saveTimer = null;
+    if (!g.savePending || g.transport.closed) return;
+    g.lastSaveAt = Date.now();
+    g.out.push(['saveProfile', g.savePending]);
+    g.savePending = null;
   }
 
   // Positions arrive in batches, sometimes several at once after a network
@@ -253,15 +276,17 @@ export class RoomGuestNet {
   }
 
   async connect() {
-    const { fb, db } = await firebase();
+    const { fb, db, auth } = await firebase();
     this.fb = fb;
     this.db = db;
+    this.uid = auth.currentUser?.uid || null;
     const room = fb.ref(db, `${ROOT}/${this.code}`);
     this.room = room;
     const host = await fb.get(fb.child(room, 'host'));
     if (!host.exists()) throw new Error(`Room ${this.code} was not found. Check the code, or ask your friend to open the room again.`);
     if (host.val().v !== PROTOCOL_VERSION) throw new Error('Your friend has a different version of the game. Both of you: refresh the page.');
-    this.gid = randomId('g', 12);
+    this.gid = this.uid;
+    if (!this.gid) throw new Error('Log in to your account to join a room.');
     const me = fb.child(room, `guests/${this.gid}`);
     await fb.onDisconnect(me).remove();
     await fb.onDisconnect(fb.child(room, `up/${this.gid}`)).remove();
@@ -282,6 +307,12 @@ export class RoomGuestNet {
       }
     });
     this.unsubMe = fb.onValue(me, (snap) => {
+      const kick = snap.val()?.kick;
+      if (kick && this.connected) {
+        this.connected = false;
+        this.emitLocal('kicked', { reason: kick });
+        return;
+      }
       // the host removed us (kicked, or the room is full and closed)
       if (!snap.exists() && this.connected && this.joinedOnce) {
         this.connected = false;
@@ -344,9 +375,9 @@ export class RoomGuestNet {
     });
   }
 
-  async hello(token, name, color) {
+  async hello(token, name, color, extra = {}) {
     const t0 = Date.now();
-    const res = await this.call('h', 'hello', { protocol: PROTOCOL_VERSION, token, name, color }, 20000);
+    const res = await this.call('h', 'hello', { protocol: PROTOCOL_VERSION, token, name, color, ...extra }, 20000);
     if (res && res.serverTime) {
       this.rtt = Date.now() - t0;
       this.offset = res.serverTime - (t0 + this.rtt / 2);

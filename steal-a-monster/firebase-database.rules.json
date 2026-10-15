@@ -3,20 +3,59 @@
     ".read": false,
     ".write": false,
     "sam": {
+      "accounts": {
+        "$uid": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.uid === $uid",
+          "name": {
+            ".validate": "newData.isString() && newData.val().toLowerCase().replace(' ', '.') + '@players.steal-a-monster.game' === auth.token.email"
+          },
+          "profile": {
+            ".validate": "newData.isString() && newData.val().length < 500000"
+          },
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "online": {
+            ".validate": "newData.hasChildren(['room', 'at'])"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "bans": {
+        ".read": "auth != null",
+        "$uid": {
+          ".write": "auth != null && auth.token.email === 'daniel@players.steal-a-monster.game'",
+          ".validate": "newData.hasChildren(['name', 'at'])"
+        }
+      },
+      "returns": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          "$rid": {
+            ".write": "auth != null && ((auth.uid === $uid && !newData.exists()) || auth.token.email === 'daniel@players.steal-a-monster.game')",
+            ".validate": "newData.child('j').isString() && newData.child('j').val().length < 20000"
+          }
+        }
+      },
       "rooms": {
         "$code": {
-          ".read": true,
-          ".write": "$code.matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$/)",
+          ".read": "auth != null",
+          ".write": "auth != null && $code.matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$/) && !root.child('sam/bans').child(auth.uid).exists() && (!data.exists() || data.child('host/uid').val() === auth.uid)",
           "host": {
-            ".validate": "newData.hasChildren(['v', 'at'])"
+            ".validate": "newData.hasChildren(['v', 'at', 'uid']) && newData.child('uid').val() === auth.uid"
           },
           "guests": {
             "$gid": {
-              ".validate": "$gid.matches(/^[A-Za-z0-9_-]{4,40}$/) && newData.hasChildren(['at'])"
+              ".write": "auth != null && auth.uid === $gid && !root.child('sam/bans').child(auth.uid).exists()",
+              ".validate": "newData.hasChildren(['at'])"
             }
           },
           "up": {
             "$gid": {
+              ".write": "auth != null && auth.uid === $gid",
               "$msg": {
                 ".validate": "newData.child('j').isString() && newData.child('j').val().length < 100000"
               }
@@ -24,6 +63,7 @@
           },
           "down": {
             "$gid": {
+              ".write": "auth != null && auth.uid === $gid",
               "$msg": {
                 ".validate": "newData.child('j').isString() && newData.child('j').val().length < 3000000"
               }

@@ -9,6 +9,7 @@ import { Server as IOServer } from 'socket.io';
 import { CONFIG, applyEnvOverrides } from '#shared/config.js';
 import { Game } from './game.js';
 import { JsonFileStore, MemoryStore } from './storage.js';
+import { AccountRegistry } from './accounts.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -31,6 +32,7 @@ export async function createGameServer(opts = {}) {
     log: opts.quiet ? () => {} : (...a) => console.log('[game]', ...a),
     devCommands: !!opts.devCommands,
     expansionThresholds: opts.expansionThresholds,
+    accounts: new AccountRegistry(store, log),
   });
   await game.init();
 

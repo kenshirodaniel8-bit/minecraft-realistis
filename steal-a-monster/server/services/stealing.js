@@ -143,7 +143,11 @@ export class Stealing {
     game.ledger.set(c.ownedId, s.id, vm.species, vm.level);
     victimProfile.monsters = victimProfile.monsters.filter((x) => x.id !== c.ownedId);
     const free = game.bases.freeSlots(s.profile);
-    const moved = { ...vm, slot: free.length ? free[0] : null, following: false, origin: 'stolen', stolenFrom: victimProfile.name, obtainedAt: game.now() };
+    const moved = {
+      ...vm, slot: free.length ? free[0] : null, following: false, team: false, origin: 'stolen', obtainedAt: game.now(),
+      // who it belongs to, for the admin's "return to owner"
+      stolenFrom: victimProfile.name, stolenFromId: victimProfile.id, stolenFromAccount: victimProfile.account,
+    };
     s.profile.monsters.push(moved);
     s.profile.stats.stolen++;
     victimProfile.stats.lost++;

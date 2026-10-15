@@ -148,11 +148,14 @@ export function sanitizeProfile(p, id, now = Date.now()) {
       species: m.species,
       level: Math.floor(num(m.level, 1, 1, 60)),
       obtainedAt: time(m.obtainedAt, now),
-      origin: ['recruited', 'stolen', 'event', 'gift'].includes(m.origin) ? m.origin : 'recruited',
+      origin: ['recruited', 'stolen', 'event', 'gift', 'returned'].includes(m.origin) ? m.origin : 'recruited',
       slot,
       following: !!m.following,
       team: !!m.team,
       stolenFrom: typeof m.stolenFrom === 'string' ? m.stolenFrom.slice(0, 16) : undefined,
+      // who it was stolen from (for the admin's "return to owner")
+      stolenFromId: typeof m.stolenFromId === 'string' ? m.stolenFromId.slice(0, 40) : undefined,
+      stolenFromAccount: typeof m.stolenFromAccount === 'string' ? m.stolenFromAccount.slice(0, 128) : undefined,
     });
   }
   // at most five companions (monsters that walk with you; never on a pad)
@@ -181,6 +184,7 @@ export function sanitizeProfile(p, id, now = Date.now()) {
   out.stats = { ...out.stats };
   for (const k of Object.keys(out.stats)) out.stats[k] = Math.floor(num(p.stats?.[k], 0));
   out.milestones = p.milestones && typeof p.milestones === 'object' ? { ...p.milestones } : {};
+  if (typeof p.account === 'string' && p.account) out.account = p.account.slice(0, 128);
   // level must match xp
   out.level = levelForXp(out.xp);
   return out;
@@ -269,6 +273,28 @@ export class OwnershipLedger {
     await this.store.saveLedger(Object.fromEntries(this.map));
   }
 
+  // Starting over: the player's monsters are let go.
+  removeOwner(owner) {
+    for (const [mid, e] of [...this.map]) {
+      if (e.owner === owner) {
+        this.map.delete(mid);
+        this.dirty = true;
+      }
+    }
+  }
+
+  // An online account's profile is the truth (it may have changed in other
+  // rooms): the ledger takes its monsters as they are and forgets the old
+  // entries for this owner.
+  adopt(profile) {
+    const ids = new Set(profile.monsters.map((m) => m.id));
+    for (const [mid, e] of [...this.map]) {
+      if (e.owner === profile.id && !ids.has(mid)) this.map.delete(mid);
+    }
+    for (const m of profile.monsters) this.map.set(m.id, { owner: profile.id, species: m.species, level: m.level });
+    this.dirty = true;
+  }
+
   // Makes a freshly loaded profile agree with the ledger.
   reconcile(profile) {
     const fixes = [];
@@ -293,6 +319,11 @@ export class OwnershipLedger {
     }
     return fixes;
   }
+}
+
+// The profile id of an account (the same in every room and on every device).
+export function accountProfileId(account) {
+  return 'p_' + sha256Hex('steal-a-monster-account:' + account).slice(0, 32);
 }
 
 export function newOwnedMonster(speciesId, level, origin, now, extra = {}) {

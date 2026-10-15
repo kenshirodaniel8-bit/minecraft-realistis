@@ -56,10 +56,10 @@ export class Net {
     }
   }
 
-  hello(token, name, color) {
+  hello(token, name, color, extra = {}) {
     const t0 = Date.now();
     return new Promise((resolve) => {
-      this.socket.timeout(15000).emit('hello', { protocol: PROTOCOL_VERSION, token, name, color }, (err, res) => {
+      this.socket.timeout(15000).emit('hello', { protocol: PROTOCOL_VERSION, token, name, color, ...extra }, (err, res) => {
         if (err) return resolve({ ok: false, message: 'The server did not answer.' });
         if (res && res.serverTime) {
           this.rtt = Date.now() - t0;

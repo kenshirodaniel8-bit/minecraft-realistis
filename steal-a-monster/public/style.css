@@ -150,6 +150,18 @@ kbd { display: inline-block; min-width: 22px; padding: 1px 6px; border: 2px soli
 .power-bar i { flex: 1; height: 14px; border-radius: 6px; background: #e8dcff; border: 2px solid var(--ink); }
 .power-bar i.on { background: linear-gradient(90deg, #8a4ad8, #5ff3ff); }
 .power-list { flex-wrap: wrap; }
+.account-box { margin-bottom: 6px; }
+.account-in { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #efe6ff; border: 2px solid var(--ink); border-radius: 12px; padding: 8px 12px; font: 800 15px var(--font); }
+.acct-tabs { display: flex; gap: 6px; margin-bottom: 6px; }
+.acct-tabs button { flex: 1; font: 800 14px var(--font); padding: 6px; border-radius: 10px; border: 2px solid var(--ink); background: #fff; cursor: pointer; }
+.acct-tabs button.on { background: var(--yellow); }
+#account-btn { width: 100%; margin-top: 4px; }
+#noacct-btn { display: block; margin: 6px auto 0; }
+#progress-choice .btn { display: block; width: 100%; margin-top: 10px; }
+#pc-cancel { display: block; margin: 10px auto 0; }
+.admin-row { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 2px solid var(--ink); border-radius: 12px; margin-bottom: 8px; background: #fff; }
+.admin-row .who { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 800 15px var(--font); }
+.admin-row .stolen { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #ffeef0; border-radius: 10px; padding: 6px 8px; font: 700 13px var(--font); }
 #moon-hud { margin-top: 4px; background: rgba(36,28,90,.85); color: #fff; border: 2px solid #8fb8ff; border-radius: 10px; padding: 3px 8px; font: 800 12px var(--font); text-align: center; pointer-events: none; }
 #crosshair { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px var(--ink); opacity: .7; display: none; }
 .mouselook #crosshair { display: block; }

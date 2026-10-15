@@ -419,6 +419,15 @@ export class UI {
     } else if (name === 'board') {
       title.textContent = '🍀 Lucky Board';
       body.innerHTML = this.boardHtml(s);
+    } else if (name === 'players') {
+      title.textContent = '🛡 Players (admin)';
+      body.innerHTML = '<p class="muted">Loading…</p>';
+      this.app.net.request('adminPlayers').then((res) => {
+        if (this.panelName !== 'players') return;
+        body.innerHTML = this.playersHtml(res);
+        this.bind(body);
+      });
+      return;
     } else if (name === 'costumes') {
       title.textContent = '🕶 Costume Shop';
       body.innerHTML = this.costumesHtml(s);
@@ -476,6 +485,8 @@ export class UI {
           case 'buyCostume': acts.buyCostume(a.id); break;
           case 'wearCostume': acts.equipCostume(a.id === 'none' ? null : a.id); break;
           case 'buyPower': acts.buyPower(); break;
+          case 'adminReturn': acts.adminReturn(Number(a.pn), a.id); break;
+          case 'adminBan': acts.adminBan(Number(a.pn), a.name); break;
           case 'dexTab': this.dexTab = a.tab; this.render(); break;
           default: break;
         }
@@ -502,6 +513,22 @@ export class UI {
     return `<p><b>${p.monsters.length} / ${p.base.slots}</b> monsters · Income <b>$${p.income}/s</b> · <span class="muted">Recruit more in the wild, then bring them to your base.</span></p>
       <p class="note">🐾 Team: <b>${team} / 5</b> monsters walk with you and fight with you. Open a monster and press <b>Bring along</b>; press <b>X</b> to call them to your side.</p>
       <div class="grid">${cards || '<p class="muted">No monsters yet! Defeat a wild monster and pay its fee to recruit it.</p>'}</div>`;
+  }
+
+  // Admin ("daniel"): everyone in this server, what they stole and from whom.
+  playersHtml(res) {
+    if (!res || !res.ok) return `<p class="note">${esc(res?.message || 'Could not load the players.')}</p>`;
+    const rows = res.players.map((p) => {
+      const stolen = p.stolen.map((m) => {
+        const sp = SPECIES_BY_ID[m.species];
+        return `<div class="stolen"><span>🦹 Stole <b>${esc(sp?.name || m.species)}</b> Lv ${m.level} from <b>${esc(m.from)}</b></span>
+          <button class="btn sm go" data-act="adminReturn" data-pn="${p.pn}" data-id="${esc(m.ownedId)}">↩ Return to ${esc(m.from)}</button></div>`;
+      }).join('');
+      const ban = p.you || p.admin ? '' : `<button class="btn sm red" data-act="adminBan" data-pn="${p.pn}" data-name="${esc(p.name)}">⛔ Ban</button>`;
+      return `<div class="admin-row"><div class="who"><span>${p.admin ? '👑 ' : ''}${esc(p.name)} <small class="muted">Lv ${p.level} · ${p.monsters} monsters${p.you ? ' · you' : ''}</small></span>${ban}</div>
+        ${stolen || '<span class="muted small">Has not stolen anything.</span>'}</div>`;
+    }).join('');
+    return `<p>Everyone in this server. Give a stolen monster back to its owner, or ban the thief (they are kicked and can't come back).</p>${rows}`;
   }
 
   // Costume Shop: looks, animations and a master power on Z.

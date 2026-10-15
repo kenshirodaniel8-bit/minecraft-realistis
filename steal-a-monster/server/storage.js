@@ -119,6 +119,27 @@ export class JsonFileStore {
     const snapshot = JSON.parse(JSON.stringify(data));
     return this.serial(file, () => atomicWrite(file, snapshot));
   }
+
+  // accounts (server/accounts.js) and bans (the admin's)
+  async loadAccounts() {
+    return (await readWithBackup(path.join(this.dir, 'accounts.json'))) || {};
+  }
+
+  async saveAccounts(data) {
+    const file = path.join(this.dir, 'accounts.json');
+    const snapshot = JSON.parse(JSON.stringify(data));
+    return this.serial(file, () => atomicWrite(file, snapshot));
+  }
+
+  async loadBans() {
+    return (await readWithBackup(path.join(this.dir, 'bans.json'))) || {};
+  }
+
+  async saveBans(data) {
+    const file = path.join(this.dir, 'bans.json');
+    const snapshot = JSON.parse(JSON.stringify(data));
+    return this.serial(file, () => atomicWrite(file, snapshot));
+  }
 }
 
 // In-memory store for tests and throwaway servers.
@@ -149,5 +170,21 @@ export class MemoryStore {
   async saveLedger(data) {
     if (this.failSaves) throw new Error('simulated save failure');
     this.ledger = JSON.parse(JSON.stringify(data));
+  }
+
+  async loadAccounts() {
+    return JSON.parse(JSON.stringify(this.accounts || {}));
+  }
+
+  async saveAccounts(data) {
+    this.accounts = JSON.parse(JSON.stringify(data));
+  }
+
+  async loadBans() {
+    return JSON.parse(JSON.stringify(this.bans || {}));
+  }
+
+  async saveBans(data) {
+    this.bans = JSON.parse(JSON.stringify(data));
   }
 }

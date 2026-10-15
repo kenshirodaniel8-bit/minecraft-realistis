@@ -68,10 +68,10 @@ export class PlayerAvatar {
       disposeLabel(this.label);
     }
     if (this.isLocal) return;
-    this.label = makeLabel(`${this.info.name}  Lv ${this.info.level || 1}`, { scale: 0.018, color: '#ffffff', font: '800 40px "Trebuchet MS", system-ui, sans-serif' });
+    this.label = makeLabel(`${this.info.admin ? '👑 ' : ''}${this.info.name}  Lv ${this.info.level || 1}`, { scale: 0.018, color: this.info.admin ? '#ffe27a' : '#ffffff', font: '800 40px "Trebuchet MS", system-ui, sans-serif' });
     this.label.position.y = 6.4;
     this.group.add(this.label);
-    this.labelKey = `${this.info.name}|${this.info.level}`;
+    this.labelKey = `${this.info.name}|${this.info.level}|${!!this.info.admin}`;
   }
 
   setInfo(info) {
@@ -80,7 +80,7 @@ export class PlayerAvatar {
     this.h.setSword(this.info.sword || 'wooden');
     this.h.setHat(this.info.cosmetic || null);
     this.h.setCostume(this.info.costume || null);
-    if (`${this.info.name}|${this.info.level}` !== this.labelKey) this.makeLabel();
+    if (`${this.info.name}|${this.info.level}|${!!this.info.admin}` !== this.labelKey) this.makeLabel();
   }
 
   // values from a snapshot row

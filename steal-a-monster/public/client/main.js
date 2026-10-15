@@ -33,6 +33,9 @@ import { WorldItems } from './worldItems.js';
 import { MonsterPreview } from './preview.js';
 import { MapRenderer } from './minimap.js';
 import { UI, TUTORIAL, fmt } from './ui.js';
+import { OnlineAccounts, ServerAccounts } from './accounts.js';
+import { BrowserStore } from './browserStore.js';
+import { sha256Hex } from '#shared/sha256.js';
 
 const $ = (id) => document.getElementById(id);
 const INTERP_DELAY = 120;
@@ -150,15 +153,19 @@ class App {
       sw.appendChild(b);
     }
     $('controls-btn').onclick = () => {
-      $('title-status').innerHTML = 'WASD move · Drag mouse or ← → to turn the camera · Click attack · Q dodge · E interact · R recruit · H home · L lasers · 1–8 gadgets';
+      $('title-status').innerHTML = 'WASD move · Drag mouse or ← → to turn the camera · Click attack · Q dodge · E interact · R recruit · H home · X call team · Z power · L lasers · 1–8 gadgets';
     };
-    const go = () => this.play();
-    $('play-btn').onclick = go;
+    $('play-btn').onclick = () => this.play();
+    $('noacct-btn').onclick = () => this.play('solo', null, { noAccount: true });
     nameInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') go();
+      if (e.key === 'Enter') (this.accounts?.available && !this.accounts.loggedIn ? $('account-btn') : $('play-btn')).click();
     });
+    $('password-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') $('account-btn').click();
+    });
+    this.bindAccounts();
     if (this.solo) {
-      $('title-status').textContent = '🟢 Single-player · runs in your browser · progress is saved on this device';
+      $('title-status').textContent = '🟢 Runs in your browser · log in to keep your monsters in every room';
       this.bindOnline();
       return;
     }
@@ -166,6 +173,125 @@ class App {
       $('title-status').textContent = `🟢 Server online · ${h.players} player${h.players === 1 ? '' : 's'} playing`;
     }).catch(() => {
       $('title-status').textContent = '🔴 Cannot reach the game server. Start it with "npm start".';
+    });
+  }
+
+  // ---------------------------------------------------------------- accounts
+
+  // Online accounts (Firebase) in the web build, server accounts with
+  // "npm start". Logged in, your name is your account's and your monsters
+  // come with you to every room.
+  async bindAccounts() {
+    const acct = this.solo ? new OnlineAccounts() : new ServerAccounts();
+    this.accounts = acct;
+    let mode = 'login';
+    const setMode = (m) => {
+      mode = m;
+      $('tab-login').classList.toggle('on', m === 'login');
+      $('tab-register').classList.toggle('on', m === 'register');
+      $('account-btn').textContent = m === 'login' ? 'Log in' : 'Create account';
+      $('password-input').autocomplete = m === 'login' ? 'current-password' : 'new-password';
+      $('account-note').textContent = m === 'login' ? 'Log in to keep your monsters in every room and on every device.' : 'Pick a name nobody has yet (spaces are fine) and a password of at least 6 characters.';
+    };
+    $('tab-login').onclick = () => setMode('login');
+    $('tab-register').onclick = () => setMode('register');
+    $('account-btn').onclick = async () => {
+      const btn = $('account-btn');
+      btn.disabled = true;
+      $('account-note').textContent = mode === 'login' ? 'Logging in…' : 'Creating your account…';
+      try {
+        const name = $('name-input').value;
+        const pass = $('password-input').value;
+        if (mode === 'login') await acct.login(name, pass);
+        else {
+          await acct.register(name, pass);
+          // the progress on this device moves into the new account
+          if (acct.kind === 'online') await this.adoptDeviceProgress();
+        }
+        $('password-input').value = '';
+        this.saveSetting('name', acct.name);
+        this.showAccount();
+        $('title-status').textContent = mode === 'login' ? `👋 Hi ${acct.name}! Press PLAY.` : `🎉 Account "${acct.name}" created! Press PLAY.`;
+      } catch (e) {
+        $('account-note').textContent = `⚠ ${e.message}`;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    $('logout-btn').onclick = async () => {
+      await acct.logout();
+      this.showAccount();
+    };
+    setMode('login');
+    if (acct.kind === 'online' && acct.available) {
+      $('account-note').textContent = 'Connecting to accounts…';
+      try {
+        await acct.init();
+      } catch (e) {
+        console.error(e);
+        acct.available = false;
+        $('account-note').textContent = `⚠ Accounts are not available right now (${e.message}). You can still play on this device.`;
+      }
+      if (acct.available) setMode('login');
+    }
+    this.showAccount();
+  }
+
+  showAccount() {
+    const acct = this.accounts;
+    const on = acct?.available;
+    const inn = on && acct.loggedIn;
+    $('account-in').hidden = !inn;
+    $('account-out').hidden = !!inn;
+    $('account-tabs').hidden = !on;
+    $('password-field').hidden = !on;
+    $('account-btn').hidden = !on;
+    $('noacct-btn').hidden = !on || inn;
+    if (!on) $('account-note').textContent = this.solo ? 'Progress is saved on this device.' : '';
+    if (inn) {
+      $('account-name').textContent = acct.name;
+      $('account-admin').hidden = !acct.admin;
+    }
+    $('play-btn').textContent = inn ? `▶ PLAY as ${acct.name}` : '▶ PLAY';
+  }
+
+  // A new online account takes over this device's old progress (once).
+  async adoptDeviceProgress() {
+    try {
+      if (localStorage.getItem('sam_adopted_' + this.token)) return;
+      const store = new BrowserStore();
+      const old = await store.loadProfile('p_' + sha256Hex('steal-a-monster:' + this.token).slice(0, 32));
+      if (!old || !(old.monsters?.length || old.money > CONFIG.startingMoney || old.level > 1)) return;
+      old.name = this.accounts.name;
+      old.account = this.accounts.uid;
+      this.accounts.pending = JSON.stringify(old);
+      await this.accounts.flush();
+      localStorage.setItem('sam_adopted_' + this.token, '1');
+      this.ui?.toast?.('Your progress on this device moved into your account.', 'good');
+    } catch (e) {
+      console.error('could not move the device progress', e);
+    }
+  }
+
+  // "Start over or continue?" — resolves 'continue', 'restart' or null (back)
+  askProgress(profile) {
+    const lvl = profile?.level ?? 1;
+    const n = profile?.monsters?.length ?? 0;
+    $('pc-title').textContent = `Welcome back, ${this.accounts.name}!`;
+    $('pc-text').textContent = profile
+      ? `Do you want to start over from the beginning, or continue with your progress from before? (Level ${lvl} · ${n} monster${n === 1 ? '' : 's'} · $${fmt(Math.floor(profile.money || 0))})`
+      : 'Do you want to start over from the beginning, or continue with your progress from before?';
+    $('progress-choice').hidden = false;
+    return new Promise((resolve) => {
+      const done = (v) => {
+        $('progress-choice').hidden = true;
+        resolve(v);
+      };
+      $('pc-continue').onclick = () => done('continue');
+      $('pc-cancel').onclick = () => done(null);
+      $('pc-restart').onclick = () => {
+        if (confirm('Really start over? Your monsters, Money and everything else in this account will be gone.')) done('restart');
+      };
     });
   }
 
@@ -180,10 +306,10 @@ class App {
       $('online-note').innerHTML = 'Not set up yet: the game owner has to add a free Firebase database first (see <b>PANDUAN-FIREBASE.md</b>).';
       return;
     }
-    $('online-note').textContent = 'Create a room and send the link to your friends, or type their room code.';
+    $('online-note').textContent = 'Log in, then create a room and send the link to your friends, or type their room code.';
     if (fromLink) {
       input.value = fromLink;
-      $('online-note').textContent = `You were invited to room ${fromLink}. Type your name and press Join!`;
+      $('online-note').textContent = `You were invited to room ${fromLink}. Log in (or create an account) and press Join!`;
       $('join-btn').classList.add('go');
     }
     $('host-btn').onclick = () => this.play('host');
@@ -202,25 +328,79 @@ class App {
     });
   }
 
-  async play(mode = 'solo', code = null) {
+  // What this player sends when joining: their account (checked by the
+  // server or by this page) or just a name on this device.
+  async prepareJoin(mode, code, opts) {
+    const acct = this.accounts;
+    const useAccount = acct?.available && acct.loggedIn && !opts.noAccount;
+    if (mode !== 'solo' && !(useAccount && acct.kind === 'online')) {
+      throw new Error('Log in to your account (or create one) to play online with friends.');
+    }
+    if (!useAccount) {
+      const name = ($('name-input').value || '').replace(/[^A-Za-z0-9_ -]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16) || `Player${Math.floor(Math.random() * 900 + 100)}`;
+      this.saveSetting('name', name);
+      return { name, extra: {}, trusted: null };
+    }
+    const name = acct.name;
+    if (acct.kind === 'server') {
+      const extra = { account: acct.helloAccount() };
+      if (!extra.account) throw new Error('Log in to your account first.');
+      if (!extra.account.create) {
+        this.ui.hideLoading();
+        const choice = await this.askProgress(null);
+        if (!choice) return null;
+        if (choice === 'restart') extra.fresh = true;
+      }
+      return { name, extra, trusted: null };
+    }
+    // online account
+    this.ui.setLoading('Loading your account…', 0.05);
+    if (mode !== 'solo' && await acct.isBanned()) throw new Error('This account is banned from online rooms.');
+    await acct.claimPresence(mode === 'guest' ? code : mode === 'host' ? 'a room' : 'solo');
+    let profile = await acct.loadProfile();
+    this.returnedOnJoin = await acct.claimReturns(profile);
+    const extra = {};
+    if (profile) {
+      this.ui.hideLoading();
+      const choice = await this.askProgress(profile);
+      if (!choice) return null;
+      if (choice === 'restart') {
+        extra.fresh = true;
+        profile = null;
+      }
+    }
+    return { name, extra, trusted: mode === 'guest' ? null : { account: acct.uid, name, profile, external: true } };
+  }
+
+  // the game in this page saves online accounts through here: our own
+  // account directly, a guest's by sending it to them
+  saveAccountProfile(profile) {
+    if (this.accounts?.kind === 'online' && profile.account === this.accounts.uid) return this.accounts.saveProfile(profile);
+    if (this.room && this.room.saveFor(profile)) return Promise.resolve();
+    return Promise.reject(new Error('that player is gone'));
+  }
+
+  async play(mode = 'solo', code = null, opts = {}) {
     if (this.starting) return;
-    // a guest talks to a friend's game through Firebase instead of running one
-    if (mode === 'guest' && !this.net.socket) this.net = new RoomGuestNet(code);
-    this.mode = this.net.remote ? 'guest' : mode;
     this.starting = true;
     this.audio.unlock();
-    const name = ($('name-input').value || '').replace(/[^A-Za-z0-9_ -]/g, '').trim().slice(0, 16) || `Player${Math.floor(Math.random() * 900 + 100)}`;
-    this.saveSetting('name', name);
     $('play-btn').disabled = true;
     for (const b of ['host-btn', 'join-btn']) $(b).disabled = true;
     this.ui = this.ui || new UI(this);
-    this.ui.setLoading('Connecting…', 0.05, TIPS[Math.floor(Math.random() * TIPS.length)]);
     try {
+      const prep = await this.prepareJoin(mode, code, opts);
+      if (!prep) return; // went back from the "start over?" question
+      // a guest talks to a friend's game through Firebase instead of running one
+      if (mode === 'guest' && !this.net.socket) this.net = new RoomGuestNet(code);
+      this.mode = this.net.remote ? 'guest' : mode;
+      this.ui.setLoading('Connecting…', 0.08, TIPS[Math.floor(Math.random() * TIPS.length)]);
       if (!this.net.socket) {
         this.bindNet();
         await this.net.connect();
+        if (this.net.game) this.net.game.accountSaver = (p) => this.saveAccountProfile(p);
       }
-      const res = await this.net.hello(this.token, name, this.settings.color);
+      const res = await this.net.hello(this.token, prep.name, this.settings.color, prep.extra, prep.trusted);
+      this.accounts?.joined?.(res);
       if (!res || !res.ok) throw new Error(res?.message || 'Could not join the server.');
       if (this.mode === 'host' && !this.room) await this.openRoom();
       this.ui.setLoading('Building the world…', 0.2);
@@ -239,6 +419,8 @@ class App {
       } else {
         this.ui.regionBanner(`Welcome back, ${res.profile.name}!`, 'Your monsters missed you.');
       }
+      for (const sp of this.returnedOnJoin || []) this.ui.toast(`🛡 The admin returned your stolen ${SPECIES_BY_ID[sp]?.name || 'monster'}!`, 'good');
+      this.returnedOnJoin = null;
       this.applyTouch();
       this.showRoomPill();
       if (this.mode === 'host') {
@@ -254,17 +436,19 @@ class App {
         setInterval(() => this.net.syncClock(), 5000);
       }
     } catch (e) {
-      console.error(e);
+      console.warn(e); // (shown to the player on the title screen)
       this.ui.hideLoading();
       $('title-status').textContent = `⚠ ${e.message}`;
-      $('play-btn').disabled = false;
-      for (const b of ['host-btn', 'join-btn']) $(b).disabled = false;
       // a failed join leaves no half-open connection behind
       if (this.net.remote && !this.joined) {
         this.net = new LocalNet();
       }
     } finally {
       this.starting = false;
+      if (!this.joined) {
+        $('play-btn').disabled = false;
+        for (const b of ['host-btn', 'join-btn']) $(b).disabled = false;
+      }
     }
   }
 
@@ -319,7 +503,7 @@ class App {
   async openRoom() {
     this.ui.setLoading('Opening your online room…', 0.15);
     try {
-      this.room = new RoomHost(this.net.game);
+      this.room = new RoomHost(this.net.game, this.accounts);
       await this.room.open();
     } catch (e) {
       console.error(e);
@@ -355,6 +539,8 @@ class App {
 
   applyWelcome(w) {
     this.pn = w.pn;
+    this.isAdmin = !!w.admin;
+    $('players-btn').hidden = !this.isAdmin;
     this.myBase = w.baseIndex;
     this.profile = w.profile;
     this.maxHp = w.profile.maxHp;
@@ -499,6 +685,10 @@ class App {
     n.on('mDefeated', (d) => this.monsters.onDefeated(d));
     n.on('mRecover', (d) => this.monsters.onRecover(d));
     n.on('allyPoof', (d) => this.monsters.poof(d));
+    // (a guest in a friend's room) our progress, to save in our account
+    n.on('saveProfile', (p) => {
+      if (this.accounts?.kind === 'online') this.accounts.saveProfile(p);
+    });
     n.on('ptp', (d) => {
       const p = this.players.get(d.pn);
       if (!p) return;
@@ -662,7 +852,7 @@ class App {
       $('disconnected').hidden = false;
     });
     n.on('roomClosed', () => {
-      if (!this.joined) return;
+      if (!this.joined || this.kicked) return;
       this.kicked = true;
       $('disc-title').textContent = 'The room was closed';
       $('disc-text').textContent = 'Your friend left or closed their game. Refresh the page to play on your own, or join another room.';
@@ -676,7 +866,9 @@ class App {
     });
     n.on('connect', async () => {
       if (!this.joined || this.kicked) return;
-      const res = await this.net.hello(this.token, this.settings.name, this.settings.color);
+      const account = this.accounts?.kind === 'server' && this.accounts.loggedIn ? { account: this.accounts.helloAccount() } : {};
+      const res = await this.net.hello(this.token, this.settings.name, this.settings.color, account);
+      this.accounts?.joined?.(res);
       if (res && res.ok) {
         this.applyWelcome(res);
         $('disconnected').hidden = true;
@@ -948,6 +1140,26 @@ class App {
       buyCostume: (id) => req('buyCostume', { id }, () => `${COSTUME_BY_ID[id].icon} You are now a ${COSTUME_BY_ID[id].name}! Press Z for ${COSTUME_BY_ID[id].power.name}.`),
       equipCostume: (id) => req('equipCostume', { id }),
       buyPower: () => req('buyPower', {}, (r) => `💪 Power level ${r.level}! +${r.bonus} damage on every costume power.`),
+      // admin ("daniel"): give a stolen monster back / ban a player. Online
+      // accounts also get the ban or the return in the database (only the
+      // admin's account may write those).
+      adminReturn: async (pn, ownedId) => {
+        const res = await req('adminReturn', { pn, ownedId }, (r) => (r.delivered ? '🛡 Returned to its owner.' : '🛡 Returned: the owner gets it the next time they play.'));
+        if (res.ok && res.deliver?.account && app.accounts?.kind === 'online') {
+          await app.accounts.deliverReturn(res.deliver.account, res.deliver.monster).catch((e) => app.ui.toast(`Could not send it to ${res.deliver.owner}: ${e.message}`, 'bad'));
+        }
+        app.ui.render();
+        return res;
+      },
+      adminBan: async (pn, name) => {
+        if (!confirm(`Ban ${name}? They are kicked and can't come back.`)) return null;
+        const res = await req('adminBan', { pn }, `🛡 ${name} is banned.`);
+        if (res.ok && res.ban?.account && app.accounts?.kind === 'online') {
+          await app.accounts.ban(res.ban.account, res.ban.name).catch((e) => app.ui.toast(`The ban was not saved online: ${e.message}`, 'bad'));
+        }
+        app.ui.render();
+        return res;
+      },
       chat: (text) => app.net.request('chat', { text }).then((r) => { if (!r.ok && r.message) app.ui.toast(r.message, 'bad'); }),
       skipTutorial: () => req('tutorial', { skip: true }),
     };

@@ -74,13 +74,15 @@ export class LocalNet {
     }
   }
 
-  async hello(token, name, color) {
+  // trusted: this browser's own online account (already logged in), see
+  // Game.join; extra: e.g. { fresh: true } to start over
+  async hello(token, name, color, extra = {}, trusted = null) {
     const deliver = (event, data) => {
       const d = copy(data);
       queueMicrotask(() => this.emitLocal(event, d));
     };
     const transport = { closed: false, send: deliver, sendVolatile: deliver, disconnect() {} };
-    const res = await this.game.join(SID, { protocol: PROTOCOL_VERSION, token, name, color }, transport);
+    const res = await this.game.join(SID, { protocol: PROTOCOL_VERSION, token, name, color, ...extra }, transport, trusted);
     if (res.ok) {
       const s = this.game.players.get(SID);
       if (s && s.offlineEarned) {

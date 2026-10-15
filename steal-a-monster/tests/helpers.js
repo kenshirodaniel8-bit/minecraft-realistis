@@ -6,6 +6,7 @@ import { MemoryStore } from '../server/storage.js';
 import { mulberry32 } from '../shared/rng.js';
 import { PROTOCOL_VERSION } from '../shared/config.js';
 import { SPECIES_BY_ID } from '../shared/monsters.js';
+import { AccountRegistry } from '../server/accounts.js';
 
 export const TOKEN_A = 'test-token-alpha-0001';
 export const TOKEN_B = 'test-token-bravo-0002';
@@ -23,6 +24,8 @@ export async function makeGame(opts = {}) {
     log: opts.log || (() => {}),
     devCommands: opts.devCommands,
     expansionThresholds: opts.expansionThresholds,
+    accounts: opts.accounts ? new AccountRegistry(store) : undefined,
+    accountSaver: opts.accountSaver,
   });
   await game.init();
   // keep tests focused: no automatic event and no ambient spawning unless asked
@@ -44,7 +47,7 @@ export async function makeGame(opts = {}) {
         game.tick(d);
       }
     },
-    async join(token, name = 'Player', extra = {}) {
+    async join(token, name = 'Player', extra = {}, trusted = null) {
       const inbox = [];
       const transport = {
         closed: false,
@@ -53,7 +56,7 @@ export async function makeGame(opts = {}) {
         disconnect() { this.closed = true; },
       };
       const sid = `sid${++sidCounter}`;
-      const res = await game.join(sid, { protocol: PROTOCOL_VERSION, token, name, ...extra }, transport);
+      const res = await game.join(sid, { protocol: PROTOCOL_VERSION, token, name, ...extra }, transport, trusted);
       const client = {
         sid,
         res,

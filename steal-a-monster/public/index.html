@@ -27,13 +27,31 @@
     <div class="title-card">
       <h1 class="logo"><span>STEAL</span><span class="a">A</span><span>MONSTER</span></h1>
       <p class="tagline">Explore · Battle · Recruit · Protect your monsters!</p>
-      <label class="field">Your name
-        <input id="name-input" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="MonsterFan">
-      </label>
+      <div id="account-box" class="account-box">
+        <div id="account-in" class="account-in" hidden>
+          <span>👤 <b id="account-name"></b><span id="account-admin" hidden> · 👑 admin</span></span>
+          <button id="logout-btn" class="linkish" type="button">Log out</button>
+        </div>
+        <div id="account-out">
+          <div id="account-tabs" class="acct-tabs" hidden>
+            <button id="tab-login" class="on" type="button">Log in</button>
+            <button id="tab-register" type="button">Create account</button>
+          </div>
+          <label class="field">Your name
+            <input id="name-input" maxlength="16" autocomplete="username" spellcheck="false" placeholder="MonsterFan">
+          </label>
+          <label id="password-field" class="field" hidden>Password
+            <input id="password-input" type="password" maxlength="64" autocomplete="current-password" placeholder="at least 6 characters">
+          </label>
+          <button id="account-btn" class="btn" type="button" hidden>Log in</button>
+          <p id="account-note" class="muted small"></p>
+        </div>
+      </div>
       <div class="field">Outfit color
         <div id="color-swatches" class="swatches"></div>
       </div>
       <button id="play-btn" class="btn big go">▶ PLAY</button>
+      <button id="noacct-btn" class="linkish small" type="button" hidden>or play without an account (only on this device)</button>
       <div id="online-box" class="online-box" hidden>
         <div class="online-title">🌐 Play online with friends</div>
         <div id="online-row" class="online-row">
@@ -49,6 +67,16 @@
         <a href="gallery.html" target="_blank" rel="noopener">🐾 Monster Gallery</a>
         <button id="controls-btn" class="linkish" type="button">⌨ Controls</button>
       </div>
+    </div>
+  </div>
+
+  <div id="progress-choice" class="screen" hidden>
+    <div class="title-card small">
+      <h2 id="pc-title">Welcome back!</h2>
+      <p id="pc-text" class="muted"></p>
+      <button id="pc-continue" class="btn big go" type="button">▶ Continue my progress</button>
+      <button id="pc-restart" class="btn red" type="button">🔄 Start over from the beginning</button>
+      <button id="pc-cancel" class="linkish small" type="button">Back</button>
     </div>
   </div>
 
@@ -88,6 +116,7 @@
         <button data-panel="base" title="Base">🏠<span>Base</span></button>
         <button data-panel="map" title="Map (M)">🗺<span>Map</span></button>
         <button data-panel="settings" title="Settings">⚙<span>Settings</span></button>
+        <button data-panel="players" id="players-btn" title="Players (admin)" hidden>🛡<span>Player</span></button>
       </div>
     </div>
 
