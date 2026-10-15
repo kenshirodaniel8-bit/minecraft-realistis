@@ -11,11 +11,12 @@ import { fbm, ridged, hashString, rngFor, clamp, lerp, smoothstep } from './rng.
 import { CONFIG, WORLD_SEED } from './config.js';
 import { ColliderGrid, boxCollider, circleCollider } from './collision.js';
 
+import { ISLANDS, islandPoint } from './islands.js';
 export const CELL = 4;          // terrain grid spacing
 export const STEP_UP = 0.95; // highest ledge you can walk up without jumping
 export const WATER_Y = 0;
 export const VOID_Y = -14;      // sea floor beyond the edge of the world
-export const PLAZA = { r: 38, y: 3.6 };
+export const PLAZA = { r: 46, y: 3.6 };
 export const ROAD_ANGLES = [0, 90, 180, 270];
 export const RING_PATH_R = 128;
 export const BASE_RING_R = 72; // path linking every base entrance
@@ -84,6 +85,11 @@ export const SPOTS = [
   { id: 'gilded_secret', name: 'The Gilded Glitch', region: 'legendary', ...P(181, 552), r: 8, kind: 'cave', hidden: true, reward: 5000, door: 181 },
   { id: 'petal_glade', name: 'Petal Glade', region: 'bloomveil', x: 1000 + 70, z: 60, r: 14, kind: 'clearing', hidden: true, reward: 800, door: 40 },
   { id: 'comet_crater', name: 'Comet Crater', region: 'starfall', x: -1000 - 60, z: -70, r: 16, kind: 'crater', reward: 1500 },
+  // every monster island: a lair for its Legendary monsters and a shrine for its Mythic ones
+  ...ISLANDS.flatMap((isl) => [
+    { id: `${isl.id}_lair`, name: `${isl.name.replace(' Island', '')} Legend Lair`, region: isl.id, ...islandPoint(isl, -75, 45), r: 15, kind: 'lair', reward: 400 + isl.tier * 300 },
+    { id: `${isl.id}_shrine`, name: `${isl.name.replace(' Island', '')} Mythic Shrine`, region: isl.id, ...islandPoint(isl, -20, -60), r: 14, kind: 'altar', reward: 800 + isl.tier * 500 },
+  ]),
 ];
 
 export const SPOT_BY_ID = Object.fromEntries(SPOTS.map((s) => [s.id, s]));
@@ -99,16 +105,22 @@ export const LAVA_POOLS = [
 
 // The hub plaza: shops and portals.
 export const SHOPS = [
-  { id: 'sword_shop', name: 'Sword Shop', kind: 'swords', ...P(135, 25), facing: 135 + 180 },
-  { id: 'item_shop', name: 'Gadget Shop', kind: 'items', ...P(45, 25), facing: 45 + 180 },
-  { id: 'lucky_board', name: 'Lucky Board', kind: 'board', ...P(225, 25), facing: 225 + 180 },
+  { id: 'sword_shop', name: 'Sword Shop', kind: 'swords', ...P(135, 31), facing: 135 + 180 },
+  { id: 'item_shop', name: 'Gadget Shop', kind: 'items', ...P(45, 31), facing: 45 + 180 },
+  { id: 'lucky_board', name: 'Lucky Board', kind: 'board', ...P(225, 31), facing: 225 + 180 },
 ];
+
+// The Island Gate in the plaza opens a travel menu for the monster islands
+// (islands.js); every island has a portal back to the plaza.
+export const GATE = { id: 'island_gate', name: 'Island Gate', ...P(315, 38), range: 6 };
+export const ISLAND_ARRIVAL = Object.fromEntries(ISLANDS.map((isl) => [isl.id, islandPoint(isl, 112)]));
 
 export const PORTALS = [
   { id: 'to_bloomveil', name: 'Bloomveil Isle', region: 'bloomveil', ...P(300, 28), to: { x: 1000 - 112, z: 0 } },
   { id: 'to_starfall', name: 'Starfall Isle', region: 'starfall', ...P(330, 28), to: { x: -1000 + 112, z: 0 } },
   { id: 'from_bloomveil', name: 'Return to the Plaza', region: 'plains', x: 1000 - 140, z: 0, to: { ...P(315, 17) } },
   { id: 'from_starfall', name: 'Return to the Plaza', region: 'plains', x: -1000 + 140, z: 0, to: { ...P(315, 17) } },
+  ...ISLANDS.map((isl) => ({ id: `from_${isl.id}`, name: 'Return to the Plaza', region: 'plains', ...islandPoint(isl, 140), to: { ...P(315, 30) } })),
 ];
 
 // Ancient Ruins puzzle: step on the plates in order to open the vault.
@@ -919,6 +931,8 @@ export function buildWorld() {
   world.shops = SHOPS.map((s) => ({ ...s, y: world.groundHeight(s.x, s.z) }));
   world.portals = PORTALS.map((p) => ({ ...p, y: world.groundHeight(p.x, p.z) }));
   for (const p of world.portals) p.to = { ...p.to, y: world.groundHeight(p.to.x, p.to.z) };
+  world.gate = { ...GATE, y: world.groundHeight(GATE.x, GATE.z) };
+  world.islandArrival = Object.fromEntries(Object.entries(ISLAND_ARRIVAL).map(([id, a]) => [id, { ...a, y: world.groundHeight(a.x, a.z) }]));
   world.spots = SPOTS;
   for (const s of SPOTS) {
     if (s.y === null || s.y === undefined) s.y = world.groundHeight(s.x, s.z);
@@ -968,7 +982,7 @@ export function buildWorld() {
     grid.add(circleCollider(p.x, p.z, pt.r * p.s, p.y - 2, p.y + 12 * p.s));
   }
   grid.add(circleCollider(0, 0, 5.2, -10, PLAZA.y + 6)); // fountain
-  for (const p of world.portals) {
+  for (const p of [...world.portals, world.gate]) {
     const a = Math.atan2(p.z, p.x) + Math.PI / 2;
     for (const sgn of [-1, 1]) {
       grid.add(circleCollider(p.x + Math.cos(a) * 3.4 * sgn, p.z + Math.sin(a) * 3.4 * sgn, 0.8, p.y - 2, p.y + 9));

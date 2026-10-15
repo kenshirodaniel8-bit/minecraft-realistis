@@ -10,6 +10,8 @@
 //
 // Angles are measured with atan2(z, x) in degrees, 0..360.
 
+import { islandRegions } from './islands.js';
+
 export const RING = {
   hub: 150,
   inner: 320,
@@ -190,6 +192,9 @@ export const REGIONS = [
     music: 'stars',
   },
 ];
+
+// the seven monster islands (islands.js), reached through the Island Gate
+REGIONS.push(...islandRegions());
 
 export const REGION_BY_ID = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
 export const REGION_INDEX = Object.fromEntries(REGIONS.map((r, i) => [r.id, i]));

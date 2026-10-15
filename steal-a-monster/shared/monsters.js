@@ -9,13 +9,16 @@
 // Model units: the ground is y = 0 and the monster faces +z. A typical baby
 // monster is about 2.2 units tall before `size` is applied (a player is 4.6).
 
+import { generateIslandSpecies } from './speciesGen.js';
+
 export const RARITIES = {
   common: { name: 'Common', color: '#8fd46b', xp: 1, order: 0 },
   uncommon: { name: 'Uncommon', color: '#4fc8ff', xp: 1.4, order: 1 },
   rare: { name: 'Rare', color: '#6b7bff', xp: 2.2, order: 2 },
   epic: { name: 'Epic', color: '#c46bff', xp: 4, order: 3 },
   legendary: { name: 'Legendary', color: '#ffb12a', xp: 8, order: 4 },
-  secret: { name: 'Secret', color: '#ff3df2', xp: 10, order: 5 },
+  mythic: { name: 'Mythic', color: '#ff3b6b', xp: 9, order: 5 },
+  secret: { name: 'Secret', color: '#ff3df2', xp: 10, order: 6 },
   event: { name: 'Event', color: '#ffd93a', xp: 3, order: 3 },
 };
 
@@ -54,7 +57,8 @@ const shot = (name, o = {}) => ({ kind: 'projectile', name, range: 18, minRange:
 const slam = (name, o = {}) => ({ kind: 'slam', name, range: 3.5, radius: 5, power: 1.5, windupMs: 950, cooldownMs: 5200, knockback: 14, ...o });
 const breath = (name, o = {}) => ({ kind: 'breath', name, range: 8, arc: 55, power: 1.4, windupMs: 750, cooldownMs: 5200, knockback: 5, ...o });
 
-export const SPECIES = [
+// Hand-made species (the mainland, the expansion islands and the events).
+const BASE_SPECIES = [
   // ======================================================== Greenstarter Plains
   {
     id: 'chompkin', name: 'Chompkin', title: 'Toothy Bud Monster', element: 'nature', rarity: 'common', category: 'common',
@@ -1538,6 +1542,10 @@ export const SPECIES = [
     },
   },
 ];
+
+// ...plus the 50 species of each of the seven monster islands (islands.js),
+// generated from the hand-made ones (speciesGen.js).
+export const SPECIES = [...BASE_SPECIES, ...generateIslandSpecies(BASE_SPECIES)];
 
 export const SPECIES_BY_ID = Object.fromEntries(SPECIES.map((s) => [s.id, s]));
 export const SPECIES_INDEX = Object.fromEntries(SPECIES.map((s, i) => [s.id, i]));

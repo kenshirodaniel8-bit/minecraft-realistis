@@ -13,6 +13,8 @@
     #bar { position: fixed; top: 10px; left: 10px; display: flex; gap: 6px; flex-wrap: wrap; z-index: 2; }
     #bar button { font: 800 14px "Trebuchet MS", system-ui; padding: 6px 12px; border-radius: 10px; border: 3px solid #2a1a4a; background: #ffe14a; cursor: pointer; }
     #bar button.on { background: #ff7ab8; color: #fff; }
+    #areas { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+    #areas a.on { background: #ff7ab8; color: #fff; }
     #bar a { font: 800 14px system-ui; padding: 6px 12px; border-radius: 10px; background: #fff; color: #2a1a4a; text-decoration: none; border: 3px solid #2a1a4a; }
   </style>
 </head>
@@ -28,6 +30,7 @@
     <button data-pose="sleep">Sleep</button>
     <button data-pose="celebrate">Celebrate</button>
     <button data-pose="carried">Carried</button>
+    <span id="areas"></span>
   </div>
   <canvas id="c"></canvas>
   <script type="module" src="client/gallery.js"></script>

@@ -6,7 +6,7 @@
 import { SPECIES, SPECIES_BY_ID, RARITIES, ELEMENTS, PERKS, monsterStats, incomePerSecond, perkValue, recruitPrice, monsterPower } from '#shared/monsters.js';
 import { SWORDS, SWORD_BY_ID, swordLockReason, swordDps } from '#shared/weapons.js';
 import { ITEMS, ITEM_BY_ID } from '#shared/items.js';
-import { REGION_BY_ID, REGIONS } from '#shared/regions.js';
+import { REGION_BY_ID, REGIONS, regionLockReason } from '#shared/regions.js';
 import { COSMETICS, COSMETIC_BY_ID } from '#shared/lucky.js';
 import { CONFIG } from '#shared/config.js';
 import { DECOR, DECOR_BY_ID, placedCounts } from '#shared/decor.js';
@@ -417,6 +417,9 @@ export class UI {
     } else if (name === 'board') {
       title.textContent = '🍀 Lucky Board';
       body.innerHTML = this.boardHtml(s);
+    } else if (name === 'travel') {
+      title.textContent = '🌴 Island Gate';
+      body.innerHTML = this.travelHtml(s);
     } else if (name === 'map') {
       title.textContent = '🗺 World Map';
       body.innerHTML = '<canvas id="map-canvas" width="900" height="900"></canvas><p class="muted small" style="text-align:center">Yellow = you · Blue = other players · Squares = bases · Dots = discovered places · Dark = locked</p>';
@@ -461,6 +464,8 @@ export class UI {
           case 'tab': this.tab = a.tab; this.render(); break;
           case 'hat': acts.equipCosmetic(a.id === 'none' ? null : a.id); break;
           case 'open': this.open(a.panel); break;
+          case 'travel': acts.travel(a.id); break;
+          case 'dexTab': this.dexTab = a.tab; this.render(); break;
           default: break;
         }
       };
@@ -486,12 +491,48 @@ export class UI {
       <div class="grid">${cards || '<p class="muted">No monsters yet! Defeat a wild monster and pay its fee to recruit it.</p>'}</div>`;
   }
 
+  // Island Gate: every island, what it needs and how many monsters live there.
+  travelHtml(s) {
+    const p = s.profile;
+    const active = new Set(s.worldState?.active || []);
+    const progress = { level: p.level, swordTier: Math.max(...p.swords.map((id) => SWORD_BY_ID[id]?.tier || 1)) };
+    const seen = p.discoveries.species;
+    const g = this.app.world.gate;
+    const pos = this.app.player.pos;
+    const near = Math.hypot(pos.x - g.x, pos.z - g.z) < g.range + 1;
+    const rows = REGIONS.filter((r) => r.shape.kind === 'island').map((r) => {
+      const lock = regionLockReason(r, progress, active);
+      const species = SPECIES.filter((sp) => sp.island === r.id || (!sp.island && sp.spawn.regions?.[0] === r.id && !sp.spawn.event));
+      const found = species.filter((sp) => seen[sp.id]).length;
+      const here = s.region === r.id;
+      const btn = here ? '<button class="btn sm" disabled>You are here</button>'
+        : lock ? `<button class="btn sm" disabled>🔒 ${esc(lock)}</button>`
+          : `<button class="btn sm go" data-act="travel" data-id="${r.id}" ${near ? '' : 'disabled'}>Travel</button>`;
+      const swatch = `#${(r.colors.high ?? 0x88cc88).toString(16).padStart(6, '0')}`;
+      return `<div class="row-item">
+        <div class="icon island-icon" style="background:radial-gradient(circle at 40% 35%, ${swatch}, #${(r.colors.accent ?? 0x8888ff).toString(16).padStart(6, '0')})">🏝</div>
+        <div class="info"><h4>${esc(r.name)}</h4><p>${esc(r.blurb || '')}</p>
+          <div class="stats-row"><span>Lv ${r.levels[0]}–${r.levels[1]}</span><span>🐾 ${species.length} species</span><span>📖 ${found} found</span>${r.monsterIsland ? '<span>👑 Legendary lair · 🔥 Mythic shrine</span>' : ''}</div>
+        </div>${btn}</div>`;
+    }).join('');
+    return `${near ? '' : '<p class="note">📍 Walk up to the Island Gate in the plaza to travel.</p>'}<p>Each monster island has 50 monsters of its own, from Common to Mythic. A portal on every island brings you back to the plaza.</p>${rows}`;
+  }
+
   codexHtml(s) {
     const p = s.profile;
     const seen = p.discoveries.species;
     const owned = new Set(p.monsters.map((m) => m.species));
     const n = Object.keys(seen).length;
-    const cards = SPECIES.map((sp) => {
+    // one tab per area, so only a few dozen pictures are drawn at a time
+    const areas = [{ id: 'main', name: '🌍 Mainland' }, ...REGIONS.filter((r) => r.monsterIsland).map((r) => ({ id: r.id, name: r.name.replace(' Island', '') }))];
+    const tab = areas.some((a) => a.id === this.dexTab) ? this.dexTab : 'main';
+    const inTab = (sp) => (tab === 'main' ? !sp.island : sp.island === tab);
+    const tabs = areas.map((a) => {
+      const list = SPECIES.filter((sp) => (a.id === 'main' ? !sp.island : sp.island === a.id));
+      const k = list.filter((sp) => seen[sp.id]).length;
+      return `<button class="${a.id === tab ? 'on' : ''}" data-act="dexTab" data-tab="${a.id}">${esc(a.name)} <small>${k}/${list.length}</small></button>`;
+    }).join('');
+    const cards = SPECIES.filter(inTab).map((sp) => {
       const known = !!seen[sp.id] || owned.has(sp.id);
       const r = RARITIES[sp.rarity];
       const where = sp.spawn.spot ? `Hidden: ${SPOTS.find((x) => x.id === sp.spawn.spot)?.region ? REGION_BY_ID[SPOTS.find((x) => x.id === sp.spawn.spot).region].name : '?'}` : sp.spawn.event ? 'LUCKY LUCKY event' : REGION_BY_ID[sp.spawn.regions[0]].name;
@@ -502,7 +543,7 @@ export class UI {
         <div class="sub">${known ? esc(sp.title) : `📍 ${esc(where)}`}${sp.spawn.time === 'night' ? ' 🌙' : sp.spawn.time === 'day' ? ' ☀' : ''}</div>
       </div>`;
     }).join('');
-    return `<p>Discovered <b>${n} / ${SPECIES.length}</b> monsters. Defeat a monster to add it to your Monsterdex.</p><div class="grid">${cards}</div>`;
+    return `<p>Discovered <b>${n} / ${SPECIES.length}</b> monsters. Defeat a monster to add it to your Monsterdex.</p><div class="tabs">${tabs}</div><div class="grid">${cards}</div>`;
   }
 
   swordsHtml(s) {

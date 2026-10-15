@@ -848,7 +848,7 @@ export class MonsterManager {
       if (m.stunnedUntil > now) flags |= 2;
       if (m.clueFor === s.id) flags |= 4;
       if (m.event) flags |= 8;
-      if (m.species.category === 'elite' || m.species.category === 'boss' || m.species.category === 'legendary') flags |= 16;
+      if (m.species.category === 'elite' || m.species.category === 'boss' || m.species.category === 'legendary' || m.species.category === 'mythic') flags |= 16;
       if (m.target === s.pn) flags |= 32;
       if (m.dash) flags |= 64;
       if (m.slowUntil > now) flags |= 128;

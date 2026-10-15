@@ -148,6 +148,7 @@ export class Game {
       equipSword: (s, p) => this.economy.handleEquipSword(s, p),
       buyItem: (s, p) => this.economy.handleBuyItem(s, p),
       buyUpgrade: (s, p) => this.economy.handleBuyUpgrade(s, p),
+      travel: (s, p) => this.economy.handleTravel(s, p),
       useItem: (s, p) => this.items.handleUse(s, p),
       lock: (s) => this.security.handleLock(s),
       home: (s) => this.bases.handleHome(s),

@@ -1,14 +1,37 @@
 // Monster gallery: every species side by side, animated. Useful for checking
 // the models and as a showcase. Query params: ?pose=move&only=draklet&cols=6
+// &island=cute (one monster island; without it: the mainland monsters)
 import * as THREE from 'three';
 import { SPECIES, RARITIES } from '#shared/monsters.js';
+import { ISLANDS } from '#shared/islands.js';
 import { buildMonster } from './monsterRenderer.js';
 import { animateMonster } from './animationSystem.js';
 import { makeLabel } from './labels.js';
 
 const params = new URLSearchParams(location.search);
 const only = params.get('only');
-const list = only ? SPECIES.filter((s) => only.split(',').includes(s.id)) : SPECIES;
+const island = params.get('island');
+const list = only ? SPECIES.filter((s) => only.split(',').includes(s.id))
+  : island ? SPECIES.filter((s) => s.island === island)
+    : SPECIES.filter((s) => !s.island);
+
+// area links: the mainland and every island
+const areas = document.getElementById('areas');
+if (areas) {
+  const link = (id, name) => {
+    const a = document.createElement('a');
+    const u = new URL(location.href);
+    u.searchParams.delete('only');
+    if (id) u.searchParams.set('island', id);
+    else u.searchParams.delete('island');
+    a.href = u.toString();
+    a.textContent = name;
+    if ((island || null) === id && !only) a.className = 'on';
+    areas.appendChild(a);
+  };
+  link(null, 'Mainland');
+  for (const isl of ISLANDS) link(isl.id, isl.name.replace(' Island', ''));
+}
 const cols = Number(params.get('cols')) || Math.min(8, Math.ceil(Math.sqrt(list.length * 1.6)));
 let pose = params.get('pose') || 'idle';
 

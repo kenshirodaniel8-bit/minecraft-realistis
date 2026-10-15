@@ -232,44 +232,85 @@ export class MapRenderer {
     ctx.fillStyle = '#1e4a7a';
     ctx.fillRect(0, 0, W, W);
     ctx.save();
-    // world extent incl. islands: x in [-1200, 1200], continent drawn large
-    const span = WORLD_EXTENT * 2 + 120;
-    const k = W / span;
+    // the continent in the middle, the islands as round insets around it
+    // (in the direction where they really are)
+    const k = (W * 0.66) / (WORLD_EXTENT * 2);
     ctx.translate(W / 2, W / 2);
     ctx.scale(k, k);
+    ctx.beginPath();
+    ctx.arc(0, 0, RING.edge + 6, 0, Math.PI * 2);
+    ctx.clip();
     ctx.drawImage(this.image, -WORLD_EXTENT, -WORLD_EXTENT, WORLD_EXTENT * 2, WORLD_EXTENT * 2);
     this.shadeLocked(ctx, s);
-    // islands as insets in the corners
     ctx.restore();
-    const insets = [];
-    this.islands.forEach((isl, i) => {
-      const sz = W * 0.22;
-      const x = i === 0 ? W - sz - 10 * ui : 10 * ui;
-      const y = W - sz - 10 * ui;
+    const insets = this.islands.map((isl) => {
+      const sh = isl.region.shape;
+      const a = Math.atan2(sh.cz, sh.cx);
+      const sz = W * 0.13;
+      return { isl, sz, cx: W / 2 + Math.cos(a) * W * 0.42, cy: W / 2 + Math.sin(a) * W * 0.42 };
+    });
+    for (const n of insets) {
+      const { isl, sz, cx, cy } = n;
       ctx.save();
       ctx.beginPath();
-      ctx.arc(x + sz / 2, y + sz / 2, sz / 2, 0, Math.PI * 2);
+      ctx.arc(cx, cy, sz / 2, 0, Math.PI * 2);
       ctx.clip();
-      ctx.drawImage(isl.img, x, y, sz, sz);
-      const open = s.active.has(isl.region.id);
-      if (!open) {
+      ctx.drawImage(isl.img, cx - sz / 2, cy - sz / 2, sz, sz);
+      const reason = regionLockReason(isl.region, s.progress, s.active);
+      if (reason) {
         ctx.fillStyle = 'rgba(20,10,40,.6)';
-        ctx.fillRect(x, y, sz, sz);
+        ctx.fillRect(cx - sz / 2, cy - sz / 2, sz, sz);
       }
       ctx.restore();
-      ctx.lineWidth = 4 * ui;
+      ctx.lineWidth = 3 * ui;
       ctx.strokeStyle = '#241640';
       ctx.beginPath();
-      ctx.arc(x + sz / 2, y + sz / 2, sz / 2, 0, Math.PI * 2);
+      ctx.arc(cx, cy, sz / 2, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.font = `800 ${Math.round(fontPx * ui)}px "Trebuchet MS", system-ui`;
+      ctx.font = `800 ${Math.round(fontPx * 0.95 * ui)}px "Trebuchet MS", system-ui`;
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#fff';
-      const label = `${isl.region.name}${open ? '' : ` (${s.minPop?.[isl.region.id] ?? isl.region.minPopulation}+ players)`}`;
-      const half = ctx.measureText(label).width / 2 + 4 * ui;
-      ctx.fillText(label, Math.min(W - half, Math.max(half, x + sz / 2)), y - 6 * ui);
-      insets.push({ isl, x, y, sz });
-    });
+      const name = isl.region.name.replace(/ (Island|Isle)$/, '');
+      const lock = !reason ? '' : s.active.has(isl.region.id) ? `🔒 Lv ${isl.region.unlock?.level}` : `🔒 ${s.minPop?.[isl.region.id] ?? isl.region.minPopulation}+ players`;
+      const lines = lock ? [name, lock] : [name];
+      // labels under the island, except at the bottom edge of the map
+      const above = cy > W * 0.75;
+      lines.forEach((t, i) => {
+        const y = above ? cy - sz / 2 - (6 + (lines.length - 1 - i) * 13) * ui : cy + sz / 2 + (12 + i * 13) * ui;
+        const half = ctx.measureText(t).width / 2 + 4 * ui;
+        const x = Math.min(W - half, Math.max(half, cx));
+        ctx.lineWidth = 3 * ui;
+        ctx.strokeStyle = '#241640';
+        ctx.fillStyle = i === 0 ? '#fff' : '#ffb0c0';
+        ctx.strokeText(t, x, y);
+        ctx.fillText(t, x, y);
+      });
+    }
+    // a world point on an island -> its inset on screen
+    const onInset = (x, z) => {
+      for (const n of insets) {
+        const sh = n.isl.region.shape;
+        const m = sh.r + 30;
+        const dx = x - sh.cx;
+        const dz = z - sh.cz;
+        if (dx * dx + dz * dz < m * m) return { x: n.cx + (dx / m) * (n.sz / 2), y: n.cy + (dz / m) * (n.sz / 2) };
+      }
+      return null;
+    };
+    const dot = (x, z, r, fill, stroke) => {
+      const p = onInset(x, z);
+      if (!p && Math.max(Math.abs(x), Math.abs(z)) > WORLD_EXTENT) return;
+      const sx = p ? p.x : W / 2 + x * k;
+      const sy = p ? p.y : W / 2 + z * k;
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r * ui, 0, Math.PI * 2);
+      ctx.fill();
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 2 * ui;
+        ctx.stroke();
+      }
+    };
     ctx.save();
     ctx.translate(W / 2, W / 2);
     ctx.scale(k, k);
@@ -284,60 +325,43 @@ export class MapRenderer {
         ctx.strokeRect(b.x - 14, b.z - 14, 28, 28);
       }
     }
-    // discovered spots
+    ctx.restore();
+    // discovered spots, clues, players (on the continent or on an island inset)
     for (const sp of this.world.spots) {
       if (!s.discoveredSpots[sp.id] && sp.hidden) continue;
-      ctx.fillStyle = s.discoveredSpots[sp.id] ? '#ffe14a' : 'rgba(255,255,255,.6)';
-      ctx.beginPath();
-      ctx.arc(sp.x, sp.z, 7, 0, Math.PI * 2);
-      ctx.fill();
+      dot(sp.x, sp.z, 3.2, s.discoveredSpots[sp.id] ? '#ffe14a' : 'rgba(255,255,255,.6)');
     }
-    for (const c of s.clues) {
-      ctx.strokeStyle = '#ff5aa5';
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.arc(c.x, c.z, 14, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    for (const p of s.players) {
-      ctx.fillStyle = '#3fa6ff';
-      ctx.beginPath();
-      ctx.arc(p.x, p.z, 8, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.fillStyle = '#ffe14a';
-    ctx.strokeStyle = '#241640';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(s.me.x, s.me.z, 11, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    for (const c of s.clues) dot(c.x, c.z, 6, 'rgba(255,90,165,.35)', '#ff5aa5');
+    for (const p of s.players) dot(p.x, p.z, 4, '#3fa6ff');
+    dot(s.me.x, s.me.z, 5.5, '#ffe14a', '#241640');
+    ctx.save();
+    ctx.translate(W / 2, W / 2);
+    ctx.scale(k, k);
     // labels (two lines: name + lock)
     ctx.textAlign = 'center';
     for (const r of REGIONS) {
       if (r.shape.kind === 'island') continue;
       let c = regionCenter(r);
       // (upper left: the island insets sit in the lower corners)
-      if (r.shape.kind === 'ring') c = { x: Math.cos(-2.36) * 535, z: Math.sin(-2.36) * 535 };
+      if (r.shape.kind === 'ring') c = { x: Math.cos(2.36) * 535, z: Math.sin(2.36) * 535 };
       if (r.id === 'plains') c = { x: 0, z: -118 };
       // regions centred on the horizontal axis: stagger inner/outer labels
-      if (r.shape.kind === 'sector' && Math.abs(c.z) < 60) c = { x: c.x, z: c.z + (r.shape.r1 === RING.hub ? 34 : -34) };
+      if (r.shape.kind === 'sector' && Math.abs(c.z) < 60) c = { x: c.x, z: c.z + (r.shape.r1 === RING.hub ? 60 : -60) };
       const reason = regionLockReason(r, s.progress, s.active);
       const lines = [r.name];
       if (reason && r.id !== 'plains') lines.push(`🔒 Lv ${r.unlock.level}${r.unlock.swordTier ? ` · T${r.unlock.swordTier} sword` : ''}`);
-      ctx.font = `800 ${Math.round((fontPx * ui) / k)}px "Trebuchet MS", system-ui`;
+      const fp = fontPx * 0.85;
+      ctx.font = `800 ${Math.round((fp * ui) / k)}px "Trebuchet MS", system-ui`;
       ctx.lineWidth = (4 * ui) / k;
       ctx.strokeStyle = '#241640';
       lines.forEach((t, i) => {
-        const y = c.z + (i - (lines.length - 1) / 2) * ((fontPx * 1.3 * ui) / k);
+        const y = c.z + (i - (lines.length - 1) / 2) * ((fp * 1.25 * ui) / k);
         ctx.fillStyle = i === 0 ? '#ffffff' : '#ffb0c0';
         ctx.strokeText(t, c.x, y);
         ctx.fillText(t, c.x, y);
       });
     }
     ctx.restore();
-    // where are the island players
-    void insets;
   }
 }
 

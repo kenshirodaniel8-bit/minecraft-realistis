@@ -159,6 +159,24 @@ export class Economy {
     return s.remember(p.reqId, { ok: true, kind: p.kind, to: offer.to });
   }
 
+  // The Island Gate in the plaza: travel to any island the player may enter.
+  handleTravel(s, p) {
+    if (!isObj(p) || typeof p.region !== 'string') return fail('bad');
+    const game = this.game;
+    const gate = game.world.gate;
+    if ((s.pos.x - gate.x) ** 2 + (s.pos.z - gate.z) ** 2 > (gate.range + 2) ** 2) return fail('too_far', 'Walk up to the Island Gate in the plaza.');
+    if (s.carrying) return fail('carrying', 'The gate refuses monster thieves!');
+    const region = REGION_BY_ID[p.region];
+    if (!region || region.shape.kind !== 'island') return fail('bad_region', 'Unknown island.');
+    const reason = regionLockReason(region, game.playerProgress(s), game.expansion.active);
+    if (reason) return fail('locked', reason);
+    const dest = game.world.islandArrival[region.id] || game.world.portals.find((pt) => pt.region === region.id)?.to;
+    if (!dest) return fail('bad_region');
+    s.portalReadyAt = game.now() + 2500;
+    game.teleport(s, dest.x, dest.y, dest.z, 'portal');
+    return { ok: true, region: region.id };
+  }
+
   // Portals in the plaza lead to the expansion islands (server-chosen
   // destinations only).
   checkPortals(s) {

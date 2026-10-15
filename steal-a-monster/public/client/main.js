@@ -827,6 +827,11 @@ class App {
         app.net.request('decline', { monsterId });
       },
       buySword: (swordId) => req('buySword', { swordId }, () => `⚔ You bought the ${SWORD_BY_ID[swordId].name}!`),
+      travel: async (region) => {
+        const res = await req('travel', { region });
+        if (res.ok) app.ui.close();
+        return res;
+      },
       equipSword: (swordId) => req('equipSword', { swordId }),
       buyItem: (itemId, qty = 1) => req('buyItem', { itemId, qty }, `Bought ${ITEM_BY_ID[itemId].name}${qty > 1 ? ` x${qty}` : ''}!`),
       buyUpgrade: (kind) => req('buyUpgrade', { kind }, kind === 'slots' ? '🟢 More monster pads!' : '🔒 Stronger lasers!'),
@@ -976,6 +981,8 @@ class App {
     for (const sh of this.world.shops) {
       if (Math.hypot(pos.x - sh.x, pos.z - sh.z) < 9) return { kind: 'shop', key: 'E', text: sh.name, panel: sh.kind === 'swords' ? 'swords' : sh.kind === 'items' ? 'items' : 'board' };
     }
+    const g = this.world.gate;
+    if (Math.hypot(pos.x - g.x, pos.z - g.z) < g.range) return { kind: 'shop', key: 'E', text: 'Island Gate: travel to the monster islands', panel: 'travel' };
     const myB = this.world.bases[this.myBase];
     if (myB && Math.hypot(pos.x - myB.terminal.x, pos.z - myB.terminal.z) < 3.5) return { kind: 'shop', key: 'E', text: 'Base upgrades', panel: 'base' };
     if (myB && isInsideBase(myB, pos.x, pos.z) && p.monsters.some((m) => m.slot === null)) {

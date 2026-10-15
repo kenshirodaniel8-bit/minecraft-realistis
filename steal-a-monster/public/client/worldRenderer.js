@@ -470,22 +470,32 @@ export class WorldRenderer {
 
   buildPortals() {
     const stone = lambert(0x9a8fb8, { flat: true });
-    for (const p of this.world.portals) {
+    const gold = lambert(0xffc94a, { flat: true });
+    for (const p of [...this.world.portals, { ...this.world.gate, gate: true }]) {
       const grp = new THREE.Group();
       const yaw = Math.atan2(p.x, p.z);
       grp.position.set(p.x, p.y, p.z);
       grp.rotation.y = yaw;
+      if (p.gate) {
+        // the Island Gate: a bigger golden arch with a rainbow swirl
+        grp.scale.setScalar(1.25);
+        for (let k = 0; k < 7; k++) {
+          const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.45, 0), new THREE.MeshStandardMaterial({ color: [0xff6b9d, 0xffb84a, 0xfff06a, 0x6be08a, 0x5ab8ff, 0x9a7bff, 0xff7ae0][k], emissive: [0xff6b9d, 0xffb84a, 0xfff06a, 0x6be08a, 0x5ab8ff, 0x9a7bff, 0xff7ae0][k], emissiveIntensity: 0.6 }));
+          gem.position.set(-3 + k, 9.3, 0.9);
+          grp.add(gem);
+        }
+      }
       for (const sgn of [-1, 1]) {
-        const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 8, 1.4), stone);
+        const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 8, 1.4), p.gate ? gold : stone);
         pillar.position.set(3.4 * sgn, 4, 0);
         pillar.castShadow = true;
         grp.add(pillar);
       }
-      const lintel = new THREE.Mesh(new THREE.BoxGeometry(8.4, 1.2, 1.6), stone);
+      const lintel = new THREE.Mesh(new THREE.BoxGeometry(8.4, 1.2, 1.6), p.gate ? gold : stone);
       lintel.position.set(0, 8.4, 0);
       grp.add(lintel);
-      const region = REGION_BY_ID[p.region];
-      const color = new THREE.Color(region.id === 'plains' ? 0x7af0ff : region.colors.accent);
+      const region = REGION_BY_ID[p.region || 'plains'];
+      const color = new THREE.Color(p.gate ? 0xff9fd8 : region.id === 'plains' ? 0x7af0ff : region.colors.accent);
       const swirl = new THREE.Mesh(
         new THREE.PlaneGeometry(5.6, 7.4),
         new THREE.ShaderMaterial({
@@ -505,11 +515,11 @@ export class WorldRenderer {
       );
       swirl.position.set(0, 4, 0);
       grp.add(swirl);
-      const label = makeLabel(p.region === 'plains' ? '🏠 Plaza' : `✨ ${p.name}`, { scale: 0.028, color: '#ffffff' });
+      const label = makeLabel(p.gate ? '🌴 Island Gate' : p.region === 'plains' ? '🏠 Plaza' : `✨ ${p.name}`, { scale: 0.028, color: p.gate ? '#fff3a8' : '#ffffff' });
       label.position.set(0, 10.4, 0);
       grp.add(label);
       this.root.add(grp);
-      this.portalMeshes[p.id] = { group: grp, swirl, label, portal: p };
+      if (!p.gate) this.portalMeshes[p.id] = { group: grp, swirl, label, portal: p };
       this.animated.push((t) => { swirl.material.uniforms.uTime.value = t; });
     }
   }

@@ -69,7 +69,7 @@ export const CONFIG = {
   monsters: {
     perRegion: 50,           // wild monsters on every island/region while a player is there
     neighbourRegion: 20,     // regions a player is close to, but not in, get this many (near them)
-    hardCap: 720,            // safety limit for the whole server (14 regions x 50 + extras)
+    hardCap: 1000,           // safety limit for the whole server (19 regions x 50 + extras)
     activationRadius: 190,   // regions with a player this close spawn and think
     spawnMinPlayerDist: 32,  // never pop in right next to someone
     spawnMaxPlayerDist: 165,
@@ -151,6 +151,7 @@ export const CONFIG = {
       rare: { chance: 0.35, min: 1, max: 1 },
       epic: { chance: 1, min: 1, max: 2 },
       legendary: { chance: 1, min: 3, max: 5 },
+      mythic: { chance: 1, min: 6, max: 10 },
       secret: { chance: 1, min: 4, max: 6 },
       event: { chance: 1, min: 1, max: 2 },
     },
