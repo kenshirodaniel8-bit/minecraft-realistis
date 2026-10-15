@@ -11,7 +11,7 @@
 import { CONFIG, PROTOCOL_VERSION } from '#shared/config.js';
 import { buildWorld, isInsideBase, WATER_Y } from '#shared/world.js';
 import { REGION_BY_ID, regionIdAt, regionLockReason } from '#shared/regions.js';
-import { SWORD_BY_ID } from '#shared/weapons.js';
+import { SWORD_BY_ID, SWORD_INDEX } from '#shared/weapons.js';
 import { SPECIES_INDEX } from '#shared/monsters.js';
 import { COSMETIC_INDEX } from '#shared/lucky.js';
 import { isObj, finite, int, sanitizeName, sanitizeText, color as isColor, fail } from './validate.js';
@@ -34,6 +34,7 @@ import { WorldExpansion } from './services/worldExpansion.js';
 import { Puzzles } from './services/puzzles.js';
 import { MoonSecret } from './services/moonSecret.js';
 import { Companions } from './services/companions.js';
+import { CostumeShop } from './services/costumes.js';
 
 export { fail };
 
@@ -134,6 +135,7 @@ export class Game {
     this.puzzles = new Puzzles(this);
     this.moonSecret = new MoonSecret(this);
     this.companions = new Companions(this);
+    this.costumes = new CostumeShop(this);
 
     this.handlers = {
       move: (s, p) => this.handleMove(s, p),
@@ -145,6 +147,10 @@ export class Game {
       unplace: (s, p) => this.bases.handleUnplace(s, p),
       follow: (s, p) => this.bases.handleFollow(s, p),
       callAllies: (s) => this.companions.handleCall(s),
+      buyCostume: (s, p) => this.costumes.handleBuy(s, p),
+      equipCostume: (s, p) => this.costumes.handleEquip(s, p),
+      buyPower: (s, p) => this.costumes.handleBuyPower(s, p),
+      power: (s, p) => this.costumes.handlePower(s, p),
       release: (s, p) => this.bases.handleRelease(s, p),
       collect: (s) => this.bases.handleCollect(s),
       buyDecor: (s, p) => this.bases.handleBuyDecor(s, p),
@@ -423,6 +429,12 @@ export class Game {
   }
 
   teleport(s, x, y, z, reason, yaw) {
+    // others nearby see you vanish here and appear there
+    const from = { x: s.pos.x, z: s.pos.z };
+    const r1 = (v) => Math.round(v * 10) / 10;
+    const ev = { pn: s.pn, x: r1(x), y: r1(y), z: r1(z), fx: r1(from.x), fz: r1(from.z) };
+    this.broadcastNear(from.x, from.z, 120, 'ptp', ev, s);
+    if ((x - from.x) ** 2 + (z - from.z) ** 2 > 240 * 240) this.broadcastNear(x, z, 120, 'ptp', ev, s);
     s.teleportSeq++;
     s.pos = { x, y, z };
     s.lastMoveAt = this.now();
@@ -577,6 +589,9 @@ export class Game {
       regionsVisited: p.regionsVisited,
       tutorial: p.tutorial,
       moon: p.moon,
+      costumes: p.costumes,
+      powerLevel: p.powerLevel,
+      powerReadyAt: s.powerReadyAt || 0,
       cosmetics: p.cosmetics,
       coupons: p.coupons,
       stats: p.stats,
@@ -593,6 +608,7 @@ export class Game {
       level: s.profile.level,
       baseIndex: s.baseIndex,
       cosmetic: s.profile.cosmetics.equipped,
+      costume: s.profile.costumes.equipped,
       sword: s.profile.sword,
     };
   }
@@ -773,7 +789,7 @@ export class Game {
       players.push([
         s.pn, r(s.pos.x), r(s.pos.y), r(s.pos.z), r(s.yaw), s.anim,
         Math.round((100 * s.hp) / s.maxHp),
-        SWORD_BY_ID[s.profile.sword]?.tier || 1,
+        SWORD_INDEX[s.profile.sword] ?? 0,
         s.carrying ? SPECIES_INDEX[s.carrying.species] : -1,
         this.effectBits(s, now),
         -1, // (was: the one follower; companions now come with the monsters)

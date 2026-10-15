@@ -11,6 +11,7 @@ import { COSMETICS, COSMETIC_BY_ID } from '#shared/lucky.js';
 import { CONFIG } from '#shared/config.js';
 import { DECOR, DECOR_BY_ID, placedCounts } from '#shared/decor.js';
 import { SPOTS } from '#shared/world.js';
+import { COSTUMES, POWER_UPGRADE, powerDamage } from '#shared/costumes.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -50,6 +51,7 @@ export class UI {
     }
     $('home-btn').onclick = () => app.actions.home();
     $('lock-btn').onclick = () => app.actions.lock();
+    $('power-btn').onclick = () => app.usePower();
     this.buildHotbar();
     $('chat-form').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -417,6 +419,12 @@ export class UI {
     } else if (name === 'board') {
       title.textContent = '🍀 Lucky Board';
       body.innerHTML = this.boardHtml(s);
+    } else if (name === 'costumes') {
+      title.textContent = '🕶 Costume Shop';
+      body.innerHTML = this.costumesHtml(s);
+    } else if (name === 'power') {
+      title.textContent = '💪 Upgrade your power';
+      body.innerHTML = this.powerHtml(s);
     } else if (name === 'travel') {
       title.textContent = '🌴 Island Gate';
       body.innerHTML = this.travelHtml(s);
@@ -465,6 +473,9 @@ export class UI {
           case 'hat': acts.equipCosmetic(a.id === 'none' ? null : a.id); break;
           case 'open': this.open(a.panel); break;
           case 'travel': acts.travel(a.id); break;
+          case 'buyCostume': acts.buyCostume(a.id); break;
+          case 'wearCostume': acts.equipCostume(a.id === 'none' ? null : a.id); break;
+          case 'buyPower': acts.buyPower(); break;
           case 'dexTab': this.dexTab = a.tab; this.render(); break;
           default: break;
         }
@@ -491,6 +502,50 @@ export class UI {
     return `<p><b>${p.monsters.length} / ${p.base.slots}</b> monsters · Income <b>$${p.income}/s</b> · <span class="muted">Recruit more in the wild, then bring them to your base.</span></p>
       <p class="note">🐾 Team: <b>${team} / 5</b> monsters walk with you and fight with you. Open a monster and press <b>Bring along</b>; press <b>X</b> to call them to your side.</p>
       <div class="grid">${cards || '<p class="muted">No monsters yet! Defeat a wild monster and pay its fee to recruit it.</p>'}</div>`;
+  }
+
+  // Costume Shop: looks, animations and a master power on Z.
+  costumesHtml(s) {
+    const p = s.profile;
+    const near = s.nearShop === 'costumes';
+    const lvl = p.powerLevel || 0;
+    const rows = COSTUMES.map((c) => {
+      const owned = p.costumes.owned.includes(c.id);
+      const worn = p.costumes.equipped === c.id;
+      let btn;
+      if (worn) btn = '<button class="btn sm ghost" data-act="wearCostume" data-id="none">Take off</button>';
+      else if (owned) btn = `<button class="btn sm blue" data-act="wearCostume" data-id="${c.id}">Wear</button>`;
+      else btn = `<button class="btn sm go" data-act="buyCostume" data-id="${c.id}" ${p.money < c.price || !near ? 'disabled' : ''}>Buy $${fmt(c.price)}</button>`;
+      const pw = c.power;
+      const what = pw.shape === 'wave' ? `a slash wave in front of you (up to ${pw.maxTargets} monsters)` : pw.shape === 'chain' ? `lightning that jumps between ${pw.maxTargets} monsters` : `everything around you (${pw.radius} m)`;
+      const extra = [pw.burn ? '🔥 sets them on fire' : '', pw.freezeMs ? '🧊 freezes them' : '', pw.heal ? `💖 heals you ${Math.round(pw.heal * 100)}%` : '', c.sword ? `⚔ comes with the ${SWORD_BY_ID[c.sword].name}` : ''].filter(Boolean);
+      const pics = `<img alt="" class="costume-pic" src="${this.app.preview.costumeIcon(c.id)}">${c.look.nightLines ? `<img alt="" class="costume-pic night" title="At night" src="${this.app.preview.costumeIcon(c.id, 160, true)}">` : ''}`;
+      return `<div class="row-item costume ${owned ? 'owned' : ''} ${worn ? 'equipped' : ''}">
+        <div class="costume-pics">${pics}</div>
+        <div class="info"><h4>${c.icon} ${esc(c.name)}</h4><p>${esc(c.blurb)}</p>
+          <div class="stats-row"><span>💥 Z: <b>${esc(pw.name)}</b> ${fmt(powerDamage(c, lvl))} damage</span><span>${esc(what)}</span><span>⏱ ${pw.cooldownMs / 1000}s</span>${extra.map((e) => `<span>${esc(e)}</span>`).join('')}<span>🎬 own idle, attack, dodge &amp; teleport moves</span></div>
+        </div>${btn}</div>`;
+    }).join('');
+    return `${near ? '' : '<p class="note">📍 You can look, but you buy at the Costume Shop in the central plaza.</p>'}<p>Wear a costume and press <b>Z</b> (or 💥) for its master power. Make every power stronger at <b>Upgrade your power</b> next door (+${POWER_UPGRADE.bonus} per level).</p>${rows}`;
+  }
+
+  // Upgrade your power: +130 to every costume power per level.
+  powerHtml(s) {
+    const p = s.profile;
+    const near = s.nearShop === 'power';
+    const lvl = p.powerLevel || 0;
+    const max = lvl >= POWER_UPGRADE.maxLevel;
+    const price = max ? 0 : POWER_UPGRADE.price(lvl);
+    const bar = Array.from({ length: POWER_UPGRADE.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('');
+    const list = COSTUMES.map((c) => `<span>${c.icon} ${esc(c.power.name)}: <b>${fmt(powerDamage(c, lvl))}</b>${max ? '' : ` → ${fmt(powerDamage(c, lvl + 1))}`}${p.costumes.owned.includes(c.id) ? ' ✅' : ''}</span>`).join('');
+    const btn = max ? '<button class="btn sm" disabled>MAX</button>'
+      : `<button class="btn go" data-act="buyPower" ${p.money < price || !near ? 'disabled' : ''}>Upgrade +${POWER_UPGRADE.bonus} power · $${fmt(price)}</button>`;
+    return `${near ? '' : '<p class="note">📍 Visit the "Upgrade your power" shop in the central plaza to upgrade.</p>'}
+      <p>Power level <b>${lvl} / ${POWER_UPGRADE.maxLevel}</b> · bonus <b>+${fmt(lvl * POWER_UPGRADE.bonus)}</b> damage on every costume master power (Z).</p>
+      <div class="power-bar">${bar}</div>
+      <div class="stats-row power-list">${list}</div>
+      <div class="acts" style="margin-top:10px">${btn}</div>
+      ${p.costumes.owned.length ? '' : '<p class="note">You have no costume yet — buy one at the Costume Shop next door to use your power.</p>'}`;
   }
 
   // Island Gate: every island, what it needs and how many monsters live there.
@@ -551,7 +606,7 @@ export class UI {
   swordsHtml(s) {
     const p = s.profile;
     const near = s.nearShop === 'swords';
-    const rows = SWORDS.map((w) => {
+    const rows = SWORDS.filter((w) => !w.costume || p.swords.includes(w.id)).map((w) => {
       const owned = p.swords.includes(w.id);
       const lock = swordLockReason(w, p);
       const equipped = p.sword === w.id;

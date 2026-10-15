@@ -212,6 +212,7 @@ export class TouchControls {
         <button class="tc-btn tc-jump" data-a="jump" aria-label="Jump">⤒</button>
         <button class="tc-btn tc-dodge" data-a="dodge" aria-label="Dodge">💨</button>
         <button class="tc-btn tc-interact" data-a="interact" aria-label="Interact">E</button>
+        <button class="tc-btn tc-power" data-a="power" aria-label="Master power">💥</button>
       </div>
       <div class="tc-top">
         <button class="tc-small" data-a="home" aria-label="Return to base">🏠</button>

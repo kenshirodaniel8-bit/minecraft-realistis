@@ -143,6 +143,13 @@ kbd { display: inline-block; min-width: 22px; padding: 1px 6px; border: 2px soli
 #goal-marker { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 4px; pointer-events: none; font: 900 15px var(--font); color: #fff; background: rgba(44,36,110,.85); border: 2px solid #8fb8ff; border-radius: 12px; padding: 3px 10px; white-space: nowrap; will-change: transform; box-shadow: 0 0 12px rgba(143,184,255,.7); }
 #goal-marker .bm-arrow { display: inline-block; color: #bfe0ff; font-size: 17px; }
 #goal-marker .bm-arrow[hidden] { display: none; }
+.row-item.costume .costume-pics { display: flex; gap: 4px; flex-shrink: 0; }
+.costume-pic { width: 84px; height: 84px; border-radius: 12px; background: #e8e2ff; border: 2px solid var(--ink); }
+.costume-pic.night { background: #0c0c24; }
+.power-bar { display: flex; gap: 4px; margin: 8px 0; }
+.power-bar i { flex: 1; height: 14px; border-radius: 6px; background: #e8dcff; border: 2px solid var(--ink); }
+.power-bar i.on { background: linear-gradient(90deg, #8a4ad8, #5ff3ff); }
+.power-list { flex-wrap: wrap; }
 #moon-hud { margin-top: 4px; background: rgba(36,28,90,.85); color: #fff; border: 2px solid #8fb8ff; border-radius: 10px; padding: 3px 8px; font: 800 12px var(--font); text-align: center; pointer-events: none; }
 #crosshair { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px var(--ink); opacity: .7; display: none; }
 .mouselook #crosshair { display: block; }
@@ -258,6 +265,7 @@ kbd { display: inline-block; min-width: 22px; padding: 1px 6px; border: 2px soli
 .tc-jump { right: 100px; bottom: 0; width: 64px; height: 64px; }
 .tc-dodge { right: 0; bottom: 100px; width: 64px; height: 64px; }
 .tc-interact { right: 92px; bottom: 82px; width: 60px; height: 60px; background: rgba(255,217,58,.95); }
+.tc-power { right: 4px; bottom: 176px; width: 56px; height: 56px; background: rgba(28,28,40,.92); border-color: #5ff3ff; }
 .tc-top { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; gap: 8px; }
 .tc-small { font-size: 22px; width: 48px; height: 48px; border-radius: 14px; border: 3px solid var(--ink); background: rgba(255,250,242,.92); }
 
@@ -316,6 +324,7 @@ body.touch #quick { display: none; }
   body.touch .tc-jump { right: 88px; width: 56px; height: 56px; }
   body.touch .tc-dodge { bottom: 88px; width: 56px; height: 56px; }
   body.touch .tc-interact { right: 76px; bottom: 70px; width: 54px; height: 54px; }
+  body.touch .tc-power { bottom: 152px; width: 50px; height: 50px; }
   body.touch .tc-top { top: 8px; }
   body.touch .tc-small { width: 42px; height: 42px; font-size: 19px; }
   body.touch #offers { top: 132px; right: 190px; width: 230px; max-height: calc(100vh - 190px); }

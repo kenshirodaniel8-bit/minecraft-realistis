@@ -216,7 +216,7 @@ export class LuckyBlocks {
       }
       case 'sword': {
         const best = Math.max(...s.profile.swords.map((id) => SWORDS.find((w) => w.id === id)?.tier || 1));
-        const next = SWORDS.find((w) => w.tier === best + 1 && !swordLockReason(w, s.profile));
+        const next = SWORDS.find((w) => w.tier === best + 1 && !w.costume && !swordLockReason(w, s.profile));
         if (!next) return money(1500 * kindDef.moneyMult);
         s.profile.swords.push(next.id);
         s.profile.sword = next.id;

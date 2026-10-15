@@ -56,6 +56,7 @@ export class PlayerAvatar {
     this.builtColor = this.color();
     this.h.setSword(this.info.sword || 'wooden');
     this.h.setHat(this.info.cosmetic || null);
+    this.h.setCostume(this.info.costume || null);
     this.h.root.traverse((o) => {
       if (o.isMesh) o.castShadow = true;
     });
@@ -78,18 +79,19 @@ export class PlayerAvatar {
     if (this.color() !== this.builtColor) this.buildBody();
     this.h.setSword(this.info.sword || 'wooden');
     this.h.setHat(this.info.cosmetic || null);
+    this.h.setCostume(this.info.costume || null);
     if (`${this.info.name}|${this.info.level}` !== this.labelKey) this.makeLabel();
   }
 
   // values from a snapshot row
   applySnapshot(t, row) {
-    const [, x, y, z, yaw, anim, hp, swordTier, carry, fx, , level, cosmetic] = row;
+    const [, x, y, z, yaw, anim, hp, swordIdx, carry, fx, , level, cosmetic] = row;
     this.buf.push(t, x, y, z, yaw);
     this.anim = anim;
     this.hpPct = hp;
     this.effects = fx;
     this.setCarry(carry);
-    const sword = SWORDS.find((s) => s.tier === swordTier)?.id || 'wooden';
+    const sword = SWORDS[swordIdx]?.id || 'wooden';
     const hat = cosmetic >= 0 ? COSMETICS[cosmetic]?.id : null;
     if (sword !== this.info.sword || hat !== (this.info.cosmetic || null) || level !== this.info.level) {
       this.setInfo({ sword, cosmetic: hat, level });
@@ -110,6 +112,33 @@ export class PlayerAvatar {
       this.carryRig.st = { pose: 'carried', poseT: 0 };
       this.h.carryAnchor.add(this.carryRig.root);
     }
+  }
+
+  statusMesh(kind) {
+    if (this.fxMeshes[kind]) return this.fxMeshes[kind];
+    let m;
+    if (kind === 'ice') {
+      m = new THREE.Mesh(new THREE.BoxGeometry(3, 5.4, 2.4), new THREE.MeshStandardMaterial({ color: 0xbff1ff, transparent: true, opacity: 0.55, roughness: 0.1 }));
+      m.position.y = 2.6;
+    } else if (kind === 'shield') {
+      m = new THREE.Mesh(new THREE.SphereGeometry(3.2, 20, 14), new THREE.MeshStandardMaterial({ color: 0x8fb8ff, transparent: true, opacity: 0.25, emissive: 0x3a6aff, emissiveIntensity: 0.4, depthWrite: false }));
+      m.position.y = 2.4;
+    } else if (kind === 'net') {
+      m = new THREE.Mesh(new THREE.SphereGeometry(2.8, 8, 6), new THREE.MeshBasicMaterial({ color: 0xc8a26a, wireframe: true }));
+      m.position.y = 2.2;
+    } else if (kind === 'goo') {
+      m = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 0.9, 12), new THREE.MeshStandardMaterial({ color: 0x9be04a, transparent: true, opacity: 0.7 }));
+      m.position.y = 0.4;
+    }
+    m.visible = false;
+    this.group.add(m);
+    this.fxMeshes[kind] = m;
+    return m;
+  }
+
+  setStatus(kind, on) {
+    if (!on && !this.fxMeshes[kind]) return;
+    this.statusMesh(kind).visible = on;
   }
 
   // For the local player: drive from local physics instead of snapshots.
@@ -167,6 +196,14 @@ export class PlayerAvatar {
 
   swing(combo) {
     this.h.startSwing(combo);
+  }
+
+  // someone teleported: snap there (no sliding across the map) and play
+  // their costume's arrival animation
+  arrive(x, y, z) {
+    this.buf.items.length = 0;
+    this.pos.set(x, y, z);
+    this.h.startTeleport();
   }
 
   // a capture started: point at it (the new companion stays hidden until

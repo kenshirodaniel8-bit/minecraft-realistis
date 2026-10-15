@@ -40,6 +40,100 @@ export class Effects {
     this.telegraphs = [];
     this.projectiles = new Map();
     this.tmpV = new THREE.Vector3();
+    this.shapes = []; // short-lived meshes: slash waves, blast rings, lightning
+  }
+
+  // ------------------------------------------------------------ costume powers
+
+  addShape(mesh, dur, step) {
+    mesh.renderOrder = 5;
+    this.scene.add(mesh);
+    this.shapes.push({ mesh, t: 0, dur, step });
+    if (this.shapes.length > 24) this.dropShape(0);
+  }
+
+  dropShape(i) {
+    const s = this.shapes[i];
+    this.scene.remove(s.mesh);
+    s.mesh.geometry.dispose();
+    s.mesh.material.dispose();
+    this.shapes.splice(i, 1);
+  }
+
+  // a glowing crescent that flies forward (Black Spy's Master Power)
+  slashWave(x, y, z, yaw, range, arcDeg, color) {
+    const arc = (arcDeg * Math.PI) / 180;
+    const geo = new THREE.RingGeometry(0.75, 1, 40, 1, Math.PI / 2 - arc / 2, arc);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+    const core = new THREE.Mesh(geo, mat);
+    core.rotation.set(-Math.PI / 2, 0, -yaw);
+    core.position.set(x, y + 2.2, z);
+    this.addShape(core, 0.6, (m, k) => {
+      const r = 1.5 + k * range;
+      m.scale.set(r, r, 1);
+      m.material.opacity = 0.95 * (1 - k * k);
+    });
+    // a second, dark inner edge for the spy look
+    const geo2 = new THREE.RingGeometry(0.6, 0.78, 40, 1, Math.PI / 2 - arc / 2, arc);
+    const dark = new THREE.Mesh(geo2, new THREE.MeshBasicMaterial({ color: 0x14141c, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+    dark.rotation.copy(core.rotation);
+    dark.position.copy(core.position);
+    this.addShape(dark, 0.6, (m, k) => {
+      const r = 1.5 + k * range;
+      m.scale.set(r, r, 1);
+      m.material.opacity = 0.8 * (1 - k);
+    });
+    for (let i = 0; i < 40; i++) {
+      const a = yaw + (Math.random() - 0.5) * arc;
+      const sp = range * (1.6 + Math.random() * 0.8);
+      this.spawn(x, y + 1.6 + Math.random() * 1.4, z, { vx: Math.sin(a) * sp, vz: Math.cos(a) * sp, vy: 0.4, grav: 0, life: 0.5, size: 0.22, color: [color, 0xffffff, 0x14141c] });
+    }
+  }
+
+  // a flat ring that grows around you (fire, blizzard, sweet hug)
+  ringBlast(x, y, z, radius, colors) {
+    const geo = new THREE.RingGeometry(0.85, 1, 48);
+    const mat = new THREE.MeshBasicMaterial({ color: colors[0], transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+    const m = new THREE.Mesh(geo, mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, y + 0.4, z);
+    this.addShape(m, 0.5, (mm, k) => {
+      const r = 0.5 + k * radius;
+      mm.scale.set(r, r, 1);
+      mm.material.opacity = 0.9 * (1 - k);
+    });
+    const n = 48;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const sp = radius / 0.45;
+      this.spawn(x, y + 0.8, z, { vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: 2 + Math.random() * 2, life: 0.55, size: 0.3, grav: 2, color: colors });
+    }
+  }
+
+  // jagged lightning between points (Thunder Hero)
+  lightning(points, color) {
+    if (points.length < 2) return;
+    const pos = [];
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      const steps = 7;
+      let prev = a;
+      for (let k = 1; k <= steps; k++) {
+        const t = k / steps;
+        const j = k === steps ? 0 : 0.9;
+        const p = { x: a.x + (b.x - a.x) * t + (Math.random() - 0.5) * j, y: a.y + (b.y - a.y) * t + (Math.random() - 0.5) * j, z: a.z + (b.z - a.z) * t + (Math.random() - 0.5) * j };
+        pos.push(prev.x, prev.y, prev.z, p.x, p.y, p.z);
+        prev = p;
+      }
+      this.burst(b.x, b.y, b.z, 14, { color: [color, 0xffffff, 0x8fb8ff], speed: 7, life: 0.4, size: 0.2, grav: 4 });
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const line = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1, toneMapped: false }));
+    this.addShape(line, 0.35, (m, k) => {
+      m.material.opacity = Math.random() < 0.3 ? 0.2 : 1 - k;
+    });
   }
 
   spawn(x, y, z, o = {}) {
@@ -215,6 +309,15 @@ export class Effects {
       num.el.style.display = '';
       num.el.style.left = `${(v.x * 0.5 + 0.5) * w + num.jitter}px`;
       num.el.style.top = `${(-v.y * 0.5 + 0.5) * h}px`;
+    }
+
+    // power shapes
+    for (let i = this.shapes.length - 1; i >= 0; i--) {
+      const sh = this.shapes[i];
+      sh.t += dt;
+      const k = Math.min(1, sh.t / sh.dur);
+      sh.step(sh.mesh, k);
+      if (k >= 1) this.dropShape(i);
     }
 
     // telegraphs

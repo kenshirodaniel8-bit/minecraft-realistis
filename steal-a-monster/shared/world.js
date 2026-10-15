@@ -109,6 +109,9 @@ export const SHOPS = [
   { id: 'sword_shop', name: 'Sword Shop', kind: 'swords', ...P(135, 31), facing: 135 + 180 },
   { id: 'item_shop', name: 'Gadget Shop', kind: 'items', ...P(45, 31), facing: 45 + 180 },
   { id: 'lucky_board', name: 'Lucky Board', kind: 'board', ...P(225, 31), facing: 225 + 180 },
+  // either side of the road out of the plaza at 90 degrees
+  { id: 'costume_shop', name: 'Costume Shop', kind: 'costumes', ...P(74, 31), facing: 74 + 180 },
+  { id: 'power_shop', name: 'Upgrade your power', kind: 'power', ...P(106, 31), facing: 106 + 180 },
 ];
 
 // The Island Gate in the plaza opens a travel menu for the monster islands
@@ -786,7 +789,8 @@ function buildShop(shop, out, y) {
     addBox(out, p.x + tx * sgn * 5.2, y + 3.5, p.z + tz * sgn * 5.2, 0.4, 3.5, 0.4, rot, 'stall_post', true);
   }
   const roof = back(3);
-  addBox(out, roof.x, y + 7.4, roof.z, 6.2, 0.35, 3.6, rot, shop.kind === 'swords' ? 'awning_red' : shop.kind === 'items' ? 'awning_blue' : 'awning_gold', false);
+  const awning = { swords: 'awning_red', items: 'awning_blue', costumes: 'awning_black', power: 'awning_purple' }[shop.kind] || 'awning_gold';
+  addBox(out, roof.x, y + 7.4, roof.z, 6.2, 0.35, 3.6, rot, awning, false);
 }
 
 // The Moon Sky Arena: floating stone platforms. They are walk-on surfaces

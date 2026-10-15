@@ -10,6 +10,7 @@ import { COSMETIC_BY_ID } from '#shared/lucky.js';
 import { DECOR_BY_ID, DECOR_SPOTS, DECOR_MAX_OWNED } from '#shared/decor.js';
 import { REGION_BY_ID } from '#shared/regions.js';
 import { MOON } from '#shared/moonSecret.js';
+import { COSTUME_BY_ID, POWER_UPGRADE } from '#shared/costumes.js';
 import { randomId } from '#shared/rng.js';
 import { sha256Hex } from '#shared/sha256.js';
 
@@ -45,6 +46,8 @@ export function newProfile(id, name, now) {
     regionsVisited: ['plains'],
     tutorial: { step: 0, done: false },
     moon: { found: [], won: false }, // the moon buttons of Cute Monster Island
+    costumes: { owned: [], equipped: null },
+    powerLevel: 0,                    // "Upgrade your power" levels (+130 each)
     cosmetics: { owned: [], equipped: null },
     coupons: { recruitDiscount: 0 },
     stats: { defeated: 0, recruited: 0, stolen: 0, lost: 0, luckyOpened: 0, deaths: 0 },
@@ -169,6 +172,9 @@ export function sanitizeProfile(p, id, now = Date.now()) {
   out.tutorial = { step: Math.floor(num(p.tutorial?.step, 0, 0, 20)), done: !!p.tutorial?.done };
   const found = Array.isArray(p.moon?.found) ? p.moon.found.filter((i) => Number.isInteger(i) && i >= 0 && i < MOON.buttons.length) : [];
   out.moon = { found: [...new Set(found)], won: !!p.moon?.won };
+  const costumes = Array.isArray(p.costumes?.owned) ? [...new Set(p.costumes.owned.filter((c) => COSTUME_BY_ID[c]))] : [];
+  out.costumes = { owned: costumes, equipped: costumes.includes(p.costumes?.equipped) ? p.costumes.equipped : null };
+  out.powerLevel = Math.floor(num(p.powerLevel, 0, 0, POWER_UPGRADE.maxLevel));
   const owned = Array.isArray(p.cosmetics?.owned) ? p.cosmetics.owned.filter((c) => COSMETIC_BY_ID[c]) : [];
   out.cosmetics = { owned: [...new Set(owned)], equipped: owned.includes(p.cosmetics?.equipped) ? p.cosmetics.equipped : null };
   out.coupons = { recruitDiscount: num(p.coupons?.recruitDiscount, 0, 0, 0.5) };

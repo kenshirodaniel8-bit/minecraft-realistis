@@ -7,6 +7,7 @@
 // maxTargets: monsters hit by one swing
 // special:    optional on-hit effect handled in server/services/combat.js
 // gems:       Monster Gems needed on top of the Money price (top tiers)
+// costume:    not sold in the shop; it comes with that costume
 
 import { REGION_BY_ID } from './regions.js';
 
@@ -93,6 +94,13 @@ export const SWORDS = [
     special: { kind: 'cleave', knockback: 6 },
   },
   {
+    // not sold: it comes with the Black Spy costume (costumes.js)
+    id: 'spy_sword', tier: 9, name: 'Spy Sword', price: 0, costume: 'black_spy', damage: 200, cooldownMs: 400, range: 4.2, arc: 140, maxTargets: 4,
+    colors: { blade: 0x17171f, edge: 0x5ff3ff, guard: 0x2c2c38, grip: 0x060608, glow: 0x5ff3ff }, length: 3.2,
+    description: 'A matte black blade with a neon edge. Fast, quiet and deadly: one hit in five is a critical hit. Comes with the Black Spy costume.',
+    special: { kind: 'crit', chance: 0.2 },
+  },
+  {
     id: 'celestial', tier: 10, name: 'Celestial Sword', price: 600000, gems: 40, damage: 250, cooldownMs: 420, range: 4.3, arc: 145, maxTargets: 5,
     unlock: { level: 27, discovered: 'legendary' }, colors: { blade: 0xfff7d8, edge: 0xffffff, guard: 0xffc23a, grip: 0x8a7aff, glow: 0xfff7a8 }, length: 3.5,
     description: 'Forged from starlight. Heals you on hit and crits often.',
@@ -107,6 +115,7 @@ export const SWORDS = [
 ];
 
 export const SWORD_BY_ID = Object.fromEntries(SWORDS.map((s) => [s.id, s]));
+export const SWORD_INDEX = Object.fromEntries(SWORDS.map((s, i) => [s.id, i]));
 
 // Returns null if the player may buy/equip the sword, else a reason.
 export function swordLockReason(sword, player) {

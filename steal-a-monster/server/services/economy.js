@@ -91,6 +91,7 @@ export class Economy {
     const sword = SWORD_BY_ID[p.swordId];
     if (!sword) return fail('unknown_sword');
     if (s.profile.swords.includes(sword.id)) return s.remember(p.reqId, fail('owned', 'You already own this sword.'));
+    if (sword.costume) return fail('costume', `The ${sword.name} comes with a costume from the Costume Shop.`);
     if (!this.nearShop(s, 'swords')) return fail('not_at_shop', 'Visit the Sword Shop in the plaza.');
     const lock = swordLockReason(sword, s.profile);
     if (lock) return fail('locked', lock);

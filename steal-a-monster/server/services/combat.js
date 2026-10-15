@@ -128,13 +128,14 @@ export class Combat {
     const game = this.game;
     const now = game.now();
     if (s.dead) return { blocked: 'dead' };
+    // attacked (even if it misses): your companions go for it
+    if (typeof opts.from === 'number') game.companions.noteThreat(s, opts.from);
     if (s.protectUntil > now) return { blocked: 'protected' };
     if (s.dodgeUntil > now) {
       game.send(s, 'dodged', { from: opts.from });
       return { blocked: 'dodge' };
     }
     const dmg = Math.max(1, Math.round(raw));
-    if (typeof opts.from === 'number') game.companions.noteThreat(s, opts.from); // companions defend you
     s.hp -= dmg;
     s.lastDamagedAt = now;
     const fx = s.fx;

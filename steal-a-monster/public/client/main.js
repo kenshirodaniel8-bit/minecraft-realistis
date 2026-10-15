@@ -25,6 +25,8 @@ import { Audio } from './audio.js';
 import { Effects } from './effects.js';
 import { CaptureFx } from './captureFx.js';
 import { MonstersView, MSTATE } from './monstersView.js';
+import { setNightGlow } from './humanoid.js';
+import { COSTUME_BY_ID, powerDamage } from '#shared/costumes.js';
 import { PlayerAvatar, FX } from './playersView.js';
 import { BasesView } from './basesView.js';
 import { WorldItems } from './worldItems.js';
@@ -372,7 +374,7 @@ class App {
     this.monsters.clear();
     this.items.clear();
     if (this.me) this.me.dispose();
-    this.me = new PlayerAvatar(this.sceneView.scene, this.world, { pn: w.pn, name: w.profile.name, color: w.profile.color, sword: w.profile.sword, cosmetic: w.profile.cosmetics.equipped, level: w.profile.level }, true);
+    this.me = new PlayerAvatar(this.sceneView.scene, this.world, { pn: w.pn, name: w.profile.name, color: w.profile.color, sword: w.profile.sword, cosmetic: w.profile.cosmetics.equipped, costume: w.profile.costumes.equipped, level: w.profile.level }, true);
     for (const info of w.players) if (info.pn !== w.pn) this.addPlayer(info);
     for (let i = 0; i < this.baseStates.length; i++) {
       this.baseStates[i] = null;
@@ -421,7 +423,7 @@ class App {
       bases: this.baseStates,
       myBase: this.myBase,
       region: this.region,
-      isNight: this.isNight(),
+      isNight: this.isNight() || this.region === 'moonsky',
       fx: this.myFx,
       carrying: this.myCarry >= 0,
       dead: (this.myFx & FX.dead) !== 0,
@@ -462,6 +464,7 @@ class App {
         this.audio.play('teleport');
         this.effects.burst(d.x, d.y + 2, d.z, 36, { color: [0x8fb8ff, 0xfff3a8, 0xffffff], speed: 7 });
       }
+      if (['home', 'portal', 'respawn', 'moon', 'moon_win', 'moon_fall', 'dev', 'region_closed'].includes(d.reason)) this.costumeArrival(this.me, d.x, d.y, d.z);
       if (d.message) this.blockedToast(d.message);
     });
     n.on('playerJoined', (info) => {
@@ -496,6 +499,14 @@ class App {
     n.on('mDefeated', (d) => this.monsters.onDefeated(d));
     n.on('mRecover', (d) => this.monsters.onRecover(d));
     n.on('allyPoof', (d) => this.monsters.poof(d));
+    n.on('ptp', (d) => {
+      const p = this.players.get(d.pn);
+      if (!p) return;
+      this.effects.burst(d.fx, p.pos.y + 2, d.fz, 20, { color: [0x7af0ff, 0xffffff], speed: 5 });
+      p.arrive(d.x, d.y, d.z);
+      this.costumeArrival(p, d.x, d.y, d.z);
+    });
+    n.on('power', (d) => this.onPower(d));
     n.on('mGone', (d) => {
       this.monsters.onGone(d);
     });
@@ -704,8 +715,8 @@ class App {
       const step = TUTORIAL[p.tutorial.step];
       if (step) this.ui.toast(`✅ Next: ${step.title}`, 'good');
     }
-    if (this.me && old && (old.sword !== p.sword || old.cosmetics.equipped !== p.cosmetics.equipped || old.level !== p.level)) {
-      this.me.setInfo({ sword: p.sword, cosmetic: p.cosmetics.equipped, level: p.level });
+    if (this.me && old && (old.sword !== p.sword || old.cosmetics.equipped !== p.cosmetics.equipped || old.costumes.equipped !== p.costumes.equipped || old.level !== p.level)) {
+      this.me.setInfo({ sword: p.sword, cosmetic: p.cosmetics.equipped, costume: p.costumes.equipped, level: p.level });
     }
     this.ui?.refresh();
   }
@@ -826,7 +837,7 @@ class App {
     if (goal && !hide && Math.hypot(goal.x - p.x, goal.z - p.z) > goal.min) {
       this.placeMarker(goalEl, goal.x, goal.y + 8, goal.z, `${goal.text} ${Math.round(Math.hypot(goal.x - p.x, goal.z - p.z))} m`);
     } else goalEl.hidden = true;
-    if (!b || hide || dist < 32 || goal) {
+    if (!b || hide || dist < 32 || goal || this.region === 'moonsky') {
       el.hidden = true;
       return;
     }
@@ -934,6 +945,9 @@ class App {
       lock: () => req('lock', {}, '🔒 Security lasers ON!'),
       useItem: (itemId) => app.useItem(itemId),
       equipCosmetic: (id) => req('equipCosmetic', { id }),
+      buyCostume: (id) => req('buyCostume', { id }, () => `${COSTUME_BY_ID[id].icon} You are now a ${COSTUME_BY_ID[id].name}! Press Z for ${COSTUME_BY_ID[id].power.name}.`),
+      equipCostume: (id) => req('equipCostume', { id }),
+      buyPower: () => req('buyPower', {}, (r) => `💪 Power level ${r.level}! +${r.bonus} damage on every costume power.`),
       chat: (text) => app.net.request('chat', { text }).then((r) => { if (!r.ok && r.message) app.ui.toast(r.message, 'bad'); }),
       skipTutorial: () => req('tutorial', { skip: true }),
     };
@@ -1032,6 +1046,75 @@ class App {
     this.net.send('attack', { yaw });
   }
 
+  // Z: the master power of your costume, aimed like a sword swing
+  usePower() {
+    const c = COSTUME_BY_ID[this.profile.costumes.equipped];
+    if (!c) {
+      this.ui.toast('🕶 Buy a costume at the Costume Shop in the plaza to get a master power (Z)!', 'warn');
+      return;
+    }
+    const now = performance.now();
+    if (now < (this.powerLockUntil || 0)) return;
+    this.powerLockUntil = now + 400;
+    if (this.myFx & (FX.frozen | FX.stunned | FX.dead | FX.slipping)) return;
+    const fwd = this.cam.forward();
+    const camYaw = Math.atan2(fwd.x, fwd.z);
+    const pos = this.player.pos;
+    const reach = c.power.range || c.power.radius || 10;
+    const target = this.monsters.nearestTarget(pos, camYaw, reach, 1.35) || this.monsters.nearestTarget(pos, this.player.yaw, reach, Math.PI);
+    const yaw = target ? Math.atan2(target.pos.x - pos.x, target.pos.z - pos.z) : this.input.mouseLook ? camYaw : this.player.yaw;
+    this.attackYaw = yaw;
+    this.attackFaceUntil = now + 700;
+    this.player.yaw = yaw;
+    this.net.request('power', { yaw }).then((res) => {
+      if (res.ok) this.powerReadyAt = performance.now() + (res.readyAt - this.serverNow());
+      else if (res.message && res.error !== 'cant_act') this.ui.toast(res.message, res.error === 'cooldown' ? 'info' : 'warn');
+    });
+  }
+
+  // the Z button shows the power's cooldown while you wear a costume
+  updatePowerButton() {
+    const btn = this.powerBtn || (this.powerBtn = $('power-btn'));
+    const c = COSTUME_BY_ID[this.profile.costumes.equipped];
+    btn.hidden = !c;
+    if (!c) return;
+    const left = Math.ceil(((this.powerReadyAt || 0) - performance.now()) / 1000);
+    setTextOnce(btn.querySelector('span'), left > 0 ? ` ${left}s` : ` ${c.power.name}`);
+    btn.classList.toggle('locked', left > 0);
+  }
+
+  onPower(d) {
+    const c = COSTUME_BY_ID[d.costume];
+    const av = d.pn === this.pn ? this.me : this.players.get(d.pn);
+    if (!c || !av) return;
+    av.h.startPower();
+    const pw = c.power;
+    const y = d.y;
+    if (pw.shape === 'wave') this.effects.slashWave(d.x, y, d.z, d.yaw, pw.range, pw.arc, pw.color);
+    else if (pw.shape === 'ring') {
+      const cols = { flame_ninja: [0xff6a2a, 0xffd23a, 0xff3a1a], frost_knight: [0x9fe8ff, 0xffffff, 0x5ab8ff], bunny_hoodie: [0xff9fd8, 0xffffff, 0xffe27a] }[c.id] || [pw.color, 0xffffff];
+      this.effects.ringBlast(d.x, y, d.z, pw.radius, cols);
+      if (pw.heal) for (let i = 0; i < 6; i++) this.effects.number('💖', new THREE.Vector3(d.x + (Math.random() - 0.5) * 3, y + 4 + Math.random() * 2, d.z + (Math.random() - 0.5) * 3), 'money');
+    } else if (pw.shape === 'chain') {
+      const pts = [{ x: d.x, y: y + 9, z: d.z }, ...d.targets.map((t) => ({ x: t.x, y: t.y + 1.5, z: t.z }))];
+      this.effects.lightning(pts, pw.color);
+    }
+    if (d.pn === this.pn) {
+      this.cam.addShake(0.9);
+      this.ui.regionBanner(`${c.icon} ${pw.name.toUpperCase()}!`, `${powerDamage(c, this.profile.powerLevel)} damage`);
+    }
+    this.audio.play(pw.shape === 'chain' ? 'crit' : 'slam');
+  }
+
+  // costume arrival after a teleport (smoke for the spy, sparkles for others)
+  costumeArrival(av, x, y, z) {
+    const c = COSTUME_BY_ID[av.info.costume];
+    if (!c) return;
+    av.h.startTeleport();
+    const cols = c.id === 'black_spy' ? [0x14141c, 0x2c2c38, c.colors.glow] : [c.colors.glow, c.colors.jacket, 0xffffff];
+    this.effects.burst(x, y + 1.5, z, 30, { color: cols, speed: 5, up: 0.6, life: 0.8, size: 0.35, grav: -1 });
+  }
+
   // what pressing E (or R) would do right now
   findInteraction() {
     const pos = this.player.pos;
@@ -1065,7 +1148,7 @@ class App {
       }
     }
     for (const sh of this.world.shops) {
-      if (Math.hypot(pos.x - sh.x, pos.z - sh.z) < 9) return { kind: 'shop', key: 'E', text: sh.name, panel: sh.kind === 'swords' ? 'swords' : sh.kind === 'items' ? 'items' : 'board' };
+      if (Math.hypot(pos.x - sh.x, pos.z - sh.z) < 9) return { kind: 'shop', key: 'E', text: sh.name, panel: { swords: 'swords', items: 'items', costumes: 'costumes', power: 'power' }[sh.kind] || 'board' };
     }
     const g = this.world.gate;
     if (Math.hypot(pos.x - g.x, pos.z - g.z) < g.range) return { kind: 'shop', key: 'E', text: 'Island Gate: travel to the monster islands', panel: 'travel' };
@@ -1238,6 +1321,7 @@ class App {
       if (input.consumePress('home')) this.actions.home();
       if (input.consumePress('lock')) this.actions.lock();
       if (input.consumePress('callAllies')) this.actions.callAllies();
+      if (input.consumePress('power') && !(this.myFx & FX.dead)) this.usePower();
       ITEMS.forEach((it, i) => {
         if (input.consumePress(`item${i + 1}`)) this.useItem(it.id);
       });
@@ -1339,7 +1423,8 @@ class App {
     this.cam.update(dt, this.player.pos, look, zoom, this.indoorView());
     this.updateBaseMarker(panelOpen);
     const lucky = this.events?.some((e) => e.phase === 'active');
-    this.sceneView.update(dt, this.t, this.dayT(), this.player.pos, this.region, lucky);
+    // the Moon Sky Arena is always under the night sky
+    this.sceneView.update(dt, this.t, this.region === 'moonsky' ? 0.82 : this.dayT(), this.player.pos, this.region, lucky);
     if (lucky && Math.random() < dt * 6) this.effects.confetti(this.player.pos.x + (Math.random() - 0.5) * 40, this.player.pos.y + 25, this.player.pos.z + (Math.random() - 0.5) * 40, 3);
 
     // HUD at ~10 Hz
@@ -1354,6 +1439,8 @@ class App {
       if (this.ui.panelName === 'map') this.drawFullMap($('map-canvas'));
       if (this.puzzle) this.worldView.setPuzzleState(this.puzzle, serverNow);
       this.updateMoonHud();
+      setNightGlow(this.isNight() || this.region === 'moonsky');
+      this.updatePowerButton();
       const open = this.puzzle && this.puzzle.openUntil > serverNow;
       for (const c of this.vaultColliders) c.enabled = !open;
       this.updateDebug(serverNow);

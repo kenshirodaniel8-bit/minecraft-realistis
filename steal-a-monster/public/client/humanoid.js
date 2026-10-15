@@ -5,6 +5,7 @@ import { glowSprite } from './labels.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { SWORD_BY_ID } from '#shared/weapons.js';
 import { COSMETIC_BY_ID } from '#shared/lucky.js';
+import { COSTUME_BY_ID } from '#shared/costumes.js';
 
 export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, dodge: 5 };
 
@@ -232,6 +233,228 @@ export function buildHat(id) {
   return g;
 }
 
+
+// ------------------------------------------------------------------ costumes
+
+// At night the Black Spy's bone lines and LEDs light up (main.js sets this).
+let nightGlow = false;
+export function setNightGlow(on) {
+  nightGlow = !!on;
+}
+
+let logoTex = null;
+function logoTexture() {
+  if (logoTex) return logoTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  // a round badge with a little monster face and the game's initials
+  ctx.fillStyle = '#5ff3ff';
+  ctx.beginPath();
+  ctx.arc(128, 128, 120, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#101016';
+  ctx.beginPath();
+  ctx.arc(128, 128, 106, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#5ff3ff';
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(128 + s * 70, 70);
+    ctx.lineTo(128 + s * 40, 40);
+    ctx.lineTo(128 + s * 30, 84);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(128 + s * 34, 104, 13, 17, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = '#5ff3ff';
+  ctx.lineWidth = 8;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(128, 124, 30, 0.25 * Math.PI, 0.75 * Math.PI);
+  ctx.stroke();
+  ctx.font = '900 46px "Trebuchet MS", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('S·A·M', 128, 208);
+  logoTex = new THREE.CanvasTexture(c);
+  logoTex.colorSpace = THREE.SRGBColorSpace;
+  return logoTex;
+}
+
+let boltTex = null;
+function boltTexture() {
+  if (boltTex) return boltTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#2a3a8a';
+  ctx.beginPath();
+  ctx.arc(64, 64, 60, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#fff27a';
+  ctx.beginPath();
+  ctx.moveTo(72, 10);
+  ctx.lineTo(34, 70);
+  ctx.lineTo(60, 70);
+  ctx.lineTo(50, 118);
+  ctx.lineTo(94, 52);
+  ctx.lineTo(68, 52);
+  ctx.closePath();
+  ctx.fill();
+  boltTex = new THREE.CanvasTexture(c);
+  boltTex.colorSpace = THREE.SRGBColorSpace;
+  return boltTex;
+}
+
+function decal(tex, w, h, glow = 0) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({
+    map: tex, transparent: true, roughness: 0.5, emissive: glow ? 0xffffff : 0, emissiveMap: glow ? tex : null, emissiveIntensity: glow,
+  }));
+  return m;
+}
+
+const glowMats = new Map();
+function glowMat(color) {
+  if (!glowMats.has(color)) glowMats.set(color, new THREE.MeshBasicMaterial({ color, toneMapped: false }));
+  return glowMats.get(color);
+}
+
+// Builds the costume pieces onto the avatar's limbs, so they move with it.
+function dressUp(h, c) {
+  const col = c.colors;
+  const look = c.look;
+  const parts = [];
+  const glows = [];   // lines that only light up at night
+  const leds = [];
+  const add = (parent, mesh, list = parts) => {
+    parent.add(mesh);
+    list.push(mesh);
+    if (list !== parts) parts.push(mesh);
+    return mesh;
+  };
+  const jacket = mat(col.jacket, { rough: c.style === 'knight' ? 0.25 : 0.55, metal: c.style === 'knight' ? 0.5 : 0 });
+  const pants = mat(col.pants, { rough: 0.7 });
+  const shoes = mat(col.shoes, { rough: 0.4 });
+  const gloves = mat(col.gloves, { rough: 0.5 });
+  const trim = mat(col.trim, { rough: 0.5 });
+  const hatMat = mat(col.hat, { rough: 0.5 });
+  // jacket, sleeves, gloves, trousers, shoes
+  add(h.torso, part(RBOX, jacket, 1.9, 1.88, 1.0, 0, 0.9, 0));
+  add(h.torso, part(RBOX, trim, 1.92, 0.22, 1.02, 0, 0.12, 0)); // belt / hem
+  for (const arm of h.arms) {
+    add(arm, part(RBOX, jacket, 0.88, 1.15, 0.88, 0, -0.42, 0));
+    add(arm, part(RBOX, gloves, 0.86, 0.62, 0.86, 0, -1.36, 0));
+  }
+  for (const leg of h.legs) {
+    add(leg, part(RBOX, pants, 0.92, 1.5, 0.92, 0, -0.74, 0));
+    add(leg, part(RBOX, shoes, 0.98, 0.44, 1.14, 0, -1.6, 0.09));
+  }
+  // the style's own pieces
+  if (look.logo) {
+    const front = add(h.torso, decal(logoTexture(), 0.62, 0.62, 0.25));
+    front.position.set(0.44, 1.32, 0.506);
+    const back = add(h.torso, decal(logoTexture(), 1.3, 1.3, 0.25));
+    back.position.set(0, 1.0, -0.506);
+    back.rotation.y = Math.PI;
+    add(h.torso, part(RBOX, trim, 1.2, 0.2, 1.04, 0, 1.78, 0)); // collar
+  }
+  if (look.hat === 'fedora') {
+    const hat = new THREE.Group();
+    hat.position.y = 1.12;
+    hat.add(part(new THREE.CylinderGeometry(0.92, 0.92, 0.07, 22), hatMat, 1, 1, 1, 0, 0.04, 0));
+    hat.add(part(new THREE.CylinderGeometry(0.5, 0.6, 0.55, 18), hatMat, 1, 1, 1, 0, 0.32, 0));
+    hat.add(part(new THREE.CylinderGeometry(0.61, 0.61, 0.13, 18), trim, 1, 1, 1, 0, 0.13, 0));
+    hat.rotation.x = -0.08;
+    add(h.head, hat);
+  }
+  if (look.glasses) {
+    add(h.head, part(RBOX, mat(0x050507, { rough: 0.15, metal: 0.4 }), 1.02, 0.24, 0.08, 0, 0.7, 0.585));
+    add(h.head, part(BOX, mat(0x5ff3ff, { emissive: 0x2a8a9a, ei: 0.6, rough: 0.1 }), 0.3, 0.04, 0.02, 0.22, 0.76, 0.63));
+  }
+  if (look.hat === 'headband') {
+    add(h.head, part(RBOX, hatMat, 1.22, 0.2, 1.2, 0, 0.92, 0));
+    for (const s of [-1, 1]) {
+      const tail = add(h.head, part(BOX, hatMat, 0.14, 0.62, 0.06, s * 0.12, 0.62, -0.68));
+      tail.rotation.z = s * 0.35;
+      tail.userData.flap = s;
+    }
+  }
+  if (look.mask) add(h.head, part(RBOX, mat(0x1a0c0e), 1.2, 0.46, 1.18, 0, 0.3, 0.01));
+  if (look.scarf) {
+    add(h.torso, part(RBOX, mat(col.glow, { emissive: 0xff4a10, ei: 0.4 }), 1.3, 0.3, 1.1, 0, 1.75, 0));
+    const end = add(h.torso, part(BOX, mat(col.glow, { emissive: 0xff4a10, ei: 0.4 }), 0.35, 1.2, 0.08, 0.35, 1.2, -0.6));
+    end.userData.flap = 1;
+  }
+  if (look.hat === 'helmet') {
+    add(h.head, part(RBOX, mat(col.hat, { rough: 0.2, metal: 0.6 }), 1.32, 1.28, 1.3, 0, 0.6, 0));
+    add(h.head, part(BOX, mat(0x0a1a2a), 0.95, 0.14, 0.06, 0, 0.7, 0.66));
+    const plume = add(h.head, part(RBOX, mat(col.trim, { emissive: 0x1a4a8a, ei: 0.4 }), 0.2, 0.6, 1.2, 0, 1.45, -0.1));
+    plume.rotation.x = 0.2;
+  }
+  if (look.armor) {
+    add(h.torso, part(RBOX, mat(0xe8f6ff, { rough: 0.15, metal: 0.7 }), 1.7, 1.1, 1.08, 0, 1.15, 0));
+    for (const arm of h.arms) add(arm, part(new THREE.SphereGeometry(0.62, 12, 8), mat(col.trim, { rough: 0.2, metal: 0.6 }), 1, 0.7, 1, 0, 0.05, 0));
+  }
+  if (look.hat === 'mask') add(h.head, part(RBOX, hatMat, 1.2, 0.26, 1.18, 0, 0.72, 0.01));
+  if (look.bolt) {
+    const b = add(h.torso, decal(boltTexture(), 0.9, 0.9, 0.3));
+    b.position.set(0, 1.1, 0.506);
+  }
+  if (look.cape) {
+    const cape = new THREE.Group();
+    cape.position.set(0, 1.75, -0.52);
+    cape.add(part(BOX, mat(0xd8384a, { rough: 0.8 }), 1.9, 2.7, 0.08, 0, -1.35, 0));
+    cape.userData.cape = true;
+    add(h.torso, cape);
+  }
+  if (look.hat === 'bunny') {
+    add(h.head, part(RBOX, hatMat, 1.32, 1.3, 1.0, 0, 0.66, -0.2)); // the hood
+    for (const s of [-1, 1]) {
+      const ear = add(h.head, part(RBOX, hatMat, 0.3, 1.25, 0.18, s * 0.32, 1.75, -0.2));
+      ear.rotation.z = -s * 0.15;
+      ear.userData.ear = s;
+      add(ear, part(RBOX, mat(0xffffff), 0.6, 0.8, 0.5, 0, 0.0, 0.3));
+    }
+  }
+  if (look.pompom) add(h.torso, part(new THREE.SphereGeometry(0.32, 12, 10), mat(0xffffff, { rough: 0.9 }), 1, 1, 1, 0, 0.15, -0.55));
+
+  // Black Spy at night: glowing stickman lines along the bones + LEDs
+  if (look.nightLines) {
+    const g = glowMat(col.glow);
+    const line = (parent, w, hh, x, y, z) => add(parent, part(BOX, g, w, hh, 0.04, x, y, z), glows);
+    line(h.torso, 0.09, 1.55, 0, 0.92, 0.512);   // spine
+    line(h.torso, 1.5, 0.09, 0, 1.62, 0.512);    // shoulders
+    line(h.torso, 0.85, 0.09, 0, 0.2, 0.512);    // hips
+    for (const arm of h.arms) {
+      line(arm, 0.09, 0.85, 0, -0.42, 0.448);    // upper arm
+      line(arm, 0.09, 0.62, 0, -1.25, 0.438);    // forearm
+    }
+    for (const leg of h.legs) {
+      line(leg, 0.09, 0.75, 0, -0.42, 0.468);    // thigh
+      line(leg, 0.09, 0.7, 0, -1.18, 0.468);     // shin
+    }
+    const ring = add(h.head, part(new THREE.TorusGeometry(0.5, 0.045, 6, 28), g, 1, 1, 1, 0, 0.58, 0.6), glows); // stickman head
+    ring.castShadow = false;
+    line(h.head, 0.09, 0.22, 0, -0.02, 0.5);     // neck
+    for (const m of glows) m.castShadow = false;
+  }
+  if (look.leds) {
+    const spots = [
+      [h.torso, 0.8, 1.68, 0.52], [h.torso, -0.8, 1.68, 0.52], [h.torso, 0.6, 0.12, 0.53], [h.torso, -0.6, 0.12, 0.53],
+      [h.torso, -0.45, 1.3, 0.52], [h.torso, 0, 1.8, -0.53], [h.arms[0], 0, -1.08, 0.45], [h.arms[1], 0, -1.08, 0.45],
+      [h.legs[0], 0, -0.82, 0.48], [h.legs[1], 0, -0.82, 0.48], [h.legs[0], 0, -1.6, 0.67], [h.legs[1], 0, -1.6, 0.67],
+    ];
+    spots.forEach(([parent, x, y, z], i) => {
+      const led = add(parent, part(new THREE.SphereGeometry(0.07, 8, 6), glowMat(col.led[i % col.led.length]), 1, 1, 1, x, y, z), leds);
+      led.castShadow = false;
+      led.userData.phase = i * 0.7;
+    });
+  }
+  return { parts, glows, leds };
+}
+
 // ------------------------------------------------------------------ avatar
 
 export class Humanoid {
@@ -306,6 +529,29 @@ export class Humanoid {
     this.sword = s;
   }
 
+  // A costume from the Costume Shop (null: your normal clothes). It brings
+  // its own idle, attack, dodge and teleport animations (see update).
+  setCostume(id) {
+    if (id === (this.costumeId ?? null)) return;
+    this.costumeId = id;
+    for (const m of this.dress?.parts || []) m.parent?.remove(m);
+    this.dress = null;
+    const c = COSTUME_BY_ID[id];
+    this.style = c ? c.style : null;
+    this.hatAnchor.visible = !c; // the costume's own headwear replaces the hat
+    if (c) this.dress = dressUp(this, c);
+  }
+
+  // arriving after a teleport (H, portals...): the costume's entrance
+  startTeleport() {
+    this.tpT = 0;
+  }
+
+  // Z: the costume's master power
+  startPower() {
+    this.powerT = 0;
+  }
+
   setHat(id) {
     if (id === this.hatId) return;
     this.hatId = id;
@@ -337,6 +583,7 @@ export class Humanoid {
   update(dt, anim, speed, carrying, t) {
     const legs = this.legs;
     const arms = this.arms;
+    const st = this.style; // costume animation style (null: normal clothes)
     let legSwing = 0;
     if (anim === ANIM.walk || anim === ANIM.run) {
       this.walkPhase += dt * (anim === ANIM.run ? 13 : 10) * Math.min(1.3, 0.4 + speed / 18);
@@ -348,9 +595,14 @@ export class Humanoid {
     const air = anim === ANIM.air;
     legs[0].rotation.x = air ? -0.5 : swimming ? Math.sin(t * 8) * 0.4 : legSwing;
     legs[1].rotation.x = air ? 0.3 : swimming ? -Math.sin(t * 8) * 0.4 : -legSwing;
+    legs[0].rotation.z = 0;
+    legs[1].rotation.z = 0;
     // body bob
     this.body.position.y = anim === ANIM.walk || anim === ANIM.run ? Math.abs(Math.sin(this.walkPhase)) * 0.12 : Math.sin(t * 2) * 0.02;
+    this.body.rotation.y = 0;
     this.torso.rotation.x = swimming ? 0.9 : anim === ANIM.run ? 0.12 : 0;
+    this.head.rotation.x = 0;
+    this.head.rotation.y *= 0.9;
     // arms
     let leftX = -legSwing * 0.8;
     let rightX = legSwing * 0.6 - 0.5;
@@ -369,6 +621,52 @@ export class Humanoid {
       leftZ = 0.25;
       rightZ = -0.25;
     }
+    // costume idle stance (standing still)
+    const still = anim === ANIM.idle && speed < 0.6 && !carrying;
+    if (st && still) {
+      this.idleT = (this.idleT || 0) + dt;
+      const k = Math.min(1, this.idleT / 0.4);
+      switch (st) {
+        case 'spy': // arms folded, looking around
+          leftX = -1.35 * k;
+          leftZ = 0.08 + 0.7 * k;
+          rightX = -0.5 - 0.65 * k;
+          rightZ = -0.08 - 0.72 * k;
+          this.head.rotation.y = Math.sin(t * 0.9) * 0.55 * k;
+          break;
+        case 'ninja': // low stance, hands together
+          this.body.position.y -= 0.32 * k;
+          leftX = rightX = -1.45 * k;
+          leftZ = 0.55 * k;
+          rightZ = -0.55 * k;
+          legs[0].rotation.z = -0.22 * k;
+          legs[1].rotation.z = 0.22 * k;
+          this.body.position.y += Math.sin(t * 3) * 0.04;
+          break;
+        case 'knight': // hand on the hip, sword ready
+          leftX = 0.1;
+          leftZ = -0.5 * k;
+          rightX = -0.5 - 0.3 * k;
+          this.torso.rotation.x = -0.06 * k + Math.sin(t * 1.5) * 0.02;
+          break;
+        case 'hero': // fists on the hips, chin up
+          leftX = rightX = 0.2 * k;
+          leftZ = -0.5 * k;
+          rightZ = 0.5 * k;
+          this.head.rotation.x = -0.15 * k;
+          legs[0].rotation.z = -0.12 * k;
+          legs[1].rotation.z = 0.12 * k;
+          break;
+        case 'bunny': // happy little hops
+          this.body.position.y += Math.abs(Math.sin(t * 5)) * 0.35 * k;
+          leftX = rightX = -0.6 * k + Math.sin(t * 10) * 0.15;
+          leftZ = -0.35 * k;
+          rightZ = 0.35 * k;
+          break;
+        default:
+          break;
+      }
+    } else this.idleT = 0;
     if (this.catchT !== undefined && this.catchT < 0.75) {
       this.catchT += dt;
       const k = Math.min(1, this.catchT / 0.15);
@@ -387,27 +685,140 @@ export class Humanoid {
     }
     if (this.swing > 0) {
       const p = 1 - this.swing; // 0 -> 1
-      const wind = p < 0.25 ? p / 0.25 : 1;
-      const slash = p < 0.25 ? 0 : Math.min(1, (p - 0.25) / 0.35);
-      rightX = -0.5 - wind * 2.2 + slash * 2.7;
-      rightZ = -0.08 + this.swingDir * (wind * 0.6 - slash * 1.1);
-      this.torso.rotation.y = this.swingDir * (wind * 0.35 - slash * 0.6);
-      this.swing = Math.max(0, this.swing - dt / 0.34);
+      let dur = 0.34;
+      if (st === 'spy') {
+        // a spinning slash with the sword arm stretched out
+        const k = Math.min(1, p / 0.2);
+        rightX = -0.3;
+        rightZ = 0.2 + 1.3 * k;
+        leftZ = -0.9 * k;
+        this.body.rotation.y = this.swingDir * Math.max(0, (p - 0.15) / 0.85) * Math.PI * 2;
+        dur = 0.36;
+      } else if (st === 'knight') {
+        // a heavy chop from above
+        rightX = p < 0.35 ? -0.5 - (p / 0.35) * 2.6 : -3.1 + ((p - 0.35) / 0.65) * 3.3;
+        leftX = rightX * 0.6;
+        rightZ = -0.08;
+        this.torso.rotation.x = p < 0.35 ? -0.12 : 0.28;
+        dur = 0.42;
+      } else if (st === 'hero') {
+        // an uppercut
+        rightX = p < 0.3 ? 0.4 * (p / 0.3) : 0.4 - ((p - 0.3) / 0.7) * 3.4;
+        this.body.position.y += Math.sin(p * Math.PI) * 0.6;
+      } else if (st === 'bunny') {
+        // a twirl
+        this.body.rotation.y = p * Math.PI * 2;
+        leftZ = -1.1;
+        rightZ = 1.1;
+        rightX = -0.4;
+      } else {
+        const wind = p < 0.25 ? p / 0.25 : 1;
+        const slash = p < 0.25 ? 0 : Math.min(1, (p - 0.25) / 0.35);
+        rightX = -0.5 - wind * 2.2 + slash * 2.7;
+        rightZ = -0.08 + this.swingDir * (wind * 0.6 - slash * 1.1);
+        this.torso.rotation.y = this.swingDir * (wind * 0.35 - slash * 0.6);
+        if (st === 'ninja') {
+          this.torso.rotation.x = 0.35 * Math.sin(p * Math.PI);
+          dur = 0.24;
+        }
+      }
+      this.swing = Math.max(0, this.swing - dt / dur);
     } else {
       this.torso.rotation.y *= 0.8;
+    }
+    // Z: master power
+    if (this.powerT !== undefined && this.powerT < 0.75) {
+      this.powerT += dt;
+      const p = Math.min(1, this.powerT / 0.75);
+      if (st === 'spy') {
+        if (p < 0.35) {
+          this.body.position.y -= 0.45 * (p / 0.35);
+          leftX = rightX = 0.9;
+          leftZ = -0.3;
+          rightZ = 0.3;
+        } else {
+          const k = (p - 0.35) / 0.65;
+          rightX = leftX = -1.5;
+          rightZ = 1.3 - k * 2.4;
+          leftZ = -1.3 + k * 2.4;
+          this.body.rotation.y = k * Math.PI * 2;
+          this.body.position.y += Math.sin(k * Math.PI) * 1.2;
+        }
+      } else if (st === 'ninja') {
+        this.body.position.y += Math.sin(p * Math.PI) * 1.6;
+        this.body.rotation.y = p * Math.PI * 4;
+        leftZ = -1.4;
+        rightZ = 1.4;
+      } else if (st === 'knight') {
+        rightX = leftX = p < 0.45 ? -3.1 * (p / 0.45) : -3.1 + ((p - 0.45) / 0.55) * 3.3;
+        this.body.position.y += p < 0.45 ? (p / 0.45) * 0.8 : 0.8 - ((p - 0.45) / 0.55) * 0.8;
+      } else if (st === 'hero') {
+        leftX = rightX = -3.0;
+        leftZ = 0.3;
+        rightZ = -0.3;
+        this.torso.rotation.x = -0.25;
+        this.body.position.y += Math.sin(p * Math.PI) * 1.4;
+      } else {
+        leftX = rightX = -1.5;
+        leftZ = 0.6;
+        rightZ = -0.6;
+        this.body.position.y += Math.abs(Math.sin(p * Math.PI * 2)) * 0.8;
+      }
     }
     arms[0].rotation.x = leftX;
     arms[0].rotation.z = leftZ;
     arms[1].rotation.x = rightX;
     arms[1].rotation.z = rightZ;
     if (this.dodge > 0) {
-      this.body.rotation.x = (1 - this.dodge) * Math.PI * 2;
-      this.body.position.y += Math.sin((1 - this.dodge) * Math.PI) * 1.2;
-      this.dodge = Math.max(0, this.dodge - dt / 0.38);
+      const p = 1 - this.dodge;
+      let dur = 0.38;
+      if (st === 'spy') {
+        // backflip
+        this.body.rotation.x = -p * Math.PI * 2;
+        this.body.position.y += Math.sin(p * Math.PI) * 1.6;
+      } else if (st === 'ninja') {
+        // cartwheel to the side
+        this.body.rotation.z = p * Math.PI * 2;
+        this.body.position.y += Math.sin(p * Math.PI) * 1.0;
+        dur = 0.32;
+      } else if (st === 'knight') {
+        // a low shield slide
+        this.body.rotation.x = Math.sin(p * Math.PI) * 0.5;
+        this.body.position.y -= Math.sin(p * Math.PI) * 0.3;
+      } else if (st === 'bunny') {
+        // two quick hops with a spin
+        this.body.rotation.y = p * Math.PI * 2;
+        this.body.position.y += Math.abs(Math.sin(p * Math.PI * 2)) * 1.4;
+      } else {
+        this.body.rotation.x = p * Math.PI * 2;
+        this.body.position.y += Math.sin(p * Math.PI) * 1.2;
+      }
+      this.dodge = Math.max(0, this.dodge - dt / dur);
     } else {
       this.body.rotation.x = 0;
     }
+    // arriving after a teleport: grow out of a swirl
+    if (st && this.tpT !== undefined && this.tpT < 0.6) {
+      this.tpT += dt;
+      const k = Math.min(1, this.tpT / 0.6);
+      const e = 1 - (1 - k) ** 3;
+      const sq = Math.sin(k * Math.PI) * 0.25;
+      this.body.scale.set(Math.max(0.05, e - sq * 0.5), Math.max(0.05, e + sq), Math.max(0.05, e - sq * 0.5));
+      this.body.rotation.y += (1 - e) * Math.PI * 4;
+    } else this.body.scale.set(1, 1, 1);
     if (this.hat?.userData.spin) this.hat.userData.spin.rotation.y += dt * 18;
+    // costume details: flapping scarves and capes, wiggling ears, night lights
+    if (this.dress) {
+      const move = Math.min(1, speed / 16);
+      for (const m of this.dress.parts) {
+        const u = m.userData;
+        if (u.flap) m.rotation.x = 0.3 + move * 0.9 + Math.sin(t * 9 + u.flap) * 0.12 * (0.3 + move);
+        else if (u.cape) m.rotation.x = 0.08 + move * 0.7 + Math.sin(t * 6) * 0.05 * (0.4 + move);
+        else if (u.ear) m.rotation.x = Math.sin(t * 3 + u.ear) * 0.12 - move * 0.4;
+      }
+      for (const g of this.dress.glows) g.visible = nightGlow;
+      for (const l of this.dress.leds) l.visible = nightGlow && Math.sin(t * 5 + l.userData.phase) > -0.3;
+    }
   }
 
   setDown(down) {

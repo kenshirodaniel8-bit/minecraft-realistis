@@ -12,7 +12,7 @@ There was no real GPU, phone, Safari or Firefox available.
 ## 1. Automated tests — executed, all passing
 
 ```bash
-npm test          # 60 tests, ~3 s, also runs in CI (.github/workflows/ci.yml)
+npm test          # 72 tests, ~5 s, also runs in CI (.github/workflows/ci.yml)
 ```
 
 They run the real server code: the `Game` class with a controllable clock and an
@@ -22,7 +22,7 @@ Socket.IO server with real socket clients.
 | Suite | Tests | Covers |
 |---|---|---|
 | `profile.test.js` | 8 | 1,000 Money exactly once (new profile only); no re-grant on reconnect/refresh/respawn; token hashing; save survives a server restart; corrupt save → backup restore, both broken → login refused (no fresh bonus); save retries; schema migration (1 → 2) and repair of forged data; coming back after a minute pays a minute of offline income (timestamps survive a reload) |
-| `combat.test.js` | 6 | all 57 species build a distinct 3D model in Node; sword reach/facing/cooldown, server-side damage only; monsters attack, knock out, respawn at home; dodge immunity; defeat → recruitment offers only to real fighters; AI behaviour (shy flee, territorial, region bounds) |
+| `combat.test.js` | 6 | all 408 species build a distinct 3D model in Node; sword reach/facing/cooldown, server-side damage only; monsters attack, knock out, respawn at home; dodge immunity; defeat → recruitment offers only to real fighters; AI behaviour (shy flee, territorial, region bounds) |
 | `recruitment.test.js` | 9 | not enough Money → nothing changes; extra recruit conditions on rare monsters (sword tier, discoveries); exact price deducted once; no double recruit (retries, double clicks, two players racing); fighter priority + base capacity; decline; one pad per monster; passive income, collect, offline cap; disconnect with an open offer |
 | `stealing.test.js` | 11 | lasers block entry and theft; lasers switching on eject intruders and make a thief drop; steal → carry → deliver, ownership moves exactly once; duplicate/invalid steal requests; an aborted grab tells the owner it is safe; gadget hit releases the monster (both drop rules); dropped monsters fly home; disconnects during theft; H teleport rules (own base only, cooldown, not while carrying); gadget range/facing/cooldown/shields; shop prices, proximity, idempotency |
 | `world.test.js` | 8 | deterministic world, 12 flat bases, spots inside their regions; region unlocks refused by the server; expansion regions open/close with hysteresis; closed portals; Lucky Blocks open once, only up close, server-rolled rewards; LUCKY LUCKY lifecycle; forged messages can't create Money/ownership/teleports; hidden/night spawns and the ruins vault puzzle |
@@ -30,6 +30,10 @@ Socket.IO server with real socket clients.
 | `tower.test.js` | 4 | base capacity 15 → 25 → 35 → 45 (10 pads per floor); the inside stairs connect every floor with steps a player can climb, and every pad has a floor under it; a player walks up the stairs with ordinary server-checked moves, and a thief standing under a floor-2 pad can't steal it; the server refuses moves through a tower wall (also at a faked upper-floor height), while the door works |
 | `population.test.js` | 1 | a region fills to 50 wild monsters while a player is on it, spread over the whole region (not only around the player); nearby regions get a smaller group; the region empties after the player leaves |
 | `swords.test.js` | 4 | the sword list is in tier order and the new swords have prices, unlocks and specials; Bubble slows; Frost freezes only on the server's roll and never a boss; Lucky Clover's jackpot does about triple damage; Rainbow cycles burn, slow and a bonus hit; Galaxy's third hit sets off a nova that hits monsters around the target but not far away |
+| `islands.test.js` | 3 | seven islands with 50 species each (16/13/10/6/3/2 from Common to Mythic, no name shared), stronger and pricier further along the chain; the Island Gate only works next to it and respects level locks; the island portals bring you back; Legendary monsters appear at the island lair and Mythic ones at the shrine |
+| `moon.test.js` | 3 | the five moon buttons count once each (1/5 … 5/5), are saved and repaired on load; the portal only opens at 5/5; the arena is not a travel destination; falling sends you back to the last platform; rounds 1–4 call an Uncommon, Rare, Epic and Legendary cute monster that only its challenger can hit or be hit by, that never leaves its platform and is never recruitable; winning gives the Secret Lunamochi once (later wins pay Money); a full base blocks the portal; going home ends the run |
+| `companions.test.js` | 3 | up to five companions (the sixth is refused), visible to everyone; they pop back when more than 9 feet away; a monster that bites you is attacked and defeated by the team, with the damage credited to you; X calls them (with a cooldown); your team stays with you at home while a fresh recruit moves into the base |
+| `costumes.test.js` | 3 | the Black Spy costs exactly 150,000 (a retried request is not charged twice), gives and equips the Spy Sword (which the sword shop does not sell), is visible to others and saved; Z deals exactly 583 to monsters in front only, then cools down; Upgrade your power adds +130 per level (583 → 843 at level 2); the other costumes' fire ring, freezing blizzard, chain lightning and healing hug |
 | `multiplayer.test.js` | 5 | HTTP serves the game, shared modules, three.js and Socket.IO; two clients get different bases and see each other move; LUCKY LUCKY is identical for both; malformed/forged socket messages are rejected; every message the game handles is reachable over the socket |
 
 The README's "Testing" section maps the 24 required checks to these suites.
@@ -249,7 +253,7 @@ frame during the event dropped from about 300 ms to about 11 ms.
 ## 3. Checked by hand in a browser (screenshots reviewed)
 
 - Title screen, name/color picker, joining, HUD, tutorial steps.
-- All 57 monsters in the gallery (`/gallery.html`): every one renders, looks
+- The original 57 monsters in the gallery (`/gallery.html`): every one renders, looks
   distinct, has eyes/face in the right place, and plays idle/quirk animations.
 - World: plaza, shops, bases, every region's look, water, lava, fog per region,
   day/night, LUCKY LUCKY sky and banner, region barriers and portals.
@@ -282,6 +286,23 @@ frame during the event dropped from about 300 ms to about 11 ms.
   agreed on the height, monsters on floor-2 pads; screenshots from inside each
   floor and from outside (dark block walls, white window frames, name board,
   laser door).
+- The seven monster islands: the Island Gate travel panel and its level locks,
+  travelling to Cute Monster Island, the world map with the island insets,
+  the Monsterdex island tabs and each island's gallery page.
+- The moon secret (scripted with a real server and browser): a moon button
+  before and after stepping on it (it turns blue, the "🌙 1/5" banner and
+  the 🌙 counter under the minimap), the Moon Portal appearing with the
+  on-screen arrow, the Moon Sky Arena (night sky, giant moon, stones,
+  coloured round platforms and their signs) and the round 1 monster on its
+  platform.
+- Companions: a team of five walking behind the player with their 💖 names,
+  and the team fighting and defeating a monster that bit the player.
+- Costumes: all five worn in the open (Black Spy by day and at night with the
+  glowing stickman lines and LEDs, Flame Ninja, Frost Knight, Thunder Hero
+  with its cape, Bunny Hoodie with ears) and their idle stances; Z hitting a
+  monster for exactly 583; the slash, ring and lightning effects; the Costume
+  Shop (day and night pictures) and the Upgrade your power panel; the two new
+  stalls in the plaza.
 
 ---
 

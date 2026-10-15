@@ -39,6 +39,8 @@ const STRUCT_MATS = {
   awning_red: { color: 0xee4a5a },
   awning_blue: { color: 0x4a8af0 },
   awning_gold: { color: 0xf3c234 },
+  awning_black: { color: 0x26262e, emissive: 0x0a2a30 },
+  awning_purple: { color: 0x9a5ae0, emissive: 0x2a0a4a },
   wood_dark: { color: 0x5c3c22 },
   // the Moon Sky Arena
   moon_stone: { color: 0xdcd6f6, emissive: 0x1c1844 },
@@ -447,8 +449,11 @@ export class WorldRenderer {
     this.root.add(title);
 
     for (const shop of this.world.shops) {
-      const text = shop.kind === 'swords' ? '⚔ SWORD SHOP' : shop.kind === 'items' ? '🥊 GADGET SHOP' : '🍀 LUCKY BOARD';
-      const label = makeLabel(text, { color: '#ffffff', bg: shop.kind === 'swords' ? '#d8384a' : shop.kind === 'items' ? '#3a7ae0' : '#e0a020', border: '#ffffff', scale: 0.035 });
+      const sign = {
+        swords: ['⚔ SWORD SHOP', '#d8384a'], items: ['🥊 GADGET SHOP', '#3a7ae0'], board: ['🍀 LUCKY BOARD', '#e0a020'],
+        costumes: ['🕶 COSTUME SHOP', '#26262e'], power: ['💪 UPGRADE YOUR POWER', '#8a4ad8'],
+      }[shop.kind];
+      const label = makeLabel(sign[0], { color: '#ffffff', bg: sign[1], border: shop.kind === 'costumes' ? '#5ff3ff' : '#ffffff', scale: 0.035 });
       const back = { x: shop.x - Math.cos(shop.facing * DEG) * 3, z: shop.z - Math.sin(shop.facing * DEG) * 3 };
       label.position.set(back.x, y + 9.4, back.z);
       this.root.add(label);
@@ -735,21 +740,21 @@ export class WorldRenderer {
     const starGeo = new THREE.BufferGeometry();
     starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
     const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, fog: false, sizeAttenuation: true }));
-    const clouds = new THREE.Mesh(new THREE.CircleGeometry(170, 48), new THREE.MeshBasicMaterial({ color: 0x8a7ad8, transparent: true, opacity: 0.85, fog: false }));
+    const clouds = new THREE.Mesh(new THREE.CircleGeometry(170, 48), new THREE.MeshBasicMaterial({ color: 0x1c1846, transparent: true, opacity: 0.9, fog: false }));
     clouds.rotation.x = -Math.PI / 2;
-    clouds.position.set(ARENA.cx, -2, ARENA.cz);
+    clouds.position.set(ARENA.cx, -13, ARENA.cz);
     arena.add(bigMoon, glow, stars, clouds);
     for (let k = 0; k < 18; k++) {
-      const puff = new THREE.Mesh(new THREE.SphereGeometry(10 + rnd() * 10, 10, 8), lambert(0xb8aaf0, { flat: true, emissive: 0x2a2060 }));
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(10 + rnd() * 10, 10, 8), lambert(0x5a4aa8, { flat: true, emissive: 0x1a1450 }));
       const a = rnd() * Math.PI * 2;
       const r = 40 + rnd() * 110;
-      puff.scale.y = 0.4;
-      puff.position.set(ARENA.cx + Math.cos(a) * r, -1 + rnd() * 2, ARENA.cz + Math.sin(a) * r);
+      puff.scale.y = 0.3;
+      puff.position.set(ARENA.cx + Math.cos(a) * r, -9 + rnd() * 3, ARENA.cz + Math.sin(a) * r);
       arena.add(puff);
     }
     const s0 = moon.start;
-    const startLbl = makeLabel('🌙 Moon Sky Arena\nJump across the stones!', { scale: 0.03, color: '#ffffff', bg: 'rgba(40,30,90,0.8)' });
-    startLbl.position.set(s0.x, s0.y + 7, s0.z - 3);
+    const startLbl = makeLabel('🌙 Moon Sky Arena\nJump across the stones!', { scale: 0.02, color: '#ffffff', bg: 'rgba(40,30,90,0.8)' });
+    startLbl.position.set(s0.x, s0.y + 9, s0.z + 4);
     arena.add(startLbl);
     moon.platforms.forEach((pl, k) => {
       const r = RARITIES[moon.rounds[k]];
@@ -882,11 +887,10 @@ function moonButtonTexture() {
   ctx.beginPath();
   ctx.arc(64, 64, 38, 0, Math.PI * 2);
   ctx.fill();
-  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = '#e8e2ff'; // bite out of the full moon -> a crescent
   ctx.beginPath();
   ctx.arc(80, 52, 32, 0, Math.PI * 2);
   ctx.fill();
-  ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = '#ffe98a';
   for (const [x, y, r] of [[92, 88, 5], [100, 66, 3], [38, 30, 3]]) {
     ctx.beginPath();

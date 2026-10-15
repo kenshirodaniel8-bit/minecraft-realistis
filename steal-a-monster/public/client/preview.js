@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { SPECIES_BY_ID } from '#shared/monsters.js';
 import { buildMonster } from './monsterRenderer.js';
 import { animateMonster } from './animationSystem.js';
-import { buildSword } from './humanoid.js';
+import { buildSword, Humanoid, ANIM, setNightGlow } from './humanoid.js';
 
 export class MonsterPreview {
   constructor() {
@@ -114,6 +114,37 @@ export class MonsterPreview {
     this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
     this.renderer.render(this.scene, this.camera);
+    const url = this.renderer.domElement.toDataURL('image/png');
+    this.icons.set(key, url);
+    return url;
+  }
+
+  // a player in a costume (cached data URL); night: dark, with the glow on
+  costumeIcon(id, size = 160, night = false) {
+    const key = `costume|${id}|${size}|${night}`;
+    if (this.icons.has(key)) return this.icons.get(key);
+    const h = new Humanoid(0x3a7ae0);
+    h.setCostume(id);
+    h.setSword(null);
+    setNightGlow(night);
+    h.update(0.5, ANIM.idle, 0, false, 1.2);
+    h.update(0.5, ANIM.idle, 0, false, 1.4);
+    h.root.rotation.y = 0.35;
+    this.renderer.setSize(size, size, false);
+    this.holder.clear();
+    this.holder.add(h.root);
+    if (night) {
+      this.scene.background = new THREE.Color(0x0c0c24);
+      this.renderer.toneMappingExposure = 0.35;
+    }
+    this.camera.aspect = 1;
+    this.camera.position.set(0, 3.2, 13);
+    this.camera.lookAt(0, 2.9, 0);
+    this.camera.updateProjectionMatrix();
+    this.renderer.render(this.scene, this.camera);
+    this.scene.background = null;
+    this.renderer.toneMappingExposure = 1;
+    setNightGlow(false);
     const url = this.renderer.domElement.toDataURL('image/png');
     this.icons.set(key, url);
     return url;
