@@ -6,6 +6,7 @@ import { SPECIES_BY_ID, incomePerSecond } from '#shared/monsters.js';
 import { isInsideBase } from '#shared/world.js';
 import { isObj, id as isId, int, fail } from '../validate.js';
 import { DECOR_BY_ID, DECOR_SPOTS, DECOR_MAX_OWNED, placedCounts } from '#shared/decor.js';
+import { MAX_COMPANIONS } from './companions.js';
 
 // Collection milestones (different species owned at once).
 export const MILESTONES = [
@@ -107,6 +108,7 @@ export class BaseManager {
     }
     m.slot = p.slot;
     m.following = false;
+    m.team = false;
     this.afterPlacementChange(s);
     this.game.tutorialEvent(s, 'place');
     return { ok: true };
@@ -130,12 +132,18 @@ export class BaseManager {
     if (!m) return fail('not_owned');
     if (this.game.stealing.isAway(m.id)) return fail('busy');
     const want = p.follow !== false;
+    if (want && !m.following) {
+      const n = s.profile.monsters.filter((o) => o.following && o.slot === null).length;
+      if (n >= MAX_COMPANIONS) return fail('too_many', `You can bring up to ${MAX_COMPANIONS} monsters. Send one home first.`);
+    }
     if (want && m.slot !== null) {
       if (!this.isAtOwnBase(s, 6)) return fail('not_at_base', 'Pick it up at your base first.');
       m.slot = null;
     }
-    for (const o of s.profile.monsters) o.following = false;
     m.following = want;
+    // chosen for your team: it stays with you even when you go home
+    // (a freshly recruited follower moves into the base instead)
+    m.team = want;
     this.afterPlacementChange(s);
     return { ok: true };
   }
@@ -170,9 +178,10 @@ export class BaseManager {
     const free = this.freeSlots(s.profile);
     const placed = [];
     for (const m of s.profile.monsters) {
-      if (m.slot !== null || !free.length || this.game.stealing.isAway(m.id)) continue;
+      if (m.slot !== null || !free.length || this.game.stealing.isAway(m.id) || (m.following && m.team)) continue;
       m.slot = free.shift();
       m.following = false;
+      m.team = false;
       placed.push(m);
     }
     if (placed.length) {

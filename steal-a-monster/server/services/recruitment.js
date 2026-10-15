@@ -13,6 +13,7 @@ import { SWORD_BY_ID } from '#shared/weapons.js';
 import { isObj, int, fail } from '../validate.js';
 import { MS } from './monsterAI.js';
 import { newOwnedMonster } from './playerData.js';
+import { MAX_COMPANIONS } from './companions.js';
 
 export class Recruitment {
   constructor(game) {
@@ -159,8 +160,8 @@ export class Recruitment {
     if (!game.economy.debit(s, price, `recruit:${m.sp}`)) return fail('money');
     if (profile.coupons.recruitDiscount) profile.coupons.recruitDiscount = 0;
     const owned = newOwnedMonster(m.sp, m.level, m.event ? 'event' : 'recruited', now);
-    for (const o of profile.monsters) o.following = false;
-    owned.following = true;
+    // it comes along with you if there is room among your companions
+    owned.following = profile.monsters.filter((o) => o.following && o.slot === null).length < MAX_COMPANIONS;
     profile.monsters.push(owned);
     game.ledger.set(owned.id, profile.id, owned.species, owned.level);
     profile.stats.recruited++;

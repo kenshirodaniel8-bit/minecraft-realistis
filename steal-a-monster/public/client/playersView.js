@@ -31,7 +31,6 @@ export class PlayerAvatar {
     this.hpPct = 100;
     this.effects = 0;
     this.carryIdx = -1;
-    this.followerIdx = -1;
     this.tmp = {};
     this.group = new THREE.Group();
     scene.add(this.group);
@@ -84,13 +83,12 @@ export class PlayerAvatar {
 
   // values from a snapshot row
   applySnapshot(t, row) {
-    const [, x, y, z, yaw, anim, hp, swordTier, carry, fx, follower, level, cosmetic] = row;
+    const [, x, y, z, yaw, anim, hp, swordTier, carry, fx, , level, cosmetic] = row;
     this.buf.push(t, x, y, z, yaw);
     this.anim = anim;
     this.hpPct = hp;
     this.effects = fx;
     this.setCarry(carry);
-    this.setFollower(follower);
     const sword = SWORDS.find((s) => s.tier === swordTier)?.id || 'wooden';
     const hat = cosmetic >= 0 ? COSMETICS[cosmetic]?.id : null;
     if (sword !== this.info.sword || hat !== (this.info.cosmetic || null) || level !== this.info.level) {
@@ -112,58 +110,6 @@ export class PlayerAvatar {
       this.carryRig.st = { pose: 'carried', poseT: 0 };
       this.h.carryAnchor.add(this.carryRig.root);
     }
-  }
-
-  setFollower(idx) {
-    if (idx === this.followerIdx) return;
-    this.followerIdx = idx;
-    if (this.followerRig) {
-      this.scene.remove(this.followerRig.root);
-      this.scene.remove(this.followerShadow);
-      this.followerRig = null;
-    }
-    if (idx >= 0 && SPECIES[idx]) {
-      const sp = SPECIES[idx];
-      this.followerRig = buildMonster(sp.id);
-      const s = Math.min(sp.size, 3.2 / this.followerRig.height);
-      this.followerRig.root.scale.setScalar(s);
-      this.followerRig.followScale = s;
-      this.followerRig.st = { pose: 'idle', poseT: 0, speed: 0 };
-      this.followerRig.pos = this.pos.clone().add(new THREE.Vector3(2, 0, -2));
-      this.followerRig.yaw = 0;
-      this.followerRig.appearAt = Math.max(performance.now(), this.followerHoldUntil || 0);
-      this.scene.add(this.followerRig.root);
-      this.followerShadow = blobShadow();
-      this.followerShadow.scale.setScalar(this.followerRig.width * s);
-      this.scene.add(this.followerShadow);
-    }
-  }
-
-  statusMesh(kind) {
-    if (this.fxMeshes[kind]) return this.fxMeshes[kind];
-    let m;
-    if (kind === 'ice') {
-      m = new THREE.Mesh(new THREE.BoxGeometry(3, 5.4, 2.4), new THREE.MeshStandardMaterial({ color: 0xbff1ff, transparent: true, opacity: 0.55, roughness: 0.1 }));
-      m.position.y = 2.6;
-    } else if (kind === 'shield') {
-      m = new THREE.Mesh(new THREE.SphereGeometry(3.2, 20, 14), new THREE.MeshStandardMaterial({ color: 0x8fb8ff, transparent: true, opacity: 0.25, emissive: 0x3a6aff, emissiveIntensity: 0.4, depthWrite: false }));
-      m.position.y = 2.4;
-    } else if (kind === 'net') {
-      m = new THREE.Mesh(new THREE.SphereGeometry(2.8, 8, 6), new THREE.MeshBasicMaterial({ color: 0xc8a26a, wireframe: true }));
-      m.position.y = 2.2;
-    } else if (kind === 'goo') {
-      m = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 0.9, 12), new THREE.MeshStandardMaterial({ color: 0x9be04a, transparent: true, opacity: 0.7 }));
-      m.position.y = 0.4;
-    }
-    m.visible = false;
-    this.group.add(m);
-    this.fxMeshes[kind] = m;
-    return m;
-  }
-
-  setStatus(kind, on) {
-    if (!on && !this.fxMeshes[kind]) return;
-    this.statusMesh(kind).visible = on;
   }
 
   // For the local player: drive from local physics instead of snapshots.
@@ -217,89 +163,25 @@ export class PlayerAvatar {
       animateMonster(this.carryRig, this.carryRig.st, dt, t);
       if (effects && Math.random() < dt * 3) effects.spawn(this.pos.x, this.pos.y + 6.5, this.pos.z, { color: [0x8fd8ff], speed: 2, life: 0.5 });
     }
-    // companion follows a little behind
-    const f = this.followerRig;
-    if (f) {
-      let behind = { x: this.pos.x - Math.sin(this.yaw) * 3.4 + Math.cos(this.yaw) * 1.6, z: this.pos.z - Math.cos(this.yaw) * 3.4 - Math.sin(this.yaw) * 1.6 };
-      // shy companions hide behind their owner when a stranger comes close
-      let stranger = null;
-      if (f.species.ai.temper === 'shy') {
-        for (const o of others) {
-          if (Math.hypot(o.x - this.pos.x, o.z - this.pos.z) < 12) stranger = o;
-        }
-      }
-      if (stranger) {
-        const dx = this.pos.x - stranger.x;
-        const dz = this.pos.z - stranger.z;
-        const d = Math.hypot(dx, dz) || 1;
-        behind = { x: this.pos.x + (dx / d) * 2.2, z: this.pos.z + (dz / d) * 2.2 };
-      }
-      const dx = behind.x - f.pos.x;
-      const dz = behind.z - f.pos.z;
-      const d = Math.hypot(dx, dz);
-      if (d > 30) {
-        f.pos.set(behind.x, this.pos.y, behind.z);
-      } else if (d > 0.6) {
-        const sp = Math.min(d * 3, 26);
-        f.pos.x += (dx / d) * sp * dt;
-        f.pos.z += (dz / d) * sp * dt;
-        f.yaw = Math.atan2(dx, dz);
-        f.st.speed = sp;
-      } else {
-        f.st.speed *= 0.8;
-        f.yaw += (this.yaw - f.yaw) * Math.min(1, dt * 2);
-      }
-      const fly = ['fly', 'flutter', 'serpent', 'float'].includes(f.species.ai.move);
-      const g = this.world.surfaceHeight(f.pos.x, f.pos.z, f.pos.y + 0.5);
-      f.pos.y = Math.max(g, fly ? 0 : g) + (fly ? 1.5 : 0);
-      f.root.position.copy(f.pos);
-      f.root.rotation.y = f.yaw;
-      // pop out with a little bounce (after a capture)
-      const pop = Math.min(1, Math.max(0, (performance.now() - (f.appearAt || 0)) / 350));
-      const bounce = pop < 1 ? 1 + Math.sin(pop * Math.PI) * 0.35 : 1;
-      f.root.scale.setScalar(Math.max(0.001, f.followScale * pop * bounce));
-      f.root.visible = pop > 0;
-      const pose = f.st.speed > 1 ? 'move' : stranger ? 'quirk' : 'idle';
-      if (pose !== f.st.pose) {
-        f.st.pose = pose;
-        f.st.poseT = 0;
-      }
-      if (pose === 'quirk') {
-        f.st.quirk = 'shy';
-        f.st.quirkDur = 1e9;
-        if (stranger) f.yaw = Math.atan2(stranger.x - f.pos.x, stranger.z - f.pos.z);
-      }
-      animateMonster(f, f.st, dt, t);
-      this.followerShadow.position.set(f.pos.x, Math.max(g, 0) + 0.05, f.pos.z);
-      this.followerShadow.visible = f.root.visible;
-    }
   }
 
   swing(combo) {
     this.h.startSwing(combo);
   }
 
-  // a capture started: point at it, and keep the new follower hidden until
-  // the orb lands (cheer), or a few seconds at most
+  // a capture started: point at it (the new companion stays hidden until
+  // the orb lands, see MonstersView.holdAllies)
   catchMonster() {
     this.h.startCatch();
-    this.followerHoldUntil = performance.now() + 4000;
-    if (this.followerRig) this.followerRig.appearAt = this.followerHoldUntil;
   }
 
   cheer() {
     this.h.startCheer();
-    this.followerHoldUntil = performance.now();
-    if (this.followerRig) {
-      this.followerRig.appearAt = this.followerHoldUntil;
-      this.followerRig.pos.set(this.pos.x, this.pos.y, this.pos.z);
-    }
   }
 
   dispose() {
     this.disposed = true;
     this.scene.remove(this.group, this.shadow, this.bar.group);
-    if (this.followerRig) this.scene.remove(this.followerRig.root, this.followerShadow);
     if (this.label) disposeLabel(this.label);
     this.bar.dispose();
   }

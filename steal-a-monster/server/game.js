@@ -33,6 +33,7 @@ import { EventManager } from './services/events.js';
 import { WorldExpansion } from './services/worldExpansion.js';
 import { Puzzles } from './services/puzzles.js';
 import { MoonSecret } from './services/moonSecret.js';
+import { Companions } from './services/companions.js';
 
 export { fail };
 
@@ -132,6 +133,7 @@ export class Game {
     this.expansion = new WorldExpansion(this, opts.expansionThresholds);
     this.puzzles = new Puzzles(this);
     this.moonSecret = new MoonSecret(this);
+    this.companions = new Companions(this);
 
     this.handlers = {
       move: (s, p) => this.handleMove(s, p),
@@ -142,6 +144,7 @@ export class Game {
       place: (s, p) => this.bases.handlePlace(s, p),
       unplace: (s, p) => this.bases.handleUnplace(s, p),
       follow: (s, p) => this.bases.handleFollow(s, p),
+      callAllies: (s) => this.companions.handleCall(s),
       release: (s, p) => this.bases.handleRelease(s, p),
       collect: (s) => this.bases.handleCollect(s),
       buyDecor: (s, p) => this.bases.handleBuyDecor(s, p),
@@ -281,6 +284,7 @@ export class Game {
     this.recruitment.onLeave(s);
     this.items.onLeave(s);
     this.moonSecret.onLeave(s);
+    this.companions.onLeave(s);
     this.players.delete(sid);
     if (this.byProfile.get(s.id) === s) this.byProfile.delete(s.id);
     this.bases.release(s.baseIndex);
@@ -687,6 +691,7 @@ export class Game {
     this.time += dtMs;
     const dt = dtMs / 1000;
     this.monsters.tick(dt, now);
+    this.companions.tick(dt, now);
     this.combat.tick(dt, now);
     this.items.tick(dt, now);
     this.stealing.tick(dt, now);
@@ -765,21 +770,21 @@ export class Game {
     const r = (v) => Math.round(v * 100) / 100;
     const players = [];
     for (const s of this.players.values()) {
-      const follower = s.profile.monsters.find((m) => m.following && m.slot === null);
       players.push([
         s.pn, r(s.pos.x), r(s.pos.y), r(s.pos.z), r(s.yaw), s.anim,
         Math.round((100 * s.hp) / s.maxHp),
         SWORD_BY_ID[s.profile.sword]?.tier || 1,
         s.carrying ? SPECIES_INDEX[s.carrying.species] : -1,
         this.effectBits(s, now),
-        follower ? SPECIES_INDEX[follower.species] : -1,
+        -1, // (was: the one follower; companions now come with the monsters)
         s.profile.level,
         s.profile.cosmetics.equipped ? COSMETIC_INDEX[s.profile.cosmetics.equipped] : -1,
         s.stealPending ? 1 : 0,
       ]);
     }
     for (const s of this.players.values()) {
-      this.sendVolatile(s, 'snap', { t: now, p: players, m: this.monsters.snapshotFor(s) });
+      const m = this.companions.snapshotFor(s, this.monsters.snapshotFor(s), CONFIG.interestRadius);
+      this.sendVolatile(s, 'snap', { t: now, p: players, m });
     }
   }
 }

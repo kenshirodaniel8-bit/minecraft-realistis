@@ -148,14 +148,16 @@ export function sanitizeProfile(p, id, now = Date.now()) {
       origin: ['recruited', 'stolen', 'event', 'gift'].includes(m.origin) ? m.origin : 'recruited',
       slot,
       following: !!m.following,
+      team: !!m.team,
       stolenFrom: typeof m.stolenFrom === 'string' ? m.stolenFrom.slice(0, 16) : undefined,
     });
   }
-  // at most one follower
-  let follower = false;
+  // at most five companions (monsters that walk with you; never on a pad)
+  let followers = 0;
   for (const m of out.monsters) {
-    if (m.following && !follower) follower = true;
+    if (m.following && m.slot === null && followers < 5) followers++;
     else m.following = false;
+    if (!m.following) m.team = false;
   }
   const d = p.discoveries || {};
   out.discoveries = {

@@ -101,6 +101,7 @@ export class Combat {
     }
     if (sp.kind === 'cleave') monsters.knockback(m, s.pos, sp.knockback);
     if (comboHit && !m.species.ai.boss) m.stunnedUntil = Math.max(m.stunnedUntil, now + 450);
+    this.game.companions.noteThreat(s, m.id); // your companions join in
     if (sp.kind === 'lifesteal') this.heal(s, dmg * sp.share);
     if (sp.kind === 'celestial') this.heal(s, dmg * sp.heal);
     monsters.damage(m, dmg, s, { crit });
@@ -133,6 +134,7 @@ export class Combat {
       return { blocked: 'dodge' };
     }
     const dmg = Math.max(1, Math.round(raw));
+    if (typeof opts.from === 'number') game.companions.noteThreat(s, opts.from); // companions defend you
     s.hp -= dmg;
     s.lastDamagedAt = now;
     const fx = s.fx;

@@ -478,7 +478,7 @@ export class UI {
     const cards = ms.map((m) => {
       const sp = SPECIES_BY_ID[m.species];
       const r = RARITIES[sp.rarity];
-      const status = s.awayIds.has(m.id) ? '⚠ Being stolen!' : m.slot !== null ? `On pad ${m.slot + 1}` : m.following ? 'Following you' : 'Not placed';
+      const status = s.awayIds.has(m.id) ? '⚠ Being stolen!' : m.slot !== null ? `On pad ${m.slot + 1}` : m.following && m.team ? '🐾 In your team' : m.following ? 'Following you' : 'Not placed';
       return `<div class="card" data-act="inspectOwned" data-id="${esc(m.id)}">
         <div class="tag" style="background:${r.color}">${r.name}</div>
         <div class="icon" style="${rarityStyle(sp)}"><img alt="" src="${this.app.preview.icon(sp.id)}"></div>
@@ -487,7 +487,9 @@ export class UI {
         ${m.origin === 'stolen' ? `<div class="sub">🦹 Stolen from ${esc(m.stolenFrom || '?')}</div>` : ''}
       </div>`;
     }).join('');
+    const team = p.monsters.filter((m) => m.following && m.slot === null).length;
     return `<p><b>${p.monsters.length} / ${p.base.slots}</b> monsters · Income <b>$${p.income}/s</b> · <span class="muted">Recruit more in the wild, then bring them to your base.</span></p>
+      <p class="note">🐾 Team: <b>${team} / 5</b> monsters walk with you and fight with you. Open a monster and press <b>Bring along</b>; press <b>X</b> to call them to your side.</p>
       <div class="grid">${cards || '<p class="muted">No monsters yet! Defeat a wild monster and pay its fee to recruit it.</p>'}</div>`;
   }
 
@@ -746,7 +748,8 @@ export class UI {
       else {
         if (owned.slot === null && free.length) acts += `<button class="btn sm go" id="ia-place" ${s.atBase ? '' : 'disabled title="Go to your base"'}>Place on pad ${free[0] + 1}</button>`;
         if (owned.slot !== null) acts += `<button class="btn sm ghost" id="ia-unplace" ${s.atBase ? '' : 'disabled title="Go to your base"'}>Pick up</button>`;
-        acts += owned.following ? '<button class="btn sm ghost" id="ia-unfollow">Stop following</button>' : `<button class="btn sm blue" id="ia-follow" ${owned.slot !== null && !s.atBase ? 'disabled' : ''}>Follow me</button>`;
+        const team = s.profile.monsters.filter((m) => m.following && m.slot === null).length;
+        acts += owned.following ? '<button class="btn sm ghost" id="ia-unfollow">Send home</button>' : `<button class="btn sm blue" id="ia-follow" ${(owned.slot !== null && !s.atBase) || team >= 5 ? 'disabled' : ''}>🐾 Bring along (${team}/5)</button>`;
         acts += '<button class="btn sm red" id="ia-release">Release</button>';
       }
     }
@@ -817,6 +820,7 @@ export function helpHtml() {
     ['Left click / F', 'Swing your sword (aims at the closest monster in front)'], ['Space', 'Jump / swim up'], ['Shift', 'Run'], ['Q', 'Dodge roll (dodges attacks)'],
     ['E', 'Interact: shops, Lucky Blocks, steal (hold), rescue'], ['R', 'Recruit the defeated monster (pay its fee)'],
     ['H', 'Teleport to your base (cooldown; not while carrying a stolen monster)'], ['L', 'Switch on your base lasers (at your base)'],
+    ['X', 'Call your companion monsters to your side (bring up to 5 along)'], ['Z', 'Costume master power (with a costume on)'],
     ['1 – 8', 'Use gadgets'], ['C / Tab', 'Your monsters'], ['M', 'World map'], ['T / Enter', 'Chat'], ['Esc', 'Close panels / release mouse'],
   ];
   return `<table class="help-table">${rows.map(([k, v]) => `<tr><td><kbd>${esc(k)}</kbd></td><td>${esc(v)}</td></tr>`).join('')}</table>

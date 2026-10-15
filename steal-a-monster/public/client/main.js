@@ -289,6 +289,7 @@ class App {
       const av = pn === this.pn ? this.me : this.players.get(pn);
       if (!av) return;
       av.catchMonster();
+      this.monsters.holdAllies(pn, 4000);
       this.capture.start({
         from: v.pos.clone(),
         height: v.rig.height * v.species.size,
@@ -296,7 +297,10 @@ class App {
         target: () => (av.disposed ? null : av.pos),
         name: v.species.name,
         mine: pn === this.pn,
-        onLand: () => av.cheer(),
+        onLand: () => {
+          av.cheer();
+          this.monsters.releaseAllies(pn);
+        },
       });
     };
     this.basesView = new BasesView(scene, this.world, this.effects, this.audio);
@@ -491,6 +495,7 @@ class App {
     n.on('mStrike', (d) => this.monsters.onStrike(d));
     n.on('mDefeated', (d) => this.monsters.onDefeated(d));
     n.on('mRecover', (d) => this.monsters.onRecover(d));
+    n.on('allyPoof', (d) => this.monsters.poof(d));
     n.on('mGone', (d) => {
       this.monsters.onGone(d);
     });
@@ -681,7 +686,6 @@ class App {
         this.me.effects = row[9];
         this.me.hpPct = row[6];
         this.me.setCarry(row[8]);
-        this.me.setFollower(row[10]);
         this.myCarry = row[8];
         continue;
       }
@@ -916,7 +920,12 @@ class App {
       placeDecor: (spot, decorId) => req('placeDecor', { spot, decorId }),
       place: (ownedId, slot) => req('place', { ownedId, slot }),
       unplace: (ownedId) => req('unplace', { ownedId }),
-      follow: (ownedId, follow) => req('follow', { ownedId, follow }),
+      follow: (ownedId, follow) => req('follow', { ownedId, follow }, follow ? '🐾 It comes along with you! (X calls your team)' : 'It went back to your base.'),
+      callAllies: async () => {
+        const res = await app.net.request('callAllies');
+        if (res.ok) app.audio.play('teleport');
+        else if (res.message) app.ui.toast(res.message, 'warn');
+      },
       release: (ownedId) => req('release', { ownedId, confirm: true }, 'Released back into the wild. Bye bye!').then(() => app.ui.close()),
       home: async () => {
         const res = await req('home');
@@ -1228,6 +1237,7 @@ class App {
     if (active) {
       if (input.consumePress('home')) this.actions.home();
       if (input.consumePress('lock')) this.actions.lock();
+      if (input.consumePress('callAllies')) this.actions.callAllies();
       ITEMS.forEach((it, i) => {
         if (input.consumePress(`item${i + 1}`)) this.useItem(it.id);
       });

@@ -2,8 +2,9 @@
 //
 // Desktop: WASD move, drag with either mouse button (or arrow keys, or V for
 // mouse-look) to turn the camera, left click attack, Space jump, Shift
-// sprint, Q dodge, E interact, R recruit, H home,
-// L lasers, 1-8 gadgets, C collection, M map, T chat, V mouse-look, Esc menu.
+// sprint, Q dodge, E interact, R recruit, H home, X call your companions,
+// Z costume power, L lasers, 1-8 gadgets, C collection, M map, T chat,
+// V mouse-look, Esc menu.
 // Touch: left joystick, drag right side to look, on-screen buttons.
 
 const KEYMAP = {
@@ -25,6 +26,8 @@ const KEYMAP = {
   KeyT: 'chat', Enter: 'chat', Slash: 'chat',
   KeyV: 'mouselook',
   KeyF: 'attack',
+  KeyX: 'callAllies',
+  KeyZ: 'power',
   F3: 'debug',
   Escape: 'menu',
   Digit1: 'item1', Digit2: 'item2', Digit3: 'item3', Digit4: 'item4',
@@ -213,6 +216,7 @@ export class TouchControls {
       <div class="tc-top">
         <button class="tc-small" data-a="home" aria-label="Return to base">🏠</button>
         <button class="tc-small" data-a="lock" aria-label="Security lasers">🔒</button>
+        <button class="tc-small" data-a="callAllies" aria-label="Call your monsters">🐾</button>
       </div>`;
     const stickZone = root.querySelector('.tc-stick-zone');
     const stick = root.querySelector('.tc-stick');

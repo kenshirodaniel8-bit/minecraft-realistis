@@ -12,6 +12,7 @@ import { QUALITY } from './scene.js';
 import { CAPTURE_SHRINK } from './captureFx.js';
 
 const POSES = ['idle', 'move', 'move', 'windup', 'strike', 'flee', 'stunned', 'defeated', 'sleep', 'recover', 'move', 'quirk'];
+export const ALLY = 256; // snapshot flag: someone's companion (row[11] = owner pn)
 export const MSTATE = { idle: 0, wander: 1, chase: 2, windup: 3, strike: 4, flee: 5, stunned: 6, defeated: 7, sleep: 8, recover: 9, return: 10, quirk: 11 };
 
 let shadowTex = null;
@@ -83,6 +84,31 @@ export class MonstersView {
     this.drawDist = QUALITY.high.monsterDist;
     this.tmp = {};
     this.frame = 0;
+    this.allyHold = new Map(); // owner pn -> hide their new companions until (ms)
+  }
+
+  // A capture is flying to this player: their new companion pops out when
+  // the orb lands (releaseAllies) instead of appearing at once.
+  holdAllies(pn, ms) {
+    this.allyHold.set(pn, performance.now() + ms);
+  }
+
+  releaseAllies(pn) {
+    const now = performance.now();
+    this.allyHold.delete(pn);
+    for (const v of this.map.values()) if (v.ally && v.owner === pn && v.appearAt > now) v.appearAt = now;
+  }
+
+  // a companion popped back to its owner's side
+  poof(d) {
+    const v = this.map.get(d.id);
+    if (!v) return;
+    this.effects.burst(v.pos.x, v.pos.y + 1, v.pos.z, 10, { color: [0xffffff, 0xffc2e8], speed: 3, life: 0.4 });
+    v.buf.items.length = 0;
+    v.pos.set(d.x, d.y, d.z);
+    v.prev.copy(v.pos);
+    v.appearAt = performance.now();
+    this.effects.burst(d.x, d.y + 1, d.z, 14, { color: [0xffffff, 0xffc2e8, 0xbfe0ff], speed: 4, life: 0.5 });
   }
 
   get(id) {
@@ -118,7 +144,7 @@ export class MonstersView {
     if (v.flashT > 0) setRigMaterial(to, FLASH_MAT);
   }
 
-  create(id, idx) {
+  create(id, idx, ally = false) {
     const species = SPECIES[idx];
     const rig = buildMonster(species.id);
     this.scene.add(rig.root);
@@ -145,10 +171,17 @@ export class MonstersView {
       gone: null,
       showBarUntil: 0,
       rarity,
+      ally,
+      owner: -1,
+      // companions are drawn no taller than a few metres, so a team of
+      // Mythic giants does not hide their owner
+      scale: ally ? Math.min(species.size, 3.4 / rig.height) : species.size,
+      appearAt: 0,
     };
+    if (ally) rig.root.scale.setScalar(v.scale);
     v.bar.group.visible = false;
     this.scene.add(v.bar.group);
-    v.shadow.scale.setScalar(rig.width * species.size * 0.9);
+    v.shadow.scale.setScalar(rig.width * v.scale * 0.9);
     this.scene.add(v.shadow);
     this.map.set(id, v);
     return v;
@@ -161,20 +194,26 @@ export class MonstersView {
       disposeLabel(v.label);
     }
     const sp = v.species;
-    v.label = makeLabel(`${sp.name}  Lv ${v.level}`, { scale: 0.016, colors: [v.rarity.color], font: '800 38px "Trebuchet MS", system-ui, sans-serif' });
+    v.label = v.ally
+      ? makeLabel(`💖 ${sp.name}  Lv ${v.level}`, { scale: 0.015, colors: ['#7ef06a'], font: '800 38px "Trebuchet MS", system-ui, sans-serif' })
+      : makeLabel(`${sp.name}  Lv ${v.level}`, { scale: 0.016, colors: [v.rarity.color], font: '800 38px "Trebuchet MS", system-ui, sans-serif' });
     this.scene.add(v.label);
     v.labelLevel = v.level;
   }
 
   applySnapshot(t, list) {
     for (const e of list) {
-      const [id, idx, x, y, z, yaw, state, hp, level, flags, quirk] = e;
+      const [id, idx, x, y, z, yaw, state, hp, level, flags, quirk, owner] = e;
       let v = this.map.get(id);
       if (!v) {
-        v = this.create(id, idx);
+        v = this.create(id, idx, (flags & ALLY) !== 0);
         v.pos.set(x, y, z);
         v.prev.set(x, y, z);
         v.yaw = yaw;
+        if (v.ally) {
+          v.owner = owner;
+          v.appearAt = Math.max(performance.now(), this.allyHold.get(owner) || 0);
+        }
       }
       if (v.gone) continue;
       v.buf.push(t, x, y, z, yaw);
@@ -182,7 +221,7 @@ export class MonstersView {
         if (state === MSTATE.defeated) this.audio.play('defeat', { pitch: v.species.personality.cry });
         // noticing an enemy: a quick intimidating face before the chase
         const calm = [MSTATE.idle, MSTATE.wander, MSTATE.sleep, MSTATE.quirk].includes(v.state);
-        if (state === MSTATE.chase && calm) {
+        if (state === MSTATE.chase && calm && !v.ally) {
           v.forcePose = 'quirk';
           v.forceQuirk = 'intimidate';
           v.forceUntil = performance.now() + 750;
@@ -214,6 +253,7 @@ export class MonstersView {
     const s = v.species.size;
     const gy = this.world.groundHeight(v.pos.x, v.pos.z);
     const yaw = Math.atan2(d.tx - v.pos.x, d.tz - v.pos.z);
+    if (d.ally) return; // companions: no danger markers
     if (d.kind === 'slam') this.effects.telegraph('slam', v.pos.x, gy, v.pos.z, 0, a.radius + 0.5, d.windupMs);
     else if (d.kind === 'breath') this.effects.telegraph('breath', v.pos.x, gy, v.pos.z, yaw, a.range + s, d.windupMs, (a.arc * Math.PI) / 180);
     else if (d.kind === 'lunge') this.effects.telegraph('lunge', v.pos.x, gy, v.pos.z, yaw, a.range + 2, d.windupMs);
@@ -230,7 +270,7 @@ export class MonstersView {
     v.st.attackKind = a.kind;
     const color = new THREE.Color(a.color || '#ffffff').getHex();
     const p = v.pos;
-    const h = v.rig.height * v.species.size;
+    const h = v.rig.height * v.scale;
     if (a.kind === 'slam') {
       this.effects.burst(p.x, p.y + 0.3, p.z, 30, { color: [color, 0xffffff], speed: a.radius * 2.2, up: 0.25, life: 0.6 });
       this.audio.play('slam');
@@ -253,10 +293,10 @@ export class MonstersView {
     v.showBarUntil = performance.now() + 6000;
     v.hp = h.hp;
     const top = v.pos.clone();
-    top.y += v.rig.height * v.species.size + 0.4;
+    top.y += v.rig.height * v.scale + 0.4;
     const cls = h.burn ? 'player' : h.crit || h.fx === 'jackpot' ? 'crit' : '';
     this.effects.number(h.crit ? `${h.dmg}!` : `${h.dmg}`, top, cls);
-    const midY = v.pos.y + v.rig.height * v.species.size * 0.5;
+    const midY = v.pos.y + v.rig.height * v.scale * 0.5;
     this.effects.hitSpark(v.pos.x, midY, v.pos.z, h.crit);
     // special sword effects
     const FX = {
@@ -344,11 +384,11 @@ export class MonstersView {
           // lifted up, spinning faster and faster, shrinking into a point
           const root = v.rig.root;
           root.rotation.y += dt * (4 + k * 22);
-          root.position.y = v.pos.y + k * k * v.rig.height * v.species.size * 0.6;
+          root.position.y = v.pos.y + k * k * v.rig.height * v.scale * 0.6;
           root.scale.setScalar(v.species.size * Math.max(0.01, 1 - k ** 1.6));
           v.shadow.scale.setScalar(Math.max(0.01, 1 - k));
         } else {
-          v.rig.root.scale.setScalar(v.species.size * Math.max(0.01, 1 - k));
+          v.rig.root.scale.setScalar(v.scale * Math.max(0.01, 1 - k));
         }
         animateMonster(v.rig, v.st, dt, time);
         if (k >= 1) this.remove(v);
@@ -366,6 +406,12 @@ export class MonstersView {
       const root = v.rig.root;
       root.position.copy(v.pos);
       root.rotation.y = v.yaw;
+      if (v.ally) {
+        // pop in (after a capture or a poof) with a little bounce
+        const pop = Math.min(1, Math.max(0, (nowMs - v.appearAt) / 350));
+        const bounce = pop < 1 ? 1 + Math.sin(pop * Math.PI) * 0.35 : 1;
+        root.scale.setScalar(Math.max(0.001, v.scale * pop * bounce));
+      }
       // pose from server state, refined by actual motion
       let pose = POSES[v.state] || 'idle';
       if (v.forcePose && nowMs < v.forceUntil && v.state !== MSTATE.defeated && v.state !== MSTATE.stunned) pose = v.forcePose;
@@ -386,7 +432,7 @@ export class MonstersView {
       if (v.st.hurtT !== undefined) v.st.hurtT += dt;
       // animate (cheaper when far away)
       if (dist < 90 || (this.frame + v.id) % 3 === 0) animateMonster(v.rig, v.st, dist < 90 ? dt : dt * 3, time);
-      root.visible = dist < this.drawDist || (v.flags & 32) !== 0; // always draw one that is after you
+      root.visible = (dist < this.drawDist || (v.flags & 32) !== 0) && (!v.ally || nowMs >= v.appearAt); // always draw one that is after you
       // hit flash
       if (v.flashT > 0) {
         v.flashT -= dt;
@@ -398,7 +444,7 @@ export class MonstersView {
         v.fxT = (v.fxT || 0) - dt;
         if (v.fxT <= 0) {
           v.fxT = 0.18;
-          const hh = v.rig.height * v.species.size;
+          const hh = v.rig.height * v.scale;
           if (v.flags & 1) this.effects.burst(v.pos.x, v.pos.y + hh * 0.6, v.pos.z, 2, { color: [0xff8a2a, 0xffd23a], speed: 1.5, up: 2.5, life: 0.5, size: 0.18, grav: -2 });
           if (v.flags & 128) this.effects.burst(v.pos.x, v.pos.y + hh * 0.8, v.pos.z, 2, { color: [0xbff4ff, 0xffffff], speed: 1.2, up: 0.5, life: 0.7, size: 0.15, grav: 2 });
         }
@@ -408,7 +454,16 @@ export class MonstersView {
       v.shadow.position.set(v.pos.x, gy + 0.06, v.pos.z);
       v.shadow.visible = root.visible;
       // label & bar
-      const h = v.rig.height * v.species.size;
+      const h = v.rig.height * v.scale;
+      if (v.ally) {
+        if (dist < 30) this.updateLabel(v);
+        if (v.label) {
+          v.label.visible = dist < 30 && root.visible;
+          v.label.position.set(v.pos.x, v.pos.y + h + 1.0, v.pos.z);
+        }
+        v.bar.group.visible = false;
+        continue;
+      }
       const near = dist < 45;
       const aggro = (v.flags & 32) !== 0;
       if (near || aggro) this.updateLabel(v);
@@ -439,7 +494,7 @@ export class MonstersView {
     let best = null;
     let bd = Infinity;
     for (const v of this.map.values()) {
-      if (v.gone || v.state === MSTATE.defeated || v.state === MSTATE.recover) continue;
+      if (v.gone || v.ally || v.state === MSTATE.defeated || v.state === MSTATE.recover) continue;
       const dx = v.pos.x - pos.x;
       const dz = v.pos.z - pos.z;
       const d = Math.hypot(dx, dz) - v.rig.width * v.species.size * 0.35;
