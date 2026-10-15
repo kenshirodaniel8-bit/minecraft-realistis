@@ -20,6 +20,7 @@ import { ThirdPersonCamera } from './camera.js';
 import { LocalPlayer } from './player.js';
 import { Net } from './net.js';
 import { LocalNet } from './localNet.js';
+import { RoomHost, RoomGuestNet, firebaseConfig, cleanRoomCode } from './rooms.js';
 import { Audio } from './audio.js';
 import { Effects } from './effects.js';
 import { CaptureFx } from './captureFx.js';
@@ -33,6 +34,7 @@ import { UI, TUTORIAL, fmt } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const INTERP_DELAY = 120;
+const REMOTE_INTERP_DELAY = 280; // online rooms: snapshots arrive in batches through Firebase
 const SWATCHES = [0x3a7ae0, 0xe84a5f, 0x3fbf5a, 0xffb02a, 0x9a5ae0, 0x2ac8c8, 0xff7ab8, 0x5a5a6a, 0xffffff, 0x8a5a32];
 const TIPS = [
   'Defeating a monster is not enough — you have to pay its recruitment fee!',
@@ -155,6 +157,7 @@ class App {
     });
     if (this.solo) {
       $('title-status').textContent = '🟢 Single-player · runs in your browser · progress is saved on this device';
+      this.bindOnline();
       return;
     }
     fetch('/health').then((r) => r.json()).then((h) => {
@@ -164,13 +167,50 @@ class App {
     });
   }
 
-  async play() {
+  // Online rooms (web build only): create a room (your browser hosts the
+  // game for your friends) or join a friend's room with its code.
+  bindOnline() {
+    $('online-box').hidden = false;
+    const input = $('room-input');
+    const fromLink = cleanRoomCode(new URLSearchParams(location.search).get('room'));
+    if (!firebaseConfig()) {
+      $('online-row').hidden = true;
+      $('online-note').innerHTML = 'Not set up yet: the game owner has to add a free Firebase database first (see <b>PANDUAN-FIREBASE.md</b>).';
+      return;
+    }
+    $('online-note').textContent = 'Create a room and send the link to your friends, or type their room code.';
+    if (fromLink) {
+      input.value = fromLink;
+      $('online-note').textContent = `You were invited to room ${fromLink}. Type your name and press Join!`;
+      $('join-btn').classList.add('go');
+    }
+    $('host-btn').onclick = () => this.play('host');
+    const join = () => {
+      const code = cleanRoomCode(input.value);
+      if (!code) {
+        $('online-note').textContent = 'A room code has 5 letters/numbers, like K7QZP.';
+        input.focus();
+        return;
+      }
+      this.play('guest', code);
+    };
+    $('join-btn').onclick = join;
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') join();
+    });
+  }
+
+  async play(mode = 'solo', code = null) {
     if (this.starting) return;
+    // a guest talks to a friend's game through Firebase instead of running one
+    if (mode === 'guest' && !this.net.socket) this.net = new RoomGuestNet(code);
+    this.mode = this.net.remote ? 'guest' : mode;
     this.starting = true;
     this.audio.unlock();
     const name = ($('name-input').value || '').replace(/[^A-Za-z0-9_ -]/g, '').trim().slice(0, 16) || `Player${Math.floor(Math.random() * 900 + 100)}`;
     this.saveSetting('name', name);
     $('play-btn').disabled = true;
+    for (const b of ['host-btn', 'join-btn']) $(b).disabled = true;
     this.ui = this.ui || new UI(this);
     this.ui.setLoading('Connecting…', 0.05, TIPS[Math.floor(Math.random() * TIPS.length)]);
     try {
@@ -180,6 +220,7 @@ class App {
       }
       const res = await this.net.hello(this.token, name, this.settings.color);
       if (!res || !res.ok) throw new Error(res?.message || 'Could not join the server.');
+      if (this.mode === 'host' && !this.room) await this.openRoom();
       this.ui.setLoading('Building the world…', 0.2);
       await new Promise((r) => setTimeout(r, 30));
       if (!this.world) this.buildScene();
@@ -197,6 +238,12 @@ class App {
         this.ui.regionBanner(`Welcome back, ${res.profile.name}!`, 'Your monsters missed you.');
       }
       this.applyTouch();
+      this.showRoomPill();
+      if (this.mode === 'host') {
+        if (this.room) this.ui.toast(`Your room is open! Code ${this.room.code} — tap the room button at the top to copy the invite link.`, 'good');
+        else this.ui.toast(`Could not open an online room (${this.roomError}). Playing single-player.`, 'bad');
+        if (this.room) setInterval(() => this.showRoomPill(), 2000);
+      }
       this.canvas.focus();
       if (!this.loopStarted) {
         this.loopStarted = true;
@@ -209,6 +256,11 @@ class App {
       this.ui.hideLoading();
       $('title-status').textContent = `⚠ ${e.message}`;
       $('play-btn').disabled = false;
+      for (const b of ['host-btn', 'join-btn']) $(b).disabled = false;
+      // a failed join leaves no half-open connection behind
+      if (this.net.remote && !this.joined) {
+        this.net = new LocalNet();
+      }
     } finally {
       this.starting = false;
     }
@@ -256,6 +308,41 @@ class App {
     this.player = new LocalPlayer(this.world);
     this.vaultColliders = this.world.colliders.all.filter((c) => c.door);
     console.log(`world built in ${Math.round(performance.now() - t0)} ms`);
+  }
+
+  async openRoom() {
+    this.ui.setLoading('Opening your online room…', 0.15);
+    try {
+      this.room = new RoomHost(this.net.game);
+      await this.room.open();
+    } catch (e) {
+      console.error(e);
+      this.room = null;
+      this.roomError = e.message;
+    }
+  }
+
+  showRoomPill() {
+    const pill = $('room-pill');
+    if (this.mode === 'host' && this.room) {
+      pill.hidden = false;
+      const n = this.room.guestCount + 1;
+      pill.innerHTML = `🌐 Room <b>${this.room.code}</b> · ${n} player${n === 1 ? '' : 's'} · 🔗 Copy link`;
+      pill.title = 'Send this link to your friends. Keep this tab open: your browser runs the game for everyone in the room.';
+      pill.onclick = () => this.copyRoomLink();
+    } else if (this.mode === 'guest') {
+      pill.hidden = false;
+      pill.innerHTML = `🌐 Room <b>${this.net.code}</b>`;
+      pill.title = "You are playing in a friend's room.";
+      pill.onclick = null;
+    }
+  }
+
+  copyRoomLink() {
+    const link = this.room.link();
+    const done = () => this.ui.toast(`Link copied! Send it to your friends: ${link}`, 'good');
+    if (navigator.clipboard) navigator.clipboard.writeText(link).then(done, () => window.prompt('Copy this link:', link));
+    else window.prompt('Copy this link:', link);
   }
 
   // ---------------------------------------------------------------- welcome & state
@@ -532,6 +619,13 @@ class App {
       this.kicked = true;
       $('disc-title').textContent = 'Disconnected';
       $('disc-text').textContent = d.reason;
+      $('disconnected').hidden = false;
+    });
+    n.on('roomClosed', () => {
+      if (!this.joined) return;
+      this.kicked = true;
+      $('disc-title').textContent = 'The room was closed';
+      $('disc-text').textContent = 'Your friend left or closed their game. Refresh the page to play on your own, or join another room.';
       $('disconnected').hidden = false;
     });
     n.on('disconnect', () => {
@@ -1030,7 +1124,7 @@ class App {
     const t0 = performance.now();
     const input = this.input;
     const serverNow = this.serverNow();
-    const renderT = serverNow - INTERP_DELAY;
+    const renderT = serverNow - (this.net.remote ? REMOTE_INTERP_DELAY : INTERP_DELAY);
     const panelOpen = this.ui.isOpen();
 
     // keys that open things

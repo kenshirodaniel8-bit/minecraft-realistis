@@ -34,6 +34,16 @@
         <div id="color-swatches" class="swatches"></div>
       </div>
       <button id="play-btn" class="btn big go">▶ PLAY</button>
+      <div id="online-box" class="online-box" hidden>
+        <div class="online-title">🌐 Play online with friends</div>
+        <div id="online-row" class="online-row">
+          <button id="host-btn" class="btn" type="button">Create room</button>
+          <span class="online-or">or</span>
+          <input id="room-input" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Room code">
+          <button id="join-btn" class="btn" type="button">Join</button>
+        </div>
+        <p id="online-note" class="muted small"></p>
+      </div>
       <p id="title-status" class="muted small" role="status"></p>
       <div class="title-links">
         <a href="gallery.html" target="_blank" rel="noopener">🐾 Monster Gallery</a>
@@ -54,6 +64,7 @@
   <div id="hud" hidden>
     <!-- first, so HUD buttons stack above the touch look/move zones -->
     <div id="touch-ui" hidden></div>
+    <button id="room-pill" class="room-pill" type="button" hidden></button>
     <div id="profile-card">
       <div class="pc-row">
         <div id="pc-level" class="badge">1</div>

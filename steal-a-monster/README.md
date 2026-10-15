@@ -35,8 +35,26 @@ automatically to the `gh-pages` branch by `.github/workflows/steal-a-monster-pag
 If the link shows a 404, enable Pages once: repository **Settings → Pages →
 Deploy from a branch → `gh-pages` / (root)**.
 
-Multiplayer (stealing from other players, shared LUCKY LUCKY events) needs the
-Node.js server below, hosted somewhere everyone can reach.
+### Online rooms with friends (Firebase)
+
+The web version can also be played **online with friends** without running a
+server: one player presses **Create room** and sends the invite link; friends
+open it and press **Join**. The room creator's browser runs the game (the same
+server code), and all messages travel through a free **Firebase Realtime
+Database**. To switch it on, follow the step-by-step guide (in Indonesian):
+**[PANDUAN-FIREBASE.md](PANDUAN-FIREBASE.md)** — create a Firebase project,
+publish [`firebase-database.rules.json`](firebase-database.rules.json), and
+paste the web config into `public/firebase-config.js`.
+
+Limits: the room closes when its creator leaves; guests' progress is saved in
+the creator's browser; every message goes through Firebase (about 100–300 ms
+extra delay); a guest downloads about 22 KB/s, so the free plan (10 GB/month)
+covers roughly 100 hours a month with one friend. It was tested with the
+official Firebase Realtime Database emulator and the real Firebase SDK
+(`scripts/room-e2e.mjs`), not against a live Firebase project.
+
+For a dedicated server instead (lowest lag, progress saved on the server), use
+the Node.js server below, hosted somewhere everyone can reach.
 
 ## Quick start (multiplayer server)
 
@@ -182,8 +200,8 @@ makes them drop the stolen monster.
 ## Multiplayer and deployment
 
 `npm start` runs the web server **and** the real-time game server on one port.
-Every important rule runs on the server; a static copy of the page alone cannot
-play (there is no single-player fallback).
+Every important rule runs on the server. (The static web build is different:
+it runs the same server code inside the browser, see above.)
 
 | Environment variable | Meaning | Default |
 |---|---|---|

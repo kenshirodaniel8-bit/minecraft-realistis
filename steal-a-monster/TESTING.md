@@ -96,6 +96,57 @@ home, and after a page reload the monster and Money were still there (no second
 starting bonus, no income jackpot). No browser errors, no failed requests.
 Not verified: the live github.io site itself (this workspace cannot reach it).
 
+### Online rooms through Firebase — `node scripts/room-e2e.mjs`
+
+Run against the **official Firebase Realtime Database emulator** (Google's
+local copy of the database, v4.11.2) with the real Firebase JS SDK and the
+security rules from `firebase-database.rules.json` loaded. Two browsers use
+the single-player web build: one creates a room, the other opens the invite
+link. Result of the last run:
+
+```
+Host opens a room
+  ✔ the title screen offers "Create room"
+  ✔ room code 6JVXU
+  ✔ invite link http://127.0.0.1:45285/minecraft-realistis/?room=6JVXU
+  ✔ the HUD shows the room (🌐 Room 6JVXU · 1 player · 🔗 Copy link)
+A friend opens the link and joins
+  ✔ the room code from the link is filled in
+  ✔ the friend plays as a guest (no game server in their page)
+  ✔ the guest starts with 1,000 Money (got 1000)
+  ✔ the guest has their own base (#1, host #0)
+  ✔ they see each other (host sees 1, guest sees 1)
+  ✔ the host's room button counts 2 players (🌐 Room 6JVXU · 2 players · 🔗 Copy link)
+The guest walks out of their tower and into the meadow
+  ✔ the guest reached the meadow (1.7 m left)
+  ✔ the host's server agrees where the guest is (1.9 m apart)
+  ✔ no movement corrections on the way (none)
+The guest fights a monster and pays to recruit it
+  ✔ the guest defeated it (state 7)
+  ✔ a recruitment card appeared for the guest
+  ✔ the guest owns the Chompkin (chompkin)
+  ✔ the fee was paid (1011 -> 891)
+  ✔ the host's game records the guest as the owner
+The guest presses H; the monster moves into their base
+  ✔ placed on pad 0
+  (round trip guest -> Firebase -> host -> Firebase -> guest: about 22 ms on localhost; the guest downloads about 21.8 KB/s)
+The host closes the game
+  ✔ the guest is told (The room was closed)
+  ✔ host: no browser errors
+  ✔ guest: no browser errors
+
+ROOM E2E PASSED
+```
+
+The security rules were also checked directly against the emulator: reading
+the list of rooms, writing outside `sam/rooms`, a malformed room code and an
+unknown field inside a room are all refused; a room's own data is allowed.
+
+**Not verified:** a live Firebase project on the internet (no account was
+available here). Real-world delay through Firebase servers is expected to be
+around 100–300 ms but was not measured. Keeping the game running while the
+host's tab is in the background (worker timers) was not tested in a hidden tab.
+
 ### Server load test — `npm run test:load`
 
 12 simulated players (real Socket.IO clients, the server's player cap) walk out

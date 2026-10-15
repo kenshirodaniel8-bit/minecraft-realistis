@@ -6,6 +6,7 @@
 import { CONFIG, PROTOCOL_VERSION } from '#shared/config.js';
 import { randomId } from '#shared/rng.js';
 import { BrowserStore } from './browserStore.js';
+import { steadyInterval } from './steadyTimer.js';
 
 const SID = 'local';
 // messages are copied like a real network would, so client and server never
@@ -36,7 +37,7 @@ export class LocalNet {
     await this.game.init();
     const step = 1000 / CONFIG.tickRate;
     let last = performance.now();
-    this.timer = setInterval(() => {
+    this.stopTimer = steadyInterval(() => {
       const t = performance.now();
       const dt = Math.min(200, t - last);
       last = t;

@@ -4,7 +4,9 @@
 > multiplayer game about battling, recruiting and stealing adorable baby monsters
 > (Three.js + Node.js + Socket.IO). It lives in `steal-a-monster/` and has its own
 > `npm install` / `npm start`. **Play the single-player version in your browser:
-> https://kenshirodaniel8-bit.github.io/minecraft-realistis/**. Everything below is about Realistis.
+> https://kenshirodaniel8-bit.github.io/minecraft-realistis/**. To play it online with friends
+> (rooms over a free Firebase database), follow
+> [steal-a-monster/PANDUAN-FIREBASE.md](steal-a-monster/PANDUAN-FIREBASE.md). Everything below is about Realistis.
 
 A block-building sandbox with **realistic graphics**: real-time sun shadows, god rays through
 the trees, animated water that mirrors the world around it, waving grass and leaves, a day/night cycle with sunsets,

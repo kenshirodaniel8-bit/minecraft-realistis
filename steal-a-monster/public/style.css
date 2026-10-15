@@ -315,6 +315,16 @@ body.touch #quick { display: none; }
   body.touch #offers { top: 132px; right: 190px; width: 230px; max-height: calc(100vh - 190px); }
   body.touch #prompt { top: auto; bottom: 64px; }
 }
+/* online rooms */
+.online-box { margin-top: 14px; padding: 10px 12px; border: 3px dashed #c9b8f0; border-radius: 16px; background: #f6f0ff; }
+.online-title { font-weight: 800; color: var(--purple); margin-bottom: 8px; }
+.online-row { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.online-row .btn { padding: 8px 14px; font-size: 16px; }
+.online-or { color: #8a7aa8; font-weight: 700; }
+#room-input { width: 112px; padding: 8px 6px; font: 800 18px var(--font); text-transform: uppercase; letter-spacing: 2px; text-align: center; border: 3px solid var(--ink); border-radius: 12px; }
+#online-note { margin: 8px 0 0; }
+.room-pill { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6; background: #f6f0ff; color: var(--ink); border: 3px solid var(--ink); border-radius: 999px; padding: 4px 14px; font: 800 14px var(--font); box-shadow: var(--shadow); cursor: pointer; white-space: nowrap; }
+.room-pill b { color: var(--purple); letter-spacing: 1px; }
 /* landscape phones: the title card becomes two columns so PLAY stays on screen */
 @media (max-height: 520px) {
   .screen { padding: 8px; }
@@ -328,7 +338,10 @@ body.touch #quick { display: none; }
   #title .swatches button { width: 28px; height: 28px; border-radius: 8px; }
   #title .field input { padding: 6px 10px; font-size: 16px; }
   #play-btn { grid-column: 2; grid-row: 3; margin-top: 6px; font-size: 22px; padding: 8px 20px; }
-  #title-status { grid-column: 1 / span 2; grid-row: 4; margin: 4px 0 0; }
+  #title-status { grid-column: 1 / span 2; grid-row: 5; margin: 4px 0 0; }
+  #title .online-box { grid-column: 1 / span 2; grid-row: 4; margin-top: 6px; padding: 6px 10px; }
+  #title .online-title { display: none; }
+  #online-note { margin-top: 4px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01s !important; animation-iteration-count: 1 !important; }

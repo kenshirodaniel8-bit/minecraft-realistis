@@ -27,6 +27,9 @@ const copyDir = (from, to, filter = () => true) => {
 copyDir('public/client', 'client');
 copyDir('shared', 'shared');
 copy('public/style.css', 'style.css');
+// online rooms: the Firebase config and the bundled Firebase SDK
+copy('public/firebase-config.js', 'firebase-config.js');
+copyDir('public/vendor', 'vendor');
 for (const f of ['game.js', 'validate.js', 'rateLimit.js']) copy(`server/${f}`, `server/${f}`);
 copyDir('server/services', 'server/services');
 // three.js and the two addons the game uses
@@ -60,7 +63,7 @@ const walk = (dir) => {
   for (const f of fs.readdirSync(dir)) {
     const p = path.join(dir, f);
     if (fs.statSync(p).isDirectory()) walk(p);
-    else if (p.endsWith('.js') && !p.includes(`${path.sep}lib${path.sep}`)) {
+    else if (p.endsWith('.js') && !p.includes(`${path.sep}lib${path.sep}`) && !p.includes(`${path.sep}vendor${path.sep}`)) {
       const src = fs.readFileSync(p, 'utf8');
       for (const m of src.matchAll(/^import [^;]*? from '([^']+)'/gm)) {
         const spec = m[1];

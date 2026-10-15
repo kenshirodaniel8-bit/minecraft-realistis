@@ -1,0 +1,39 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "sam": {
+      "rooms": {
+        "$code": {
+          ".read": true,
+          ".write": "$code.matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$/)",
+          "host": {
+            ".validate": "newData.hasChildren(['v', 'at'])"
+          },
+          "guests": {
+            "$gid": {
+              ".validate": "$gid.matches(/^[A-Za-z0-9_-]{4,40}$/) && newData.hasChildren(['at'])"
+            }
+          },
+          "up": {
+            "$gid": {
+              "$msg": {
+                ".validate": "newData.child('j').isString() && newData.child('j').val().length < 100000"
+              }
+            }
+          },
+          "down": {
+            "$gid": {
+              "$msg": {
+                ".validate": "newData.child('j').isString() && newData.child('j').val().length < 3000000"
+              }
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    }
+  }
+}
