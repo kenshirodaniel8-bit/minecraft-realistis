@@ -5,7 +5,7 @@ import { glowSprite } from './labels.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { SWORD_BY_ID } from '#shared/weapons.js';
 import { COSMETIC_BY_ID } from '#shared/lucky.js';
-import { COSTUME_BY_ID } from '#shared/costumes.js';
+import { COSTUME_BY_ID, costumeWithPower } from '#shared/costumes.js';
 
 export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, dodge: 5 };
 
@@ -394,10 +394,19 @@ function dressUp(h, c) {
     plume.rotation.x = 0.2;
   }
   if (look.armor) {
-    add(h.torso, part(RBOX, mat(0xe8f6ff, { rough: 0.15, metal: 0.7 }), 1.7, 1.1, 1.08, 0, 1.15, 0));
+    add(h.torso, part(RBOX, mat(col.armor ?? 0xe8f6ff, { rough: 0.15, metal: 0.7 }), 1.7, 1.1, 1.08, 0, 1.15, 0));
     for (const arm of h.arms) add(arm, part(new THREE.SphereGeometry(0.62, 12, 8), mat(col.trim, { rough: 0.2, metal: 0.6 }), 1, 0.7, 1, 0, 0.05, 0));
   }
   if (look.hat === 'mask') add(h.head, part(RBOX, hatMat, 1.2, 0.26, 1.18, 0, 0.72, 0.01));
+  // guard uniforms (shared/guards.js)
+  if (look.hat === 'cap') {
+    add(h.head, part(RBOX, hatMat, 1.22, 0.36, 1.22, 0, 1.12, 0));
+    add(h.head, part(BOX, hatMat, 0.9, 0.06, 0.5, 0, 1.0, 0.72));
+    add(h.head, part(BOX, mat(col.trim, { metal: 0.5, rough: 0.3 }), 0.22, 0.2, 0.04, 0, 1.15, 0.62));
+  }
+  if (look.badge) add(h.torso, part(BOX, mat(col.trim, { metal: 0.6, rough: 0.25, emissive: col.trim, ei: 0.15 }), 0.28, 0.32, 0.05, -0.45, 1.35, 0.52));
+  if (look.vest) add(h.torso, part(RBOX, mat(look.vest, { rough: 0.8 }), 1.96, 1.3, 1.06, 0, 1.0, 0));
+  if (look.visor) add(h.head, part(BOX, mat(look.visor, { emissive: look.visor, ei: 0.9, rough: 0.2 }), 1.0, 0.18, 0.06, 0, 0.7, 0.67));
   if (look.bolt) {
     const b = add(h.torso, decal(boltTexture(), 0.9, 0.9, 0.3));
     b.position.set(0, 1.1, 0.506);
@@ -405,7 +414,17 @@ function dressUp(h, c) {
   if (look.cape) {
     const cape = new THREE.Group();
     cape.position.set(0, 1.75, -0.52);
-    cape.add(part(BOX, mat(0xd8384a, { rough: 0.8 }), 1.9, 2.7, 0.08, 0, -1.35, 0));
+    const legend = c.style === 'legend';
+    cape.add(part(BOX, mat(typeof look.cape === 'number' ? look.cape : 0xd8384a, { rough: 0.8 }), legend ? 2.2 : 1.9, legend ? 3.4 : 2.7, 0.08, 0, legend ? -1.7 : -1.35, 0));
+    if (legend) {
+      // a glowing hem and the power's sign on the back
+      const hem = part(BOX, glowMat(col.glow), 2.24, 0.14, 0.1, 0, -3.36, 0);
+      hem.castShadow = false;
+      cape.add(hem);
+      const sign = part(new THREE.OctahedronGeometry(0.45), glowMat(col.glow), 1, 1.4, 0.2, 0, -1.4, -0.08);
+      sign.castShadow = false;
+      cape.add(sign);
+    }
     cape.userData.cape = true;
     add(h.torso, cape);
   }
@@ -419,6 +438,66 @@ function dressUp(h, c) {
     }
   }
   if (look.pompom) add(h.torso, part(new THREE.SphereGeometry(0.32, 12, 10), mat(0xffffff, { rough: 0.9 }), 1, 1, 1, 0, 0.15, -0.55));
+
+  // Legend Master: a crown, big pauldrons, a glowing gem, glowing lines that
+  // are always on (in the colour of the chosen power) and orbs circling you
+  const pulses = []; // glow materials that breathe
+  const orbs = [];
+  if (look.hat === 'crown') {
+    const gold = mat(col.hat, { rough: 0.2, metal: 0.85, emissive: col.hat, ei: 0.15 });
+    const crown = new THREE.Group();
+    crown.position.y = 1.12;
+    crown.add(part(new THREE.CylinderGeometry(0.66, 0.62, 0.32, 18, 1, true), gold, 1, 1, 1, 0, 0.12, 0));
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      const tall = i === 0 ? 0.75 : 0.45;
+      const spike = part(new THREE.ConeGeometry(0.13, tall, 6), gold, 1, 1, 1, Math.sin(a) * 0.62, 0.28 + tall / 2, Math.cos(a) * 0.62);
+      crown.add(spike);
+      crown.add(part(new THREE.OctahedronGeometry(0.1), glowMat(col.glow), 1, 1.3, 1, Math.sin(a) * 0.66, 0.13, Math.cos(a) * 0.66));
+    }
+    add(h.head, crown);
+  }
+  if (c.style === 'legend') {
+    const metal = mat(col.armor ?? col.trim, { rough: 0.18, metal: 0.8 });
+    for (const [i, arm] of h.arms.entries()) {
+      const s = i === 0 ? -1 : 1;
+      const pad = add(arm, part(RBOX, metal, 1.15, 0.5, 1.15, s * 0.12, 0.25, 0));
+      pad.rotation.z = s * -0.35;
+      add(arm, part(new THREE.ConeGeometry(0.16, 0.6, 6), metal, 1, 1, 1, s * 0.35, 0.65, 0));
+    }
+    add(h.torso, part(RBOX, metal, 1.96, 0.28, 1.08, 0, 0.12, 0)); // belt
+    for (const leg of h.legs) add(leg, part(RBOX, metal, 0.98, 0.5, 0.98, 0, -1.25, 0.02)); // greaves
+    const gem = add(h.torso, part(new THREE.OctahedronGeometry(0.26), glowMat(col.glow), 1, 1.3, 0.6, 0, 1.25, 0.62));
+    gem.castShadow = false;
+    gem.userData.pulse = true;
+  }
+  if (look.glowLines) {
+    const g = new THREE.MeshBasicMaterial({ color: col.glow, toneMapped: false, transparent: true, opacity: 1 });
+    const line = (parent, w, hh, x, y, z) => {
+      const m = add(parent, part(BOX, g, w, hh, 0.05, x, y, z));
+      m.castShadow = false;
+      return m;
+    };
+    line(h.torso, 0.1, 1.1, 0.42, 0.75, 0.56);
+    line(h.torso, 0.1, 1.1, -0.42, 0.75, 0.56);
+    line(h.torso, 1.5, 0.08, 0, 1.75, 0.55);
+    for (const arm of h.arms) {
+      line(arm, 0.1, 0.62, 0, -1.3, 0.45);
+      line(arm, 0.62, 0.08, 0, -0.95, 0.45);
+    }
+    for (const leg of h.legs) {
+      line(leg, 0.1, 0.9, 0, -0.62, 0.47);
+      line(leg, 0.7, 0.08, 0, -1.55, 0.6);
+    }
+    pulses.push(g);
+    // three glowing orbs circling the body
+    for (let i = 0; i < 3; i++) {
+      const orb = add(h.body, part(new THREE.IcosahedronGeometry(0.22, 1), glowMat(col.glow), 1, 1, 1, 0, 3, 0));
+      orb.castShadow = false;
+      orb.userData.orbit = i;
+      orbs.push(orb);
+    }
+  }
 
   // Black Spy at night: glowing stickman lines along the bones + LEDs
   if (look.nightLines) {
@@ -452,7 +531,75 @@ function dressUp(h, c) {
       led.userData.phase = i * 0.7;
     });
   }
-  return { parts, glows, leds };
+  return { parts, glows, leds, pulses, orbs };
+}
+
+// ------------------------------------------------------------------ legend moves
+
+// The Legend Master's 10 sword moves, one after the other (then again).
+// p goes 0 -> 1 over the move; returns arm (lx, lz, rx, rz), torso (tx, ty)
+// and body (by spin, y lift, z lunge, flip) poses.
+export const LEGEND_MOVE_DUR = [0.3, 0.3, 0.38, 0.4, 0.4, 0.32, 0.46, 0.56, 0.52, 0.62];
+export const LEGEND_MOVE_NAMES = ['Crescent Slash', 'Return Slash', 'Sky Splitter', 'Rising Dragon', 'Cyclone Cut', 'Piercing Light', 'Cross Strike', 'Meteor Drop', 'Whirlwind', 'Legend Break'];
+const ease = (k) => 1 - (1 - Math.min(1, Math.max(0, k))) ** 3;
+const ramp = (p, a, b) => Math.min(1, Math.max(0, (p - a) / (b - a)));
+
+function legendMove(move, p) {
+  switch (move) {
+    case 0: { // Crescent Slash: wide from the right to the left
+      const w = ramp(p, 0, 0.25);
+      const k = ease(ramp(p, 0.25, 0.6));
+      return { rx: -1.5 * w, rz: 1.3 * w - 2.4 * k, ty: 0.55 * w - 1.2 * k, lz: 0.6 };
+    }
+    case 1: { // Return Slash: backhand from the left to the right, with a hop
+      const w = ramp(p, 0, 0.25);
+      const k = ease(ramp(p, 0.25, 0.6));
+      return { rx: -1.5 * w, rz: -1.1 * w + 2.6 * k, ty: -0.6 * w + 1.3 * k, y: Math.sin(p * Math.PI) * 0.4, lz: 0.5 };
+    }
+    case 2: { // Sky Splitter: two hands overhead, straight down
+      const w = ramp(p, 0, 0.3);
+      const k = ease(ramp(p, 0.3, 0.6));
+      const x = -0.5 - 2.6 * w + 2.4 * k;
+      return { rx: x, lx: x, rz: -0.25, lz: 0.25, tx: -0.2 * w + 0.5 * k, y: Math.sin(Math.min(1, p / 0.6) * Math.PI) * 0.7 };
+    }
+    case 3: { // Rising Dragon: from the ground up into the sky
+      const w = ramp(p, 0, 0.25);
+      const k = ease(ramp(p, 0.25, 0.65));
+      return { rx: 0.6 * w - 3.7 * k, rz: -0.1, lx: 0.4, tx: 0.3 * w - 0.6 * k, y: k * 1.8 * (1 - ramp(p, 0.7, 1)) };
+    }
+    case 4: { // Cyclone Cut: a full spin with the blade out
+      const k = ease(ramp(p, 0.1, 0.85));
+      return { rx: -1.45, rz: 1.35, lx: -1.2, lz: -1.2, by: -k * Math.PI * 2 };
+    }
+    case 5: { // Piercing Light: pull back, then a lunging stab
+      const w = ramp(p, 0, 0.35);
+      const k = ease(ramp(p, 0.35, 0.55));
+      const back = ramp(p, 0.75, 1);
+      return { rx: 0.6 * w - 1.0 * k, rz: -0.08, lx: 0.5 * k, lz: 0.4, ty: 0.5 * w - 0.6 * k, tx: 0.3 * k, z: (1.6 * k) * (1 - back) - 0.3 * w * (1 - k) };
+    }
+    case 6: { // Cross Strike: two diagonal slashes, an X
+      const k1 = ease(ramp(p, 0.05, 0.4));
+      const k2 = ease(ramp(p, 0.5, 0.85));
+      if (p < 0.45) return { rx: -2.8 + 2.4 * k1, rz: 1.1 - 2.0 * k1, ty: 0.4 - 0.9 * k1, lz: 0.5 };
+      return { rx: -2.8 + 2.4 * k2, rz: -0.9 + 2.0 * k2, ty: -0.5 + 0.9 * k2, lz: 0.5 };
+    }
+    case 7: { // Meteor Drop: jump, front flip, smash the ground
+      const up = ramp(p, 0, 0.55);
+      const k = ease(ramp(p, 0.55, 0.7));
+      const x = -3.0 + 2.6 * k;
+      return { rx: x, lx: x, rz: -0.2, lz: 0.2, y: Math.sin(up * Math.PI * 0.5) * 3.2 * (1 - k) - 0.3 * k, flip: -ease(ramp(p, 0.1, 0.55)) * Math.PI * 2, tx: 0.45 * k };
+    }
+    case 8: { // Whirlwind: two spins rising up
+      const k = ease(ramp(p, 0, 0.9));
+      return { rx: -1.5, rz: 1.4, lx: -1.5, lz: -1.4, by: k * Math.PI * 4, y: Math.sin(p * Math.PI) * 1.6 };
+    }
+    default: { // Legend Break: gather the power overhead, then a huge chop
+      const w = ramp(p, 0, 0.4);
+      const k = ease(ramp(p, 0.4, 0.55));
+      const x = -0.5 - 2.7 * w + 2.9 * k;
+      return { rx: x, lx: x, rz: -0.15, lz: 0.15, y: 1.2 * w * (1 - k) - 0.45 * k, tx: -0.3 * w + 0.6 * k, by: 0 };
+    }
+  }
 }
 
 // ------------------------------------------------------------------ avatar
@@ -531,14 +678,23 @@ export class Humanoid {
 
   // A costume from the Costume Shop (null: your normal clothes). It brings
   // its own idle, attack, dodge and teleport animations (see update).
-  setCostume(id) {
-    if (id === (this.costumeId ?? null)) return;
+  // power: the chosen power of a Legend Master (its colours and effects)
+  setCostume(id, power = null) {
+    const key = `${id}|${power}`;
+    if (key === (this.costumeKey ?? 'null|null')) return;
+    this.costumeKey = key;
     this.costumeId = id;
+    const c = COSTUME_BY_ID[id] || null;
+    this.element = c?.choosePower ? costumeWithPower(c, power).element : null;
+    this.setOutfit(c ? costumeWithPower(c, power) : null);
+  }
+
+  // any costume-like outfit { style, colors, look } (costumes, guard uniforms)
+  setOutfit(c) {
     for (const m of this.dress?.parts || []) m.parent?.remove(m);
     this.dress = null;
-    const c = COSTUME_BY_ID[id];
     this.style = c ? c.style : null;
-    this.hatAnchor.visible = !c; // the costume's own headwear replaces the hat
+    this.hatAnchor.visible = !c; // the outfit's own headwear replaces the hat
     if (c) this.dress = dressUp(this, c);
   }
 
@@ -561,9 +717,11 @@ export class Humanoid {
     this.hat = h;
   }
 
-  startSwing(combo = false) {
+  // move: which of the Legend Master's 10 sword moves (0..9)
+  startSwing(combo = false, move = 0) {
     this.swing = 1;
     this.swingDir = combo ? -1 : this.swingDir * -1;
+    this.move = move;
   }
 
   startDodge() {
@@ -600,6 +758,8 @@ export class Humanoid {
     // body bob
     this.body.position.y = anim === ANIM.walk || anim === ANIM.run ? Math.abs(Math.sin(this.walkPhase)) * 0.12 : Math.sin(t * 2) * 0.02;
     this.body.rotation.y = 0;
+    this.body.position.z = 0;
+    let flipX = 0; // a front flip in a sword move
     this.torso.rotation.x = swimming ? 0.9 : anim === ANIM.run ? 0.12 : 0;
     this.head.rotation.x = 0;
     this.head.rotation.y *= 0.9;
@@ -615,6 +775,13 @@ export class Humanoid {
     if (air) {
       leftX = -2.6;
       leftZ = 0.4;
+    }
+    if (st === 'legend' && anim === ANIM.run && !carrying) {
+      // the hero run: leaning in, arms swept back
+      leftX = rightX = 1.0 + legSwing * 0.1;
+      leftZ = 0.3;
+      rightZ = -0.3;
+      this.torso.rotation.x = 0.35;
     }
     if (carrying) {
       leftX = rightX = -2.9;
@@ -657,6 +824,23 @@ export class Humanoid {
           legs[0].rotation.z = -0.12 * k;
           legs[1].rotation.z = 0.12 * k;
           break;
+        case 'guard': // at attention, sword ready
+          leftX = 0.05;
+          leftZ = 0.05;
+          rightX = -0.55 * k;
+          rightZ = -0.12;
+          this.head.rotation.y = Math.sin(t * 0.6) * 0.35 * k;
+          break;
+        case 'legend': // floating, sword raised, the free hand glowing with power
+          this.body.position.y += (0.35 + Math.sin(t * 2.2) * 0.15) * k;
+          leftX = -0.35 * k;
+          leftZ = 0.08 + 0.55 * k;
+          rightX = -0.5 - 0.35 * k;
+          rightZ = -0.08 + 0.55 * k;
+          this.head.rotation.x = -0.12 * k;
+          legs[0].rotation.x = 0.15 * k;
+          legs[1].rotation.x = -0.25 * k;
+          break;
         case 'bunny': // happy little hops
           this.body.position.y += Math.abs(Math.sin(t * 5)) * 0.35 * k;
           leftX = rightX = -0.6 * k + Math.sin(t * 10) * 0.15;
@@ -686,7 +870,20 @@ export class Humanoid {
     if (this.swing > 0) {
       const p = 1 - this.swing; // 0 -> 1
       let dur = 0.34;
-      if (st === 'spy') {
+      if (st === 'legend') {
+        const r = legendMove(this.move || 0, p);
+        leftX = r.lx ?? leftX;
+        leftZ = r.lz ?? leftZ;
+        rightX = r.rx ?? rightX;
+        rightZ = r.rz ?? rightZ;
+        this.torso.rotation.y = r.ty || 0;
+        this.torso.rotation.x = r.tx ?? this.torso.rotation.x;
+        this.body.rotation.y = r.by || 0;
+        this.body.position.y += r.y || 0;
+        this.body.position.z = r.z || 0;
+        flipX = r.flip || 0;
+        dur = LEGEND_MOVE_DUR[this.move || 0];
+      } else if (st === 'spy') {
         // a spinning slash with the sword arm stretched out
         const k = Math.min(1, p / 0.2);
         rightX = -0.3;
@@ -727,10 +924,41 @@ export class Humanoid {
       this.torso.rotation.y *= 0.8;
     }
     // Z: master power
-    if (this.powerT !== undefined && this.powerT < 0.75) {
+    const powerDur = st === 'legend' ? 1.1 : 0.75;
+    if (this.powerT !== undefined && this.powerT < powerDur) {
       this.powerT += dt;
-      const p = Math.min(1, this.powerT / 0.75);
-      if (st === 'spy') {
+      const p = Math.min(1, this.powerT / powerDur);
+      if (st === 'legend') {
+        if (p < 0.3) {
+          // charging: rise up, arms spread wide, power gathering
+          const k = p / 0.3;
+          this.body.position.y += k * 1.8;
+          leftX = rightX = -0.4;
+          leftZ = 0.08 + 1.3 * k;
+          rightZ = -0.08 - 1.3 * k;
+          this.head.rotation.x = -0.35 * k;
+          this.torso.rotation.x = -0.25 * k;
+          this.body.position.y += Math.sin(t * 60) * 0.04 * k; // trembling with power
+        } else if (p < 0.42) {
+          // both hands to the sky
+          leftX = rightX = -3.0;
+          leftZ = 0.25;
+          rightZ = -0.25;
+          this.body.position.y += 1.8 + ((p - 0.3) / 0.12) * 0.4;
+          this.head.rotation.x = -0.4;
+        } else {
+          // smash it down
+          const k = Math.min(1, (p - 0.42) / 0.1);
+          const back = Math.max(0, (p - 0.75) / 0.25);
+          leftX = rightX = -3.0 + k * 2.2;
+          leftZ = 0.4;
+          rightZ = -0.4;
+          this.body.position.y += (2.2 * (1 - k) - 0.5 * k) * (1 - back);
+          this.torso.rotation.x = 0.5 * k * (1 - back);
+          legs[0].rotation.x = -0.9 * k * (1 - back);
+          legs[1].rotation.x = 0.5 * k * (1 - back);
+        }
+      } else if (st === 'spy') {
         if (p < 0.35) {
           this.body.position.y -= 0.45 * (p / 0.35);
           leftX = rightX = 0.9;
@@ -772,7 +1000,13 @@ export class Humanoid {
     if (this.dodge > 0) {
       const p = 1 - this.dodge;
       let dur = 0.38;
-      if (st === 'spy') {
+      if (st === 'legend') {
+        // a flash step: a low spinning dash
+        this.body.rotation.z = p * Math.PI * 2;
+        this.body.rotation.x = 0.6 * Math.sin(p * Math.PI);
+        this.body.position.y += Math.sin(p * Math.PI) * 0.6;
+        dur = 0.3;
+      } else if (st === 'spy') {
         // backflip
         this.body.rotation.x = -p * Math.PI * 2;
         this.body.position.y += Math.sin(p * Math.PI) * 1.6;
@@ -794,8 +1028,9 @@ export class Humanoid {
         this.body.position.y += Math.sin(p * Math.PI) * 1.2;
       }
       this.dodge = Math.max(0, this.dodge - dt / dur);
+      if (this.dodge === 0) this.body.rotation.z = 0;
     } else {
-      this.body.rotation.x = 0;
+      this.body.rotation.x = flipX;
     }
     // arriving after a teleport: grow out of a swirl
     if (st && this.tpT !== undefined && this.tpT < 0.6) {
@@ -815,8 +1050,16 @@ export class Humanoid {
         if (u.flap) m.rotation.x = 0.3 + move * 0.9 + Math.sin(t * 9 + u.flap) * 0.12 * (0.3 + move);
         else if (u.cape) m.rotation.x = 0.08 + move * 0.7 + Math.sin(t * 6) * 0.05 * (0.4 + move);
         else if (u.ear) m.rotation.x = Math.sin(t * 3 + u.ear) * 0.12 - move * 0.4;
+        else if (u.pulse) m.scale.setScalar(1 + Math.sin(t * 5) * 0.15);
       }
       for (const g of this.dress.glows) g.visible = nightGlow;
+      const surge = this.powerT !== undefined && this.powerT < 1.1 ? 1 : 0;
+      for (const m of this.dress.pulses) m.opacity = 0.65 + 0.35 * Math.sin(t * 4) + surge * 0.3;
+      this.dress.orbs.forEach((o, i) => {
+        const a = t * (2.2 + surge * 6) + (i * Math.PI * 2) / 3;
+        const r = 1.9 + Math.sin(t * 1.3 + i) * 0.2 + surge * 0.8;
+        o.position.set(Math.sin(a) * r, 2.6 + Math.sin(t * 2 + i * 2) * 0.8, Math.cos(a) * r);
+      });
       for (const l of this.dress.leds) l.visible = nightGlow && Math.sin(t * 5 + l.userData.phase) > -0.3;
     }
   }

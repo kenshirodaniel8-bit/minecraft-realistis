@@ -4,6 +4,20 @@ Panduan ini membuat tombol **🌐 Play online with friends** di game kamu
 (https://kenshirodaniel8-bit.github.io/minecraft-realistis/) bisa dipakai.
 Kamu cukup melakukannya **satu kali**. Gratis, tanpa kartu kredit.
 
+> ### ⚡ Yang perlu kamu lakukan SEKARANG (versi dengan akun)
+>
+> Config Firebase kamu (`steal-a-monster`) **sudah terpasang** di game, jadi
+> Langkah 4 dan 5 sudah selesai. Karena sekarang game memakai **akun**, masih
+> ada 3 hal yang harus kamu lakukan sendiri di Firebase Console:
+>
+> 1. **Langkah 3** — tempel dan **Publish** aturan (Rules) yang **baru** dari
+>    `firebase-database.rules.json`. Aturan lama tidak mengizinkan akun, jadi
+>    tanpa ini login/simpan progres akan ditolak (*permission denied*).
+> 2. **Langkah 3b** — nyalakan login **Email/Password** di *Authentication*.
+> 3. **Langsung buat akun bernama `daniel`** di game (lihat bagian
+>    *Akun dan admin "daniel"*). Siapa pun yang pertama membuat akun dengan
+>    nama itu menjadi admin semua server, jadi jangan sampai keduluan orang lain.
+
 ## Cara kerjanya (singkat)
 
 - Satu pemain menekan **Create room**. Browser dia menjalankan "server" game,
@@ -45,8 +59,37 @@ Kamu cukup melakukannya **satu kali**. Gratis, tanpa kartu kredit.
    folder `steal-a-monster`), lalu tempel di sana.
 4. Klik **Publish**.
 
-Aturan ini hanya mengizinkan data room game (`sam/rooms/KODE`). Daftar room
-tidak bisa dibaca, dan data lain di luar room tidak bisa ditulis.
+Aturan ini mengatur:
+
+- **Akun** (`sam/accounts/...`): hanya pemilik akun yang bisa menulis
+  akunnya sendiri, dan nama di akun harus sama dengan nama yang dipakai
+  untuk login (jadi tidak ada yang bisa menyamar jadi "daniel").
+- **Ban dan pengembalian monster** (`sam/bans`, `sam/returns`): hanya akun
+  `daniel` yang bisa menulisnya.
+- **Room** (`sam/rooms/KODE`): harus login; pemain yang di-ban tidak bisa
+  membuat atau masuk room; tidak ada yang bisa mengirim pesan atas nama orang
+  lain; hanya pembuat room yang bisa menutupnya. Daftar room tidak bisa dibaca.
+
+Kalau nanti file `firebase-database.rules.json` berubah lagi (misalnya setelah
+update game), ulangi langkah ini supaya aturan di Firebase ikut baru.
+
+## Langkah 3b: Nyalakan login akun (Authentication)
+
+Akun pemain memakai **Firebase Authentication**. Pemain tidak perlu punya
+email: game membuat "email" sendiri dari nama, misalnya nama `Mira Fox`
+menjadi `mira.fox@players.steal-a-monster.game`. Pemain cukup mengisi **nama**
+dan **password** (minimal 6 karakter).
+
+1. Di menu kiri pilih **Build → Authentication**.
+2. Klik **Get started** (kalau muncul).
+3. Buka tab **Sign-in method**.
+4. Di daftar *Native providers* pilih **Email/Password**.
+5. Nyalakan tombol **Enable** yang pertama (Email/Password). Yang kedua,
+   *Email link (passwordless sign-in)*, **biarkan mati**.
+6. Klik **Save**.
+
+Selesai. Kalau langkah ini terlewat, pemain akan melihat tulisan
+*"Accounts are not switched on yet…"* saat mencoba membuat akun.
 
 ## Langkah 4: Daftarkan aplikasi web dan salin config
 
@@ -114,15 +157,47 @@ tidak bisa dibaca, dan data lain di luar room tidak bisa ditulis.
 1. Buka **https://kenshirodaniel8-bit.github.io/minecraft-realistis/**.
    Kalau sebelumnya sudah dibuka, tekan **Ctrl + F5** (atau tarik layar ke
    bawah di HP) supaya versi barunya termuat.
-2. **Kamu (pembuat room):** isi nama, lalu tekan **Create room**.
+2. **Kamu (pembuat room):** pilih **Create account** (pertama kali) atau
+   **Log in**, isi nama dan password, lalu tekan **Create room**. Muncul
+   pertanyaan *"start over from the beginning, or continue?"*: pilih
+   **Continue** untuk melanjutkan progres, atau **Start over** untuk mulai
+   dari nol (progres akun benar-benar dihapus).
 3. Di atas layar muncul tombol **🌐 Room K7QZP · 1 player · 🔗 Copy link**.
    Tekan tombol itu supaya link tersalin, lalu kirim ke teman (WhatsApp,
    Discord, dll).
-4. **Teman:** buka link itu, isi nama, lalu tekan **Join**. Kode room sudah
-   terisi otomatis. Bisa juga dengan mengetik kode 5 hurufnya sendiri.
+4. **Teman:** buka link itu, buat akun atau login, lalu tekan **Join**. Kode
+   room sudah terisi otomatis. Bisa juga dengan mengetik kode 5 hurufnya
+   sendiri.
 5. Satu room bisa diisi sampai **12 pemain** (ada 12 base).
 
 ---
+
+## Akun dan admin "daniel"
+
+- **Nama tidak boleh sama.** "Mira Fox", "mira fox" dan "Mira   Fox"
+  dianggap nama yang sama. Spasi boleh. Nama 2–16 huruf/angka/spasi/`_`/`-`.
+- **Monster ikut ke mana saja.** Progres (monster, uang, kostum, penjaga, dan
+  lain-lain) disimpan di **akun masing-masing pemain** di Firebase. Monster
+  yang kamu dapat di room teman tetap ada di game kamu sendiri dan di room
+  lain. Progres disimpan otomatis kira-kira setiap 10 detik.
+- **Main tanpa akun** tetap bisa untuk main sendiri (progres disimpan di
+  browser itu saja). Untuk main online harus login.
+- **Admin `daniel`:** akun bernama `daniel` adalah admin di **semua** room.
+  Hanya daniel yang punya tombol **🛡 Player**. Di situ muncul semua pemain di
+  room itu, monster apa yang sudah mereka curi dan dari siapa, dengan tombol:
+  - **↩ Return to …** — monster curian dikembalikan ke pemiliknya (langsung
+    masuk base kalau pemiliknya sedang online; kalau tidak, monsternya
+    menunggu di akun pemilik dan datang saat dia main lagi).
+  - **⛔ Ban** — pencuri langsung dikeluarkan ("You were banned by the
+    admin.") dan tidak bisa membuat atau masuk room lagi.
+- **Membatalkan ban:** buka **Realtime Database → Data**, buka `sam` →
+  `bans`, cari baris dengan nama pemainnya, lalu klik **🗑 (hapus)** pada
+  baris itu.
+- **Lupa password:** belum ada fitur reset di game. Pemilik project bisa
+  menghapus akunnya di **Authentication → Users** (cari
+  `nama@players.steal-a-monster.game`) dan datanya di
+  **Realtime Database → sam → accounts**; setelah itu nama tersebut bisa
+  didaftarkan lagi (progresnya hilang).
 
 ## Hal penting yang perlu diketahui (jujur)
 
@@ -131,10 +206,14 @@ tidak bisa dibaca, dan data lain di luar room tidak bisa ditulis.
   teman akan melihat pesan *"The room was closed"*. Game dibuat supaya tetap
   jalan walaupun kamu pindah ke tab lain, tapi hal ini belum diuji di semua
   browser. Paling aman, biarkan tab game tetap terbuka di depan.
-- **Progres teman disimpan di browser pembuat room.** Kalau teman main lagi
-  di room yang dibuat **orang yang sama** (browser yang sama), monster dan
-  uangnya kembali. Kalau orang lain yang membuat room, teman mulai dari awal
-  di room itu. Progres main sendiri (single-player) tiap orang terpisah.
+- **Progres disimpan di akun tiap pemain** (lihat bagian di atas), tetapi
+  selama main, game di browser **pembuat room** yang menghitung semuanya lalu
+  mengirim progres teman ke akun teman setiap ~10 detik. Kalau room tertutup
+  mendadak, beberapa detik terakhir bisa hilang.
+- **Data akun bisa dibaca pemain yang login** (pembuat room perlu membaca
+  progres temannya). Isinya hanya data game (monster, uang, dll.), bukan
+  password; password disimpan oleh Firebase Authentication dan tidak bisa
+  dibaca siapa pun.
 - **Lag:** semua pesan lewat server Firebase di Singapore. Biasanya ada jeda
   sekitar 100–300 ms. Masih enak dimainkan, tapi tidak secepat server game
   sendiri (`npm start` di komputer).
@@ -153,6 +232,10 @@ tidak bisa dibaca, dan data lain di luar room tidak bisa ditulis.
 
 | Yang terlihat | Penyebab dan solusi |
 |---|---|
+| *"Accounts are not switched on yet…"* | Login Email/Password belum dinyalakan (Langkah 3b). |
+| *"The account database refused this…"* atau *permission denied* saat login/simpan | Rules baru (Langkah 3) belum di-**Publish**. |
+| *"That name is already taken"* | Nama itu sudah dipakai orang lain (huruf besar/kecil dan spasi tidak membedakan). Pilih nama lain. |
+| *"This account is banned from online rooms."* | Akun itu di-ban oleh daniel. Lihat cara membatalkan ban di atas. |
 | *"Not set up yet…"* di bawah tombol online | Config belum masuk, atau websitenya belum diperbarui. Cek tab Actions sudah hijau, lalu tekan Ctrl + F5. |
 | *"Room K7QZP was not found"* | Kodenya salah, atau pembuat room sudah menutup game-nya. Minta link baru. |
 | *"Your friend has a different version"* | Salah satu masih memakai versi lama. Kalian berdua tekan Ctrl + F5. |
@@ -163,22 +246,25 @@ tidak bisa dibaca, dan data lain di luar room tidak bisa ditulis.
 
 ## Untuk developer: menguji tanpa akun Firebase
 
-Game ini sudah diuji dengan **Firebase Realtime Database Emulator** (versi
-lokal resmi dari Google) dan Firebase SDK yang asli:
+Game ini sudah diuji dengan **Firebase Local Emulator Suite** (versi lokal
+resmi dari Google: Authentication + Realtime Database, butuh Java) dan
+Firebase SDK yang asli. `firebase.json` di folder ini sudah memakai
+`firebase-database.rules.json`:
 
 ```bash
 cd steal-a-monster
-curl -o db-emu.jar https://storage.googleapis.com/firebase-preview-drop/emulator/firebase-database-emulator-v4.11.2.jar
-java -jar db-emu.jar --port 9000 &
-# (opsional) pakai Rules yang sama dengan Langkah 3:
-curl -X PUT -H "Authorization: Bearer owner" --data-binary @firebase-database.rules.json "http://127.0.0.1:9000/.settings/rules.json?ns=demo-sam"
+npx firebase-tools@13 emulators:start --only auth,database --project demo-sam &
 node scripts/build-web.mjs
-node scripts/room-e2e.mjs 127.0.0.1:9000
+node scripts/room-e2e.mjs 127.0.0.1:9000 127.0.0.1:9099
+node scripts/rules-check.mjs
 ```
 
-Tes itu membuka dua browser: satu membuat room, satu lagi masuk lewat link,
-lalu teman berjalan, bertarung, merekrut monster, dan pulang ke base. Di akhir
-tes, pembuat room menutup game-nya. Semua kodenya ada di
+Tes itu membuka beberapa browser: admin `daniel` login dan membuat room, teman
+membuat akun dan masuk lewat link, berjalan, bertarung, merekrut monster, dan
+pulang ke base; progres teman tersimpan di akunnya dan muncul lagi di game
+teman sendiri (dengan pertanyaan *start over / continue*); lalu daniel
+mengembalikan monster curian dan mem-ban pencurinya. `rules-check.mjs`
+mencoba langsung aturan keamanan (siapa boleh menulis apa). Semua kodenya ada di
 `public/client/rooms.js`. Firebase SDK dibundel menjadi satu file
 `public/vendor/firebase.js` (`node scripts/build-firebase.mjs`), jadi game
 tidak bergantung pada CDN.

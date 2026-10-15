@@ -37,12 +37,13 @@ import { MoonSecret } from './services/moonSecret.js';
 import { Companions } from './services/companions.js';
 import { CostumeShop } from './services/costumes.js';
 import { Admin } from './services/admin.js';
+import { GuardSystem } from './services/guards.js';
 
 export { fail };
 
 export const EFFECT = {
   frozen: 1, rooted: 2, slowed: 4, shield: 8, speed: 16, dodge: 32, protected: 64, burning: 128,
-  stunned: 256, slipping: 512, radar: 1024, dead: 2048,
+  stunned: 256, slipping: 512, radar: 1024, dead: 2048, thief: 4096,
 };
 
 class Session {
@@ -139,6 +140,7 @@ export class Game {
     this.companions = new Companions(this);
     this.costumes = new CostumeShop(this);
     this.admin = new Admin(this);
+    this.guards = new GuardSystem(this);
     this.accounts = opts.accounts || null;     // server/accounts.js (Node server only)
     this.accountSaver = opts.accountSaver || null; // saves online accounts (browser rooms)
     this.bans = new Map();                     // profile id -> ban
@@ -158,6 +160,8 @@ export class Game {
       equipCostume: (s, p) => this.costumes.handleEquip(s, p),
       buyPower: (s, p) => this.costumes.handleBuyPower(s, p),
       power: (s, p) => this.costumes.handlePower(s, p),
+      choosePower: (s, p) => this.costumes.handleChoosePower(s, p),
+      buyGuards: (s, p) => this.bases.handleBuyGuards(s, p),
       adminPlayers: (s) => this.admin.handlePlayers(s),
       adminReturn: (s, p) => this.admin.handleReturn(s, p),
       adminBan: (s, p) => this.admin.handleBan(s, p),
@@ -718,6 +722,7 @@ export class Game {
       baseIndex: s.baseIndex,
       cosmetic: s.profile.cosmetics.equipped,
       costume: s.profile.costumes.equipped,
+      costumePower: s.profile.costumes.power || null,
       sword: s.profile.sword,
       admin: !!s.admin,
     };
@@ -818,6 +823,7 @@ export class Game {
     const dt = dtMs / 1000;
     this.monsters.tick(dt, now);
     this.companions.tick(dt, now);
+    this.guards.tick(dt, now);
     this.combat.tick(dt, now);
     this.items.tick(dt, now);
     this.stealing.tick(dt, now);
@@ -889,6 +895,7 @@ export class Game {
     if (f.slipUntil > now) b |= EFFECT.slipping;
     if (f.radarUntil > now) b |= EFFECT.radar;
     if (s.dead) b |= EFFECT.dead;
+    if ((s.thiefUntil || 0) > now) b |= EFFECT.thief; // guards are after them
     return b;
   }
 
@@ -910,7 +917,7 @@ export class Game {
     }
     for (const s of this.players.values()) {
       const m = this.companions.snapshotFor(s, this.monsters.snapshotFor(s), CONFIG.interestRadius);
-      this.sendVolatile(s, 'snap', { t: now, p: players, m });
+      this.sendVolatile(s, 'snap', { t: now, p: players, m, g: this.guards.snapshotFor(s) });
     }
   }
 }

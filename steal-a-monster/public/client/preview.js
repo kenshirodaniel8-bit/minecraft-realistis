@@ -120,11 +120,11 @@ export class MonsterPreview {
   }
 
   // a player in a costume (cached data URL); night: dark, with the glow on
-  costumeIcon(id, size = 160, night = false) {
-    const key = `costume|${id}|${size}|${night}`;
+  costumeIcon(id, size = 160, night = false, power = null) {
+    const key = `costume|${id}|${size}|${night}|${power}`;
     if (this.icons.has(key)) return this.icons.get(key);
     const h = new Humanoid(0x3a7ae0);
-    h.setCostume(id);
+    h.setCostume(id, power);
     h.setSword(null);
     setNightGlow(night);
     h.update(0.5, ANIM.idle, 0, false, 1.2);

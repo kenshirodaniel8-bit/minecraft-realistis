@@ -10,7 +10,8 @@ import { COSMETIC_BY_ID } from '#shared/lucky.js';
 import { DECOR_BY_ID, DECOR_SPOTS, DECOR_MAX_OWNED } from '#shared/decor.js';
 import { REGION_BY_ID } from '#shared/regions.js';
 import { MOON } from '#shared/moonSecret.js';
-import { COSTUME_BY_ID, POWER_UPGRADE } from '#shared/costumes.js';
+import { COSTUME_BY_ID, POWER_UPGRADE, LEGEND_POWERS } from '#shared/costumes.js';
+import { GUARDS } from '#shared/guards.js';
 import { randomId } from '#shared/rng.js';
 import { sha256Hex } from '#shared/sha256.js';
 
@@ -39,14 +40,14 @@ export function newProfile(id, name, now) {
     swords: [CONFIG.startingSword],
     items,
     monsters: [],
-    base: { slots: CONFIG.startingSlots, laserLevel: 0, decor: new Array(DECOR_SPOTS).fill(null) },
+    base: { slots: CONFIG.startingSlots, laserLevel: 0, guardLevel: 0, decor: new Array(DECOR_SPOTS).fill(null) },
     decor: { owned: {} },
     storedIncome: 0,
     discoveries: { species: {}, spots: {} },
     regionsVisited: ['plains'],
     tutorial: { step: 0, done: false },
     moon: { found: [], won: false }, // the moon buttons of Cute Monster Island
-    costumes: { owned: [], equipped: null },
+    costumes: { owned: [], equipped: null, power: null }, // power: the Legend Master's chosen power
     powerLevel: 0,                    // "Upgrade your power" levels (+130 each)
     cosmetics: { owned: [], equipped: null },
     coupons: { recruitDiscount: 0 },
@@ -119,6 +120,7 @@ export function sanitizeProfile(p, id, now = Date.now()) {
   out.base = {
     slots: Math.floor(num(b.slots, CONFIG.startingSlots, CONFIG.startingSlots, CONFIG.bases.maxSlots)),
     laserLevel: Math.floor(num(b.laserLevel, 0, 0, CONFIG.security.lockDurationsSec.length - 1)),
+    guardLevel: Math.floor(num(b.guardLevel, 0, 0, GUARDS.maxLevel)),
     decor: new Array(DECOR_SPOTS).fill(null),
   };
   // decorations: known ids, bounded counts, never more placed than owned
@@ -176,7 +178,7 @@ export function sanitizeProfile(p, id, now = Date.now()) {
   const found = Array.isArray(p.moon?.found) ? p.moon.found.filter((i) => Number.isInteger(i) && i >= 0 && i < MOON.buttons.length) : [];
   out.moon = { found: [...new Set(found)], won: !!p.moon?.won };
   const costumes = Array.isArray(p.costumes?.owned) ? [...new Set(p.costumes.owned.filter((c) => COSTUME_BY_ID[c]))] : [];
-  out.costumes = { owned: costumes, equipped: costumes.includes(p.costumes?.equipped) ? p.costumes.equipped : null };
+  out.costumes = { owned: costumes, equipped: costumes.includes(p.costumes?.equipped) ? p.costumes.equipped : null, power: LEGEND_POWERS[p.costumes?.power] ? p.costumes.power : null };
   out.powerLevel = Math.floor(num(p.powerLevel, 0, 0, POWER_UPGRADE.maxLevel));
   const owned = Array.isArray(p.cosmetics?.owned) ? p.cosmetics.owned.filter((c) => COSMETIC_BY_ID[c]) : [];
   out.cosmetics = { owned: [...new Set(owned)], equipped: owned.includes(p.cosmetics?.equipped) ? p.cosmetics.equipped : null };

@@ -8,12 +8,13 @@ import { SWORDS } from '#shared/weapons.js';
 import { COSMETICS } from '#shared/lucky.js';
 import { Humanoid, ANIM } from './humanoid.js';
 import { buildMonster } from './monsterRenderer.js';
+import { AURA_OF } from './legendFx.js';
 import { animateMonster } from './animationSystem.js';
 import { makeLabel, disposeLabel } from './labels.js';
 import { blobShadow, HealthBar } from './monstersView.js';
 import { InterpBuffer } from './net.js';
 
-export const FX = { frozen: 1, rooted: 2, slowed: 4, shield: 8, speed: 16, dodge: 32, protected: 64, burning: 128, stunned: 256, slipping: 512, radar: 1024, dead: 2048 };
+export const FX = { frozen: 1, rooted: 2, slowed: 4, shield: 8, speed: 16, dodge: 32, protected: 64, burning: 128, stunned: 256, slipping: 512, radar: 1024, dead: 2048, thief: 4096 };
 
 const DEFAULT_COLORS = [0x3a7ae0, 0xe84a5f, 0x3fbf5a, 0xffb02a, 0x9a5ae0, 0x2ac8c8, 0xff7ab8, 0x5a5a6a];
 
@@ -56,7 +57,7 @@ export class PlayerAvatar {
     this.builtColor = this.color();
     this.h.setSword(this.info.sword || 'wooden');
     this.h.setHat(this.info.cosmetic || null);
-    this.h.setCostume(this.info.costume || null);
+    this.h.setCostume(this.info.costume || null, this.info.costumePower || null);
     this.h.root.traverse((o) => {
       if (o.isMesh) o.castShadow = true;
     });
@@ -79,7 +80,7 @@ export class PlayerAvatar {
     if (this.color() !== this.builtColor) this.buildBody();
     this.h.setSword(this.info.sword || 'wooden');
     this.h.setHat(this.info.cosmetic || null);
-    this.h.setCostume(this.info.costume || null);
+    this.h.setCostume(this.info.costume || null, this.info.costumePower || null);
     if (`${this.info.name}|${this.info.level}|${!!this.info.admin}` !== this.labelKey) this.makeLabel();
   }
 
@@ -170,9 +171,19 @@ export class PlayerAvatar {
     this.setStatus('ice', frozen);
     this.setStatus('shield', (fx & FX.shield) !== 0);
     this.setStatus('net', (fx & FX.rooted) !== 0);
+    // a thief the guards are after: a red tag over the head for everyone
+    const thief = (fx & FX.thief) !== 0;
+    if (thief && !this.thiefTag) {
+      this.thiefTag = makeLabel('🦹 THIEF!', { scale: 0.024, color: '#ffffff', bg: 'rgba(216,56,74,0.92)', border: '#ffffff' });
+      this.thiefTag.position.y = 7.6;
+      this.group.add(this.thiefTag);
+    }
+    if (this.thiefTag) this.thiefTag.visible = thief && Math.floor(t * 4) % 4 !== 0;
     if (this.fxMeshes.shield?.visible) this.fxMeshes.shield.rotation.y += dt;
     // protected after respawn: blink
     this.h.root.visible = !((fx & FX.protected) && Math.floor(t * 8) % 2 === 0);
+    // Legend Master: the aura of its power
+    if (this.h.element && effects && !dead && Math.random() < dt * 14) effects.aura(AURA_OF[this.h.element], this.pos.x, this.pos.y + 0.4 + Math.random() * 4, this.pos.z);
     if ((fx & FX.speed) && effects && Math.random() < dt * 30) effects.spawn(this.pos.x, this.pos.y + 0.5, this.pos.z, { color: [0xffd23a, 0xffffff], speed: 0.5, vy: 0.5, grav: 0, life: 0.4 });
     if ((fx & FX.burning) && effects && Math.random() < dt * 20) effects.aura('ember', this.pos.x, this.pos.y + 2, this.pos.z);
     if ((fx & FX.stunned) && effects && Math.random() < dt * 10) effects.spawn(this.pos.x, this.pos.y + 5.2, this.pos.z, { color: 0xffe14a, speed: 2, vy: 0.3, grav: 0, life: 0.5 });
@@ -194,8 +205,8 @@ export class PlayerAvatar {
     }
   }
 
-  swing(combo) {
-    this.h.startSwing(combo);
+  swing(combo, move = 0) {
+    this.h.startSwing(combo, move);
   }
 
   // someone teleported: snap there (no sliding across the map) and play

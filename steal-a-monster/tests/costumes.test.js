@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeGame, TOKEN_A, TOKEN_B, FIELD } from './helpers.js';
-import { COSTUMES, COSTUME_BY_ID, POWER_UPGRADE, powerDamage } from '../shared/costumes.js';
+import { COSTUMES, COSTUME_BY_ID, POWER_UPGRADE, LEGEND_POWERS, LEGEND_MOVES, powerDamage, costumeWithPower } from '../shared/costumes.js';
 import { SWORD_BY_ID } from '../shared/weapons.js';
 import { sanitizeProfile } from '../server/services/playerData.js';
 
@@ -31,7 +31,7 @@ test('the Black Spy costume costs 150,000, comes with the Spy Sword and is seen 
   assert.equal(a.profile.money, 10000, 'exactly 150,000 taken');
   assert.equal(a.send('buyCostume', { id: 'black_spy', reqId: 'r1' }).ok, true, 'a retried request is not charged twice');
   assert.equal(a.profile.money, 10000);
-  assert.deepEqual(a.profile.costumes, { owned: ['black_spy'], equipped: 'black_spy' });
+  assert.deepEqual(a.profile.costumes, { owned: ['black_spy'], equipped: 'black_spy', power: null });
   assert.ok(a.profile.swords.includes('spy_sword') && a.profile.sword === 'spy_sword', 'Spy Sword given and equipped');
   assert.ok(SWORD_BY_ID.spy_sword.damage >= 180, 'a strong sword');
   // the Spy Sword is not for sale
@@ -48,8 +48,8 @@ test('the Black Spy costume costs 150,000, comes with the Spy Sword and is seen 
   assert.equal(a.send('equipCostume', { id: 'black_spy' }).ok, true);
   // saved and loaded
   const again = sanitizeProfile(JSON.parse(JSON.stringify(a.profile)), a.profile.id);
-  assert.deepEqual(again.costumes, { owned: ['black_spy'], equipped: 'black_spy' });
-  assert.deepEqual(sanitizeProfile({ costumes: { owned: ['nope', 'black_spy'], equipped: 'nope' }, powerLevel: 99 }, 'p_x').costumes, { owned: ['black_spy'], equipped: null });
+  assert.deepEqual(again.costumes, { owned: ['black_spy'], equipped: 'black_spy', power: null });
+  assert.deepEqual(sanitizeProfile({ costumes: { owned: ['nope', 'black_spy'], equipped: 'nope' }, powerLevel: 99 }, 'p_x').costumes, { owned: ['black_spy'], equipped: null, power: null });
   assert.equal(sanitizeProfile({ powerLevel: 99 }, 'p_x').powerLevel, POWER_UPGRADE.maxLevel);
 });
 
@@ -129,4 +129,68 @@ test('other costume powers: fire ring, freezing blizzard, chain lightning, heali
   a.s.hp = 10;
   const hug = use('bunny_hoodie');
   assert.ok(hug.ok && a.s.hp > 10, 'the hug heals');
+});
+
+test('Legend Master: 200,000,000, choose a power, 1200 damage, the power sets its look and 10 sword moves', async () => {
+  const h = await makeGame();
+  const a = await h.join(TOKEN_A, 'Alice');
+  const b = await h.join(TOKEN_B, 'Bob');
+  const legend = COSTUME_BY_ID.legend_master;
+  assert.equal(legend.price, 200_000_000);
+  assert.equal(legend.choosePower, true);
+  at(h, a, 'costumes');
+  a.profile.money = 200_000_000 - 1;
+  assert.equal(a.send('buyCostume', { id: 'legend_master' }).error, 'money');
+  assert.equal(a.send('choosePower', { power: 'ice' }).error, 'not_owned');
+  a.profile.money = 200_000_000;
+  assert.equal(a.send('buyCostume', { id: 'legend_master', reqId: 'l1' }).ok, true);
+  assert.equal(a.profile.money, 0);
+  // no power chosen yet: Z asks for one
+  h.place(a, FIELD.x, FIELD.z, 0);
+  assert.equal(a.send('power', { yaw: 0 }).error, 'no_power');
+  assert.equal(a.send('choosePower', { power: 'nope' }).error, 'bad');
+  assert.equal(a.send('choosePower', { power: 'lightning' }).ok, true);
+  assert.equal(a.profile.costumes.power, 'lightning');
+  const info = b.events('playerInfo').filter((i) => i.pn === a.s.pn).pop();
+  assert.equal(info.costume, 'legend_master');
+  assert.equal(info.costumePower, 'lightning', 'everyone sees the power (colours, animations)');
+  const lit = costumeWithPower(legend, 'lightning');
+  assert.equal(lit.colors, LEGEND_POWERS.lightning.colors);
+  assert.equal(lit.power.shape, 'chain');
+  // Z: 1200 exactly to every monster the chain reaches
+  const ms = [[0, 5], [2, 9], [4, 13]].map(([dx, dz]) => {
+    const m = h.spawnMonster('chompkin', 30, FIELD.x + dx, FIELD.z + dz);
+    m.maxHp = m.hp = 9000;
+    m.stunnedUntil = h.clock.t + 1e7;
+    return m;
+  });
+  a.clear();
+  const res = a.send('power', { yaw: 0 });
+  assert.equal(res.ok, true);
+  assert.equal(res.dmg, 1200);
+  assert.ok(ms.every((m) => m.hp === 9000 - 1200), 'exactly 1200 each');
+  assert.equal(a.events('power')[0].element, 'lightning');
+  // change the power later: now a ring of ice that freezes
+  assert.equal(a.send('choosePower', { power: 'ice' }).ok, true);
+  h.advance(6100);
+  for (const m of ms) m.stunnedUntil = 0;
+  const ice = a.send('power', { yaw: 0 });
+  assert.equal(ice.hits, 3);
+  assert.ok(ms.every((m) => m.stunnedUntil > h.clock.t + 1000), 'frozen');
+  // saved and loaded
+  assert.equal(sanitizeProfile(JSON.parse(JSON.stringify(a.profile)), a.profile.id).costumes.power, 'ice');
+  assert.equal(sanitizeProfile({ costumes: { owned: [], power: 'hack' } }, 'p_x').costumes.power, null);
+  // the sword moves go 1, 2, ... 10 and then start again
+  h.place(b, FIELD.x + 4, FIELD.z - 4);
+  for (const m of ms) m.stunnedUntil = h.clock.t + 1e7;
+  a.s.protectUntil = Infinity;
+  const moves = [];
+  for (let i = 0; i < 12; i++) {
+    h.advance(1000);
+    b.clear();
+    moves.push(a.send('attack', { yaw: 0 }).move);
+    assert.equal(b.events('swing').find((e) => e.pn === a.s.pn)?.move, moves[i], 'others see the same move');
+  }
+  assert.deepEqual(moves, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1]);
+  assert.equal(LEGEND_MOVES, 10);
 });

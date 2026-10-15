@@ -11,7 +11,8 @@ import { COSMETICS, COSMETIC_BY_ID } from '#shared/lucky.js';
 import { CONFIG } from '#shared/config.js';
 import { DECOR, DECOR_BY_ID, placedCounts } from '#shared/decor.js';
 import { SPOTS } from '#shared/world.js';
-import { COSTUMES, POWER_UPGRADE, powerDamage } from '#shared/costumes.js';
+import { COSTUMES, POWER_UPGRADE, LEGEND_POWERS, LEGEND_MOVES, powerDamage, costumeWithPower } from '#shared/costumes.js';
+import { GUARDS, guardLevel } from '#shared/guards.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -369,6 +370,7 @@ export class UI {
   }
 
   open(name, arg) {
+    if (name !== this.panelName) $('panel-body').scrollTop = 0;
     this.panelName = name;
     this.panelArg = arg;
     $('panel-wrap').hidden = false;
@@ -431,6 +433,9 @@ export class UI {
     } else if (name === 'costumes') {
       title.textContent = '🕶 Costume Shop';
       body.innerHTML = this.costumesHtml(s);
+    } else if (name === 'legend') {
+      title.textContent = '👑 Choose your power';
+      body.innerHTML = this.legendHtml(s);
     } else if (name === 'power') {
       title.textContent = '💪 Upgrade your power';
       body.innerHTML = this.powerHtml(s);
@@ -485,6 +490,8 @@ export class UI {
           case 'buyCostume': acts.buyCostume(a.id); break;
           case 'wearCostume': acts.equipCostume(a.id === 'none' ? null : a.id); break;
           case 'buyPower': acts.buyPower(); break;
+          case 'choosePower': acts.choosePower(a.id); break;
+          case 'buyGuards': acts.buyGuards(); break;
           case 'adminReturn': acts.adminReturn(Number(a.pn), a.id); break;
           case 'adminBan': acts.adminBan(Number(a.pn), a.name); break;
           case 'dexTab': this.dexTab = a.tab; this.render(); break;
@@ -536,17 +543,27 @@ export class UI {
     const p = s.profile;
     const near = s.nearShop === 'costumes';
     const lvl = p.powerLevel || 0;
-    const rows = COSTUMES.map((c) => {
+    const rows = COSTUMES.map((base) => {
+      const c = p.costumes.power ? costumeWithPower(base, p.costumes.power) : base;
       const owned = p.costumes.owned.includes(c.id);
       const worn = p.costumes.equipped === c.id;
       let btn;
       if (worn) btn = '<button class="btn sm ghost" data-act="wearCostume" data-id="none">Take off</button>';
       else if (owned) btn = `<button class="btn sm blue" data-act="wearCostume" data-id="${c.id}">Wear</button>`;
       else btn = `<button class="btn sm go" data-act="buyCostume" data-id="${c.id}" ${p.money < c.price || !near ? 'disabled' : ''}>Buy $${fmt(c.price)}</button>`;
+      if (c.choosePower && owned) {
+        const el = LEGEND_POWERS[p.costumes.power];
+        btn = `<div class="btn-col">${btn}<button class="btn sm gold" data-act="open" data-panel="legend">${el ? `${el.icon} Change power` : '👑 Choose power!'}</button></div>`;
+      }
       const pw = c.power;
       const what = pw.shape === 'wave' ? `a slash wave in front of you (up to ${pw.maxTargets} monsters)` : pw.shape === 'chain' ? `lightning that jumps between ${pw.maxTargets} monsters` : `everything around you (${pw.radius} m)`;
       const extra = [pw.burn ? '🔥 sets them on fire' : '', pw.freezeMs ? '🧊 freezes them' : '', pw.heal ? `💖 heals you ${Math.round(pw.heal * 100)}%` : '', c.sword ? `⚔ comes with the ${SWORD_BY_ID[c.sword].name}` : ''].filter(Boolean);
-      const pics = `<img alt="" class="costume-pic" src="${this.app.preview.costumeIcon(c.id)}">${c.look.nightLines ? `<img alt="" class="costume-pic night" title="At night" src="${this.app.preview.costumeIcon(c.id, 160, true)}">` : ''}`;
+      const pics = `<img alt="" class="costume-pic" src="${this.app.preview.costumeIcon(c.id, 160, false, p.costumes.power)}">${c.look.nightLines ? `<img alt="" class="costume-pic night" title="At night" src="${this.app.preview.costumeIcon(c.id, 160, true)}">` : ''}`;
+      if (c.choosePower) {
+        const el = LEGEND_POWERS[p.costumes.power];
+        extra.unshift(el ? `${el.icon} Power: ${el.name}` : `🎨 Choose 1 of ${Object.keys(LEGEND_POWERS).length} powers: ${Object.values(LEGEND_POWERS).map((e) => e.icon).join(' ')}`);
+        extra.push(`⚔ ${LEGEND_MOVES} different sword moves in a row`);
+      }
       return `<div class="row-item costume ${owned ? 'owned' : ''} ${worn ? 'equipped' : ''}">
         <div class="costume-pics">${pics}</div>
         <div class="info"><h4>${c.icon} ${esc(c.name)}</h4><p>${esc(c.blurb)}</p>
@@ -554,6 +571,24 @@ export class UI {
         </div>${btn}</div>`;
     }).join('');
     return `${near ? '' : '<p class="note">📍 You can look, but you buy at the Costume Shop in the central plaza.</p>'}<p>Wear a costume and press <b>Z</b> (or 💥) for its master power. Make every power stronger at <b>Upgrade your power</b> next door (+${POWER_UPGRADE.bonus} per level).</p>${rows}`;
+  }
+
+  // Legend Master: pick its power (right after buying it, or later).
+  legendHtml(s) {
+    const p = s.profile;
+    if (!p.costumes.owned.includes('legend_master')) return '<p class="note">Buy the 👑 Legend Master at the Costume Shop first.</p>';
+    const cards = Object.entries(LEGEND_POWERS).map(([id, el]) => {
+      const on = p.costumes.power === id;
+      return `<div class="legend-card ${on ? 'on' : ''}" style="--glow:#${el.fx[0].toString(16).padStart(6, '0')}">
+        <img alt="" src="${this.app.preview.costumeIcon('legend_master', 150, false, id)}">
+        <h4>${el.icon} ${esc(el.name)}</h4>
+        <div class="sub">💥 <b>${esc(el.power)}</b></div>
+        <div class="sub muted">${esc(el.blurb)}</div>
+        ${on ? '<button class="btn sm ghost" disabled>✅ Your power</button>' : `<button class="btn sm go" data-act="choosePower" data-id="${id}">Choose ${esc(el.name)}</button>`}
+      </div>`;
+    }).join('');
+    return `<p>Your power changes the Legend Master's <b>colours</b>, its <b>glow</b>, all its <b>animations</b>, the effects of its <b>${LEGEND_MOVES} sword moves</b> (attack 1, 2, 3 … ${LEGEND_MOVES}, then again) and its master power on <b>Z</b>. You can change it again here at any time.</p>
+      <div class="legend-grid">${cards}</div>`;
   }
 
   // Upgrade your power: +130 to every costume power per level.
@@ -710,8 +745,22 @@ export class UI {
         ${slotsUp ? `<button class="btn sm go" data-act="upgrade" data-kind="slots" ${!atBase || p.money < slotsUp.price || (p.gems || 0) < (slotsUp.gems || 0) || p.level < slotsUp.level ? 'disabled' : ''}>$${fmt(slotsUp.price)}${slotsUp.gems ? ` + ${slotsUp.gems}💎` : ''}</button>` : ''}</div>
       <div class="row-item"><div class="icon" style="background:#ffe0e3">🔒</div><div class="info"><h4>Stronger lasers</h4><p>${laserPrice ? `Lasers last ${durations[laserLvl]}s → ${durations[laserLvl + 1]}s` : 'Fully upgraded!'}</p></div>
         ${laserPrice ? `<button class="btn sm go" data-act="upgrade" data-kind="laser" ${!atBase || p.money < laserPrice || (p.gems || 0) < laserGems ? 'disabled' : ''}>$${fmt(laserPrice)}${laserGems ? ` + ${laserGems}💎` : ''}</button>` : ''}</div>
+      ${this.guardsHtml(s)}
       <h3>Pads</h3><p class="muted small">Every floor holds 10 monsters. Use the stairs inside your base to go up.</p>${pads}
       ${this.decorHtml(s)}`;
+  }
+
+  // Guards: they fight thieves in your base (and can be beaten).
+  guardsHtml(s) {
+    const p = s.profile;
+    const lvl = p.base.guardLevel || 0;
+    const L = guardLevel(lvl);
+    const next = lvl < GUARDS.maxLevel ? guardLevel(lvl + 1) : null;
+    const price = lvl === 0 ? GUARDS.buyPrice : next ? GUARDS.upgradePrice(lvl) : 0;
+    const now = L ? `Level ${lvl}: ${L.guards} guards${L.helis ? ` + ${L.helis} helicopter${L.helis > 1 ? 's' : ''}` : ''}, ${L.damage} sword damage` : 'No guards yet.';
+    const then = next ? `→ Level ${lvl + 1}: ${next.guards} guards${next.helis ? ` + ${next.helis} helicopter${next.helis > 1 ? 's' : ''}` : ''}, ${next.damage} damage, ${next.look} uniforms` : 'Fully upgraded: the toughest security there is!';
+    const btn = next ? `<button class="btn sm go" data-act="buyGuards" ${!s.atBase || p.money < price ? 'disabled' : ''}>${lvl ? 'Upgrade' : 'Hire'} $${fmt(price)}</button>` : '';
+    return `<div class="row-item"><div class="icon" style="background:#dfe8ff">💂</div><div class="info"><h4>Guards</h4><p>${now} ${then}</p><p class="muted small">Guards fight anyone who comes in to steal. A thief can still beat them; they get back up after 90 s.</p></div>${btn}</div>`;
   }
 
   // Decorations: what is on each wall spot, and the catalog to buy from.

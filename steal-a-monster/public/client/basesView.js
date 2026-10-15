@@ -200,8 +200,10 @@ export class BasesView {
       for (const [id, m] of view.monsters) this.removeMonster(view, id, m);
       view.pads.forEach((p) => this.padStyle(view, p, false, null));
       this.setLasers(view, false);
+      this.setFacilities(view, 0);
       return;
     }
+    this.setFacilities(view, st.guardLevel || 0);
     const color = this.colorOf(st);
     const hex = '#' + color.toString(16).padStart(6, '0');
     if (!prev || prev.name !== st.name || prev.color !== st.color || prev.level !== st.level) {
@@ -243,6 +245,68 @@ export class BasesView {
     this.setLasers(view, st.lockedUntil > 0);
     if (prev && !(prev.lockedUntil > 0) && st.lockedUntil > 0) this.audio.play('laser');
     this.setStored(view, st.stored);
+  }
+
+  // Security that grows with the guard level: a "GUARDED" sign (1+), a guard
+  // booth (3+), a barrier at the door (5+), a helipad on the roof (7+) and
+  // sweeping searchlights (9+).
+  setFacilities(view, level) {
+    if (view.facLevel === level) return;
+    view.facLevel = level;
+    if (view.fac) {
+      view.group.remove(view.fac);
+      view.fac = null;
+      view.searchlights = null;
+    }
+    if (!level) return;
+    const b = view.base;
+    const g = new THREE.Group();
+    const put = (mesh, u, v, y) => {
+      const p = b.toWorld(u, v);
+      mesh.position.set(p.x, b.y + y, p.z);
+      mesh.rotation.y = b.yaw;
+      mesh.castShadow = true;
+      g.add(mesh);
+      return mesh;
+    };
+    const sign = makeLabel(`💂 GUARDED · Lv ${level}`, { scale: 0.022, color: '#ffffff', bg: level >= 10 ? '#c89a10' : '#2a3a8a', border: '#ffffff' });
+    put(sign, 0, b.half + 0.8, 10.5);
+    if (level >= 3) {
+      put(new THREE.Mesh(new THREE.BoxGeometry(3.2, 3.6, 3.2), std(0xd8dde6)), -9.5, b.half + 5, 1.8);
+      put(new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.4, 3.6), std(0x2a3a8a)), -9.5, b.half + 5, 3.8);
+      put(new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.2, 0.1), std(0x8fd8ff, { emissive: 0x1a3a5a })), -9.5, b.half + 6.62, 2.4);
+    }
+    if (level >= 5) {
+      for (const s of [-1, 1]) put(new THREE.Mesh(new THREE.BoxGeometry(0.6, 2.4, 0.6), std(0x3a3f4a)), s * 6, b.half + 10, 1.2);
+      for (let k = 0; k < 6; k++) {
+        put(new THREE.Mesh(new THREE.BoxGeometry(2, 0.35, 0.35), std(k % 2 ? 0xffffff : 0xd8384a)), -5 + k * 2, b.half + 10, 2.1);
+      }
+    }
+    if (level >= 7) {
+      const top = CONFIG.bases.floors * CONFIG.bases.floorHeight + 0.65;
+      put(new THREE.Mesh(new THREE.CylinderGeometry(7, 7, 0.1, 32), std(0x3a3f4a)), 0, 0, top);
+      const ring = put(new THREE.Mesh(new THREE.TorusGeometry(6, 0.25, 6, 32), std(0xffd23a, { emissive: 0x4a3a00 })), 0, 0, top + 0.08);
+      ring.rotation.x = Math.PI / 2;
+      const h = makeLabel('H', { font: '900 120px system-ui', scale: 0.05, color: '#ffffff' });
+      put(h, 0, 0, top + 1.5);
+    }
+    if (level >= 9) {
+      view.searchlights = [];
+      for (const s of [-1, 1]) {
+        put(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 10, 8), std(0x3a3f4a)), s * 12.5, b.half + 2, 5);
+        const head = put(new THREE.Group(), s * 12.5, b.half + 2, 10.2);
+        head.add(new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.8, 1.2, 10), std(0x22262c)));
+        const beam = new THREE.Mesh(new THREE.ConeGeometry(4, 24, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff6c0, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }));
+        beam.position.y = -12;
+        const arm = new THREE.Group();
+        arm.rotation.x = -1.0;
+        arm.add(beam);
+        head.add(arm);
+        view.searchlights.push({ head, s });
+      }
+    }
+    view.group.add(g);
+    view.fac = g;
   }
 
   // Your own base: a tall light beam and a "YOUR BASE" sign you can spot from
@@ -430,6 +494,7 @@ export class BasesView {
         const sameFloor = !!me && Math.abs((me.y ?? view.base.y) - (view.base.y + s.y)) < 3;
         p.label.visible = view.near && (p.alert || (sameFloor && Math.hypot(me.x - s.x, me.z - s.z) < PAD_LABEL_DIST));
       }
+      if (view.searchlights) for (const sl of view.searchlights) sl.head.rotation.y = view.base.yaw + Math.sin(t * 0.7 + sl.s) * 1.2;
       view.coin.rotation.z = t * 2;
       view.coin.position.y = view.base.y + 2.2 + Math.sin(t * 2) * 0.2;
       if (view.locked) {

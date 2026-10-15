@@ -12,7 +12,21 @@ const AURA_COLORS = {
   snow: [0xffffff, 0xd8f6ff], bubble: [0xbff1ff, 0xffffff], dust: [0xc9a27a, 0xe8d0b0], glow: [0xfff27a, 0x7affd8],
   shadow: [0x9a6bff, 0x3a2a6a], petal: [0xff9fd8, 0xffe27a], star: [0xfff7a8, 0xb48cff], rune: [0x5fe3c0, 0xbffff0],
   pixel: [0xff3df2, 0x3dfff2], coin: [0xffd23a, 0xfff27a],
+  holy: [0xfff6c0, 0xffffff, 0xffd23a], thunder: [0xfff27a, 0xffffff, 0x8fb8ff], cosmic: [0xff7ae0, 0x7affd8, 0xfff27a],
 };
+
+// how each Legend power's particles move (elementBurst)
+const ELEMENT_MOTION = {
+  fire: { grav: -3, up: 1.2, life: 0.8, size: 0.32 },
+  ice: { grav: 10, up: 1.4, life: 0.8, size: 0.26 },
+  lightning: { grav: 0, up: 0.4, life: 0.28, size: 0.18, speed: 2.2 },
+  shadow: { grav: -0.8, up: 0.4, life: 1.1, size: 0.45, speed: 0.6 },
+  light: { grav: -1.5, up: 1, life: 1.0, size: 0.22 },
+  cosmic: { grav: 0, up: 0.5, life: 1.0, size: 0.24, speed: 1.3 },
+};
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
+const ease = (k) => 1 - (1 - k) ** 3;
 
 export class Effects {
   constructor(scene, camera) {
@@ -41,6 +55,13 @@ export class Effects {
     this.projectiles = new Map();
     this.tmpV = new THREE.Vector3();
     this.shapes = []; // short-lived meshes: slash waves, blast rings, lightning
+    this.timers = []; // staged effects (later)
+  }
+
+  // run fn after `sec` seconds (effects that come in stages)
+  later(sec, fn) {
+    if (sec <= 0) fn();
+    else this.timers.push({ t: sec, fn });
   }
 
   // ------------------------------------------------------------ costume powers
@@ -49,7 +70,8 @@ export class Effects {
     mesh.renderOrder = 5;
     this.scene.add(mesh);
     this.shapes.push({ mesh, t: 0, dur, step });
-    if (this.shapes.length > 24) this.dropShape(0);
+    step(mesh, 0);
+    if (this.shapes.length > 90) this.dropShape(0);
   }
 
   dropShape(i) {
@@ -110,18 +132,175 @@ export class Effects {
     }
   }
 
+  // ------------------------------------------------------------ Legend Master
+
+  // a glowing crescent left by a sword move. roll 0: flat (a sideways
+  // slash), PI/2: upright (a chop). dir: which way it sweeps.
+  slashArc(x, y, z, yaw, o = {}) {
+    const radius = o.radius ?? 4.5;
+    const arc = ((o.arc ?? 160) * Math.PI) / 180;
+    const roll = o.roll ?? 0;
+    const dir = o.dir ?? 1;
+    const dur = o.dur ?? 0.34;
+    const width = o.width ?? 0.3;
+    const fwd = o.fwd ?? 0;
+    const cols = o.colors || [0xffffff, 0xffffff];
+    // basis: x = forward, y = across the slash plane, z = its normal
+    const f = new THREE.Vector3(0, 0, 1);
+    const side = new THREE.Vector3(Math.cos(roll), Math.sin(roll), 0);
+    const nrm = new THREE.Vector3().crossVectors(f, side);
+    const base = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(f, side, nrm));
+    const q = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw).multiply(base);
+    const cx = x + Math.sin(yaw) * fwd;
+    const cz = z + Math.cos(yaw) * fwd;
+    const cy = y + (o.height ?? 2.4);
+    const spin = new THREE.Quaternion();
+    const layer = (inner, color, opacity, grow) => {
+      const geo = new THREE.RingGeometry(inner, 1, Math.max(24, Math.round(arc * 12)), 1, -arc / 2, arc);
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+      m.position.set(cx, cy, cz);
+      this.addShape(m, dur, (mm, k) => {
+        // sweeps through, grows a little and fades
+        spin.setFromAxisAngle(nrm, dir * (1 - ease(Math.min(1, k * 2.2))) * -arc * 0.6);
+        mm.quaternion.copy(q).multiply(spin);
+        const r = radius * (0.8 + grow * k);
+        mm.scale.set(r, r, r);
+        mm.material.opacity = opacity * (k < 0.35 ? 1 : 1 - (k - 0.35) / 0.65);
+      });
+    };
+    layer(1 - width, cols[0], 0.85, 0.45);
+    layer(1 - width * 0.3, cols[1] ?? 0xffffff, 1, 0.4);
+    // sparks thrown off the edge
+    const n = o.sparks ?? 26;
+    const p = new THREE.Vector3();
+    for (let i = 0; i < n; i++) {
+      const a = (Math.random() - 0.5) * arc;
+      p.set(Math.cos(a), Math.sin(a), 0).applyQuaternion(q).multiplyScalar(radius);
+      const sp = 4 + Math.random() * 5;
+      this.spawn(cx + p.x, cy + p.y, cz + p.z, { vx: (p.x / radius) * sp, vy: (p.y / radius) * sp + 1, vz: (p.z / radius) * sp, grav: 3, life: 0.45, size: 0.2, color: cols });
+    }
+  }
+
+  // a column of light (from the sky or out of the ground)
+  pillar(x, y, z, color, height = 26, radius = 1.4, dur = 0.8) {
+    const geo = new THREE.CylinderGeometry(radius, radius * 1.15, height, 18, 1, true);
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+    m.position.set(x, y + height / 2, z);
+    this.addShape(m, dur, (mm, k) => {
+      const w = k < 0.15 ? 0.3 + (k / 0.15) * 0.9 : 1.2 - (k - 0.15) * 1.3;
+      mm.scale.set(Math.max(0.02, w), 1, Math.max(0.02, w));
+      mm.material.opacity = 0.6 * (1 - k * k);
+    });
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.35, radius * 0.35, height, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+    core.position.copy(m.position);
+    this.addShape(core, dur * 0.7, (mm, k) => {
+      mm.material.opacity = 0.75 * (1 - k);
+    });
+    this.burst(x, y + 0.5, z, 14, { color: [color, 0xffffff], speed: 6, up: 1.2, life: 0.6, size: 0.25, grav: 6 });
+  }
+
+  // ice spikes bursting out of the ground in a ring
+  iceSpikes(x, y, z, radius, n, color = 0x9fe8ff) {
+    const geo = new THREE.ConeGeometry(0.7, 4.2, 5);
+    geo.translate(0, 2.1, 0);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, toneMapped: false });
+    const m = new THREE.InstancedMesh(geo, mat, n);
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
+      const r = radius * (0.85 + Math.random() * 0.3);
+      e.set((Math.random() - 0.5) * 0.6, 0, (Math.random() - 0.5) * 0.6 + Math.cos(a) * 0.35);
+      q.setFromEuler(e);
+      const s = 0.7 + Math.random() * 0.7;
+      m4.compose(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r), q, new THREE.Vector3(s, s * (0.8 + Math.random() * 0.8), s));
+      m.setMatrixAt(i, m4);
+      this.burst(x + Math.cos(a) * r, y + 0.5, z + Math.sin(a) * r, 3, { color: [0xffffff, color], speed: 4, up: 1.5, life: 0.6, size: 0.22, grav: 10 });
+    }
+    m.position.set(x, y - 0.2, z);
+    this.addShape(m, 1.6, (mm, k) => {
+      const g = k < 0.1 ? k / 0.1 : 1;
+      mm.scale.set(1, Math.max(0.01, g * (k > 0.8 ? 1 - (k - 0.8) / 0.2 : 1)), 1);
+      mm.material.opacity = k > 0.7 ? 0.9 * (1 - (k - 0.7) / 0.3) : 0.9;
+    });
+  }
+
+  // a sphere that bursts outwards (or collapses inwards)
+  sphereBlast(x, y, z, radius, color, dur = 0.7, implode = false) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, depthWrite: false, blending: implode ? THREE.NormalBlending : THREE.AdditiveBlending, toneMapped: false }));
+    m.position.set(x, y, z);
+    this.addShape(m, dur, (mm, k) => {
+      const e = ease(k);
+      const r = implode ? radius * (1 - e) + 0.3 : 0.5 + radius * e;
+      mm.scale.setScalar(Math.max(0.05, r));
+      mm.material.opacity = implode ? 0.85 * Math.min(1, k * 4) : 0.7 * (1 - k);
+    });
+  }
+
+  // a spear of light thrust forward
+  beam(x, y, z, yaw, length, colors) {
+    const dirV = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    const geo = new THREE.ConeGeometry(0.55, length, 12, 1, true);
+    geo.rotateX(Math.PI); // the point in front
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: colors[0], transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dirV);
+    m.position.set(x + dirV.x * (length / 2 + 0.8), y + 2.3, z + dirV.z * (length / 2 + 0.8));
+    this.addShape(m, 0.35, (mm, k) => {
+      mm.scale.set(1 - k * 0.7, 0.3 + ease(Math.min(1, k * 3)) * 0.7, 1 - k * 0.7);
+      mm.material.opacity = 0.9 * (1 - k);
+    });
+    const tip = { x: x + dirV.x * (length + 0.8), y: y + 2.3, z: z + dirV.z * (length + 0.8) };
+    this.later(0.08, () => this.burst(tip.x, tip.y, tip.z, 22, { color: [...colors, 0xffffff], speed: 8, life: 0.45, size: 0.24, grav: 2 }));
+  }
+
+  // lightning straight down from the sky
+  skyBolt(x, y, z, color) {
+    this.lightning([{ x: x + (Math.random() - 0.5) * 6, y: y + 38, z: z + (Math.random() - 0.5) * 6 }, { x, y: y + 0.3, z }], color, 3.2, 14);
+    this.pillar(x, y, z, color, 30, 0.7, 0.4);
+    this.burst(x, y + 0.5, z, 18, { color: [color, 0xffffff, 0x8fb8ff], speed: 9, up: 1.2, life: 0.4, size: 0.2, grav: 6 });
+  }
+
+  // the particles of a Legend power: embers rise, ice shards fall, sparks
+  // flicker, darkness drifts, light floats up, stars swirl
+  elementBurst(element, x, y, z, n, colors, speed = 6) {
+    const mo = ELEMENT_MOTION[element] || ELEMENT_MOTION.fire;
+    this.burst(x, y, z, n, { color: colors, speed: speed * (mo.speed ?? 1), up: mo.up, life: mo.life, size: mo.size, grav: mo.grav });
+  }
+
+  // a spiral of particles rising around a point (charging up)
+  spiral(x, y, z, radius, colors, n = 40) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 6;
+      const r = radius * (1 - i / n);
+      this.later(i * 0.008, () => this.spawn(x + Math.cos(a) * r, y + (i / n) * 4, z + Math.sin(a) * r, { vx: -Math.cos(a) * 2, vz: -Math.sin(a) * 2, vy: 3, grav: 0, life: 0.6, size: 0.26, color: colors }));
+    }
+  }
+
+  // the whole screen flashes (the strongest powers)
+  flash(color = 0xffffff, strength = 0.6) {
+    if (!this.flashEl) {
+      this.flashEl = document.createElement('div');
+      this.flashEl.className = 'screen-flash';
+      document.body.appendChild(this.flashEl);
+    }
+    this.flashEl.style.background = `#${color.toString(16).padStart(6, '0')}`;
+    this.flashT = 0;
+    this.flashMax = strength;
+    this.flashEl.style.opacity = String(strength);
+  }
+
   // jagged lightning between points (Thunder Hero)
-  lightning(points, color) {
+  lightning(points, color, jitter = 0.9, steps = 7) {
     if (points.length < 2) return;
     const pos = [];
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1];
       const b = points[i];
-      const steps = 7;
       let prev = a;
       for (let k = 1; k <= steps; k++) {
         const t = k / steps;
-        const j = k === steps ? 0 : 0.9;
+        const j = k === steps ? 0 : jitter;
         const p = { x: a.x + (b.x - a.x) * t + (Math.random() - 0.5) * j, y: a.y + (b.y - a.y) * t + (Math.random() - 0.5) * j, z: a.z + (b.z - a.z) * t + (Math.random() - 0.5) * j };
         pos.push(prev.x, prev.y, prev.z, p.x, p.y, p.z);
         prev = p;
@@ -309,6 +488,23 @@ export class Effects {
       num.el.style.display = '';
       num.el.style.left = `${(v.x * 0.5 + 0.5) * w + num.jitter}px`;
       num.el.style.top = `${(-v.y * 0.5 + 0.5) * h}px`;
+    }
+
+    // staged effects
+    if (this.timers.length) {
+      const due = [];
+      this.timers = this.timers.filter((tm) => {
+        tm.t -= dt;
+        if (tm.t <= 0) due.push(tm.fn);
+        return tm.t > 0;
+      });
+      for (const fn of due) fn();
+    }
+    if (this.flashEl && this.flashT !== undefined) {
+      this.flashT += dt;
+      const o = Math.max(0, this.flashMax * (1 - this.flashT / 0.45));
+      this.flashEl.style.opacity = String(o);
+      if (o === 0) this.flashT = undefined;
     }
 
     // power shapes

@@ -46,8 +46,12 @@ Database**. To switch it on, follow the step-by-step guide (in Indonesian):
 publish [`firebase-database.rules.json`](firebase-database.rules.json), and
 paste the web config into `public/firebase-config.js`.
 
-Limits: the room closes when its creator leaves; guests' progress is saved in
-the creator's browser; every message goes through Firebase (about 100–300 ms
+Online rooms need an **account** (Firebase Authentication with
+Email/Password must be switched on, see the guide). Every player's progress is
+saved in **their own account**, so the monsters you get in a friend's room are
+still yours in your own game and in every other room.
+
+Limits: the room closes when its creator leaves; every message goes through Firebase (about 100–300 ms
 extra delay); a guest downloads about 22 KB/s, so the free plan (10 GB/month)
 covers roughly 100 hours a month with one friend. It was tested with the
 official Firebase Realtime Database emulator and the real Firebase SDK
@@ -55,6 +59,43 @@ official Firebase Realtime Database emulator and the real Firebase SDK
 
 For a dedicated server instead (lowest lag, progress saved on the server), use
 the Node.js server below, hosted somewhere everyone can reach.
+
+### Accounts
+
+The title screen has **Log in** and **Create account** (name + password of at
+least 6 characters). Names are **unique** — "Mira Fox", "mira fox" and
+"Mira   Fox" are the same name — 2–16 letters, numbers, **spaces**, `_` or
+`-`. Logged in, your monsters, Money and everything else follow you: into your
+friends' rooms, into your own room and onto other devices. Every time you
+create or join a server you are asked **"start over from the beginning, or
+continue with your progress from before?"** (starting over really wipes the
+account's progress). **Play without an account** still works for single-player
+on one device.
+
+- **Web build / online rooms:** Firebase Authentication (the email is made from
+  the name, `mira.fox@players.steal-a-monster.game`, nobody types an email) and
+  the account's profile in the Realtime Database at `sam/accounts/<uid>`. The
+  database rules let only the owner write their account and check the name
+  against the login.
+- **Node server:** accounts live on the server in `DATA_DIR/accounts.json`
+  (scrypt password hashes). The browser keeps a "remember me" key instead of the
+  password.
+
+### The admin: "daniel"
+
+The account named **daniel** is the admin of **every** server and room
+(register it first so nobody else takes the name). Only daniel gets a
+**🛡 Player** button. It lists everyone in the server, which monsters they stole
+and **from whom**, with two buttons:
+
+- **↩ Return to <owner>** — the stolen monster goes back to its owner (straight
+  into their base if they are online, otherwise it waits in their account and
+  arrives the next time they play);
+- **⛔ Ban** — the thief is kicked with "You were banned by the admin." and
+  can't come back (Node server: `DATA_DIR/bans.json`; online: `sam/bans/<uid>`).
+
+To lift a ban, delete the player's entry from `bans.json` (Node) or from
+`sam/bans` in the Firebase console (online). The admin can't ban themselves.
 
 ## Quick start (multiplayer server)
 
@@ -100,7 +141,7 @@ animated side by side.
 | **H** | Teleport to your base (20 s cooldown, not while carrying a stolen monster). Your base has a light beam and a "🏠 YOUR BASE" sign; when you're away, an on-screen 🏠 pointer shows the way and the distance |
 | **L** | Switch on your base's security lasers (you must be at your base) |
 | **X** | Call your companion monsters (up to 5) to your side |
-| **Z** | Your costume's **master power** (Black Spy: 583 damage, +130 per power upgrade) |
+| **Z** | Your costume's **master power** (Black Spy: 583 damage, Legend Master: 1,200, +130 per power upgrade) |
 | **1 – 8** | Use gadgets |
 | **C** / Tab · **M** | Your monsters · World map |
 | **T** / Enter | Chat · **Esc** close panels / settings · **F3** debug overlay |
@@ -242,12 +283,61 @@ and gives you its own **idle, attack, dodge and teleport animations** and a
 | ❄️ Frost Knight | 45,000 | Blizzard Nova: 260 to everything around you and freezes them, 5.5 s |
 | ⚡ Thunder Hero | 90,000 | Thunder Strike: 420, lightning that jumps between 3 monsters, 5.5 s |
 | 🐰 Bunny Hoodie | 25,000 | Sweet Hug: 180 around you and heals you 40%, 7 s |
+| 👑 **Legend Master** — glowing armour, a crown, a long cape, glowing lines and three orbs circling you. **Choose its power** right after buying it. | **200,000,000** | Depends on the power, **1,200** damage, 6 s (see below) |
+
+**Legend Master.** Right after you buy it a **"Choose your power"** window
+opens (change it later with *Change power* in the Costume Shop). The power
+decides the costume's **colours**, its glow and aura, its animations, the
+effects of its sword moves and its master power:
+
+| Power | Master power (Z) |
+|---|---|
+| 🔥 Fire | Phoenix Inferno: a ring of fire with pillars of flame, sets everything on fire (12 m) |
+| ❄️ Ice | Absolute Zero: two rings of ice spikes burst out of the ground and freeze everything (13 m) |
+| ⚡ Lightning | Thunder God: lightning from the sky on up to 6 monsters |
+| 🌑 Shadow | Void Eclipse: a huge wave of darkness in front of you (18 m, 180°) |
+| ☀️ Light | Holy Judgment: pillars of light around you; heals you 30% |
+| 🌌 Cosmic | Galaxy Collapse: a star explosion, the widest ring (15 m) |
+
+The power animation charges up (you rise, the orbs speed up), then releases
+with a screen flash and camera shake. The Legend Master also has **10
+different sword moves** that come one after the other — attack 1 uses move 1,
+attack 2 uses move 2 … attack 10 uses move 10, then it starts again: Crescent
+Slash, Return Slash, Sky Splitter, Rising Dragon, Cyclone Cut, Piercing Light,
+Cross Strike, Meteor Drop, Whirlwind and Legend Break, each with its own
+glowing slash in the power's colours. Everyone sees the same move (the server
+counts them).
 
 Next door, **Upgrade your power** adds **+130** damage to every costume power
 per level (10 levels; 20,000, 40,000, 60,000 … Money), so the Black Spy's
 Master Power goes 583 → 713 → 843 …
 Entering a landmark or hidden place for the first time is a **discovery** with
 a Money reward; the **Monsterdex** tracks every species you have met.
+
+### Base guards
+
+In the **🏠 My Base** panel (at your base) you can hire **guards** for
+**420,000,000**: 2 guards with swords. They attack anyone who walks into your
+base, anyone carrying one of your monsters nearby, and anyone who hits them —
+never you. They **can be beaten**: a knocked-out guard gets up again after
+90 s. Each **upgrade** (60,000,000 × the current level) brings more guards,
+better uniforms and swords, and stricter facilities:
+
+| Level | Guards | Uniform / sword | Facilities |
+|---|---|---|---|
+| 1–2 | 2 / 4 | blue cap / stone, iron | "GUARDED" sign |
+| 3–4 | 6 / 8 | police / iron, steel | + guard booth |
+| 5–6 | 10 / 12 | armour / steel, flame | + barrier |
+| 7–8 | 15 / 18 | black elite with red visor / thunder | + helipad, 1 / 2 **helicopters with guns** |
+| 9 | 21 | black elite / celestial | + searchlights, 3 helicopters |
+| **10** | **24** | **gold armour, red cape / Galaxy Sword** (140 damage) | **4 helicopters** |
+
+Helicopters circle the tower and shoot thieves near it while at least one
+guard is standing. When a thief comes in, the owner sees **"🚨 THIEF! … is
+trying to steal your monsters — your guards are fighting!"** at the top of the
+screen and everyone sees a blinking **🦹 THIEF!** tag over the thief. When the
+thief knocks out every guard, the owner sees **"💥 The thief … has defeated
+your guards!"**.
 
 ### Lucky Blocks and LUCKY LUCKY
 
@@ -317,6 +407,7 @@ steal-a-monster/
     game.js                    authoritative simulation: sessions, movement validation,
                                tick loop (20 Hz), snapshots (10 Hz), message dispatch
     storage.js                 JsonFileStore (atomic writes + .bak) and MemoryStore
+    accounts.js                Node-server accounts (scrypt passwords, remember keys)
     validate.js, rateLimit.js  input validation, per-message token buckets
     services/
       playerData.js            profiles: creation (1,000 Money once), schema migration,
@@ -334,10 +425,15 @@ steal-a-monster/
       events.js                LUCKY LUCKY lifecycle (generic event framework)
       worldExpansion.js        population tiers with hysteresis, region open/close
       puzzles.js               Ancient Ruins plate puzzle and sealed vault
+      costumes.js              Costume Shop, Legend Master powers, master power on Z
+      guards.js                base guards and helicopters (AI, alerts, knock-outs)
+      admin.js                 the admin "daniel": Player list, return, ban
   shared/                      identical on server and client
     config.js                  every gameplay number in one place
     regions.js, world.js       deterministic world: terrain, props, bases, caves, colliders
     monsters.js                the species registry (stats, AI, attacks, perks, model recipes)
+    costumes.js, guards.js     costumes + Legend powers, guard levels and uniforms
+    names.js                   unique names, the admin name, account emails
     weapons.js, items.js, lucky.js, decor.js, collision.js, rng.js
   public/
     index.html, style.css, gallery.html
@@ -352,7 +448,12 @@ steal-a-monster/
       playersView.js           avatars, carried monster, companion follower, status FX
       basesView.js             pads, placed monsters, lasers, collector, signs, decorations
       decorModels.js           procedural 3D base decorations
-      humanoid.js              blocky avatar, 10 procedural swords, 8 hats
+      humanoid.js              blocky avatar, swords, hats, costumes, the Legend
+                               Master's 10 sword moves
+      legendFx.js              Legend Master slash and power effects per element
+      guardsView.js            guards (uniforms) and helicopters
+      accounts.js, fb.js       log in / create account (Firebase or the Node server)
+      rooms.js, localNet.js    online rooms over Firebase, the in-browser game
       player.js, camera.js, input.js   movement prediction, third-person camera, controls
       ui.js, minimap.js, preview.js    HUD/panels, minimap + world map, monster previews
       effects.js, audio.js, net.js, labels.js, worldItems.js, gallery.js
@@ -401,6 +502,13 @@ any Money/ownership transaction; failed saves are retried. Loaded data is
 sanitised (unknown species/swords/items dropped, duplicate ids and doubled pads
 fixed, Money and Gems clamped, never more decorations placed than owned).
 
+Accounts (`accounts.json`, scrypt password hashes and "remember me" key
+hashes) and bans (`bans.json`) are stored next to the profiles. An account's
+profile id is derived from the account, not from the browser token, so logging
+in on another device opens the same profile. Online (Firebase) accounts keep
+their profile in the database instead; the room's game treats that profile as
+the truth when the player joins and writes it back every 10 s.
+
 An **ownership ledger** (`data/ownership.json`, written before profiles on every
 transfer) is the source of truth for who owns which monster, so a crash between
 two profile writes during a theft can neither duplicate nor lose a monster.
@@ -445,7 +553,7 @@ Web Audio API (`public/client/audio.js`). To use recorded sounds, call
 ## Testing
 
 ```bash
-npm test            # automated: node --test, 72 tests, runs in CI
+npm test            # automated: node --test, 85 tests, runs in CI
 npm run test:e2e    # two real browsers on one server (needs Playwright + Chromium)
 npm run test:load   # 12 simulated players; reports server tick time and bandwidth
 ```
@@ -480,6 +588,9 @@ Socket.IO server with real socket clients. Requirement → test:
 | — | Moon buttons, portal, arena rounds, the secret monster | `moon.test.js` |
 | — | Five companions follow, pop back, defend you, X calls them | `companions.test.js` |
 | — | Costumes, Spy Sword, 583 master power, +130 power upgrades | `costumes.test.js` |
+| — | Legend Master: 200,000,000, choose a power, 1,200 damage, 10 sword moves in a row | `costumes.test.js` |
+| — | Accounts, unique names, start over / continue, admin "daniel" (Player list, return, ban) | `accounts.test.js` |
+| — | Guards: 420,000,000, upgrades to 24 guards + 4 helicopters, thief alerts, can be beaten | `guards.test.js` |
 
 See **[TESTING.md](TESTING.md)** for what was verified by hand in a browser and
 what remains unverified.

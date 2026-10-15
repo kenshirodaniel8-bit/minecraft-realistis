@@ -6,6 +6,7 @@
 
 import { CONFIG } from '#shared/config.js';
 import { SWORD_BY_ID } from '#shared/weapons.js';
+import { LEGEND_MOVES } from '#shared/costumes.js';
 import { isObj, finite, fail } from '../validate.js';
 
 const DEG = Math.PI / 180;
@@ -33,7 +34,9 @@ export class Combat {
     s.combo.at = now;
     const comboHit = s.combo.count % 3 === 0;
     s.yaw = p.yaw;
-    game.broadcastNear(s.pos.x, s.pos.z, 120, 'swing', { pn: s.pn, combo: comboHit }, s);
+    // the Legend Master goes through 10 different sword moves, then again
+    s.moveIdx = ((s.moveIdx ?? -1) + 1) % LEGEND_MOVES;
+    game.broadcastNear(s.pos.x, s.pos.z, 120, 'swing', { pn: s.pn, combo: comboHit, move: s.moveIdx }, s);
 
     const reach = sword.range + CONFIG.player.radius + CONFIG.combat.rangeTolerance;
     const targets = game.monsters.findInArc(s.pos, p.yaw, reach, sword.arc + 20, sword.maxTargets, s);
@@ -59,10 +62,19 @@ export class Combat {
         hits.push(h);
       }
     }
+    // base guards of other players are hit like monsters
+    for (const t of game.guards.findInArc(s, p.yaw, reach, sword.arc + 20, Math.max(0, sword.maxTargets - targets.length))) {
+      const c = CONFIG.combat;
+      let dmg = sword.damage * (1 + (s.perks?.damage || 0)) * (1 - c.damageVariance + game.rng() * c.damageVariance * 2);
+      const crit = game.rng() < c.critChance + (sword.special?.kind === 'crit' ? sword.special.chance : 0);
+      if (crit) dmg *= c.critMultiplier;
+      if (comboHit) dmg *= 1 + c.comboBonus;
+      hits.push(game.guards.hit(s, t, Math.max(1, Math.round(dmg)), crit));
+    }
     if (hits.length) game.broadcastNear(s.pos.x, s.pos.z, 140, 'hits', { pn: s.pn, hits, nova });
     // swinging at a lucky block opens it too
     if (!hits.length) game.lucky.trySwing(s, p.yaw);
-    return { ok: true, hits: hits.length };
+    return { ok: true, hits: hits.length, move: s.moveIdx };
   }
 
   hitMonster(s, m, sword, comboHit, mult, now, chained = false) {

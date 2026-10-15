@@ -25,8 +25,10 @@ import { Audio } from './audio.js';
 import { Effects } from './effects.js';
 import { CaptureFx } from './captureFx.js';
 import { MonstersView, MSTATE } from './monstersView.js';
+import { GuardsView } from './guardsView.js';
 import { setNightGlow } from './humanoid.js';
-import { COSTUME_BY_ID, powerDamage } from '#shared/costumes.js';
+import { COSTUME_BY_ID, LEGEND_POWERS, LEGEND_MOVES, powerDamage, costumeWithPower } from '#shared/costumes.js';
+import { legendSwingFx, legendPowerFx } from './legendFx.js';
 import { PlayerAvatar, FX } from './playersView.js';
 import { BasesView } from './basesView.js';
 import { WorldItems } from './worldItems.js';
@@ -490,6 +492,7 @@ class App {
       });
     };
     this.basesView = new BasesView(scene, this.world, this.effects, this.audio);
+    this.guardsView = new GuardsView(scene, this.world, this.effects, this.audio);
     this.items = new WorldItems(scene, this.world, this.effects, this.audio);
     this.preview = new MonsterPreview();
     this.mapRenderer = new MapRenderer(this.world);
@@ -558,9 +561,11 @@ class App {
     for (const p of this.players.values()) p.dispose();
     this.players.clear();
     this.monsters.clear();
+    this.guardsView.clear();
     this.items.clear();
     if (this.me) this.me.dispose();
-    this.me = new PlayerAvatar(this.sceneView.scene, this.world, { pn: w.pn, name: w.profile.name, color: w.profile.color, sword: w.profile.sword, cosmetic: w.profile.cosmetics.equipped, costume: w.profile.costumes.equipped, level: w.profile.level }, true);
+    this.me = new PlayerAvatar(this.sceneView.scene, this.world, { pn: w.pn, name: w.profile.name, color: w.profile.color, sword: w.profile.sword, cosmetic: w.profile.cosmetics.equipped, costume: w.profile.costumes.equipped, costumePower: w.profile.costumes.power, level: w.profile.level }, true);
+    this.moveIdx = -1; // the server starts the Legend Master's sword moves again too
     for (const info of w.players) if (info.pn !== w.pn) this.addPlayer(info);
     for (let i = 0; i < this.baseStates.length; i++) {
       this.baseStates[i] = null;
@@ -672,11 +677,17 @@ class App {
     n.on('base', (b) => this.onBase(b));
     n.on('baseStored', (list) => this.basesView?.setStoredAll(list));
     n.on('swing', (d) => {
-      this.players.get(d.pn)?.swing(d.combo);
+      const p = this.players.get(d.pn);
+      if (!p) return;
+      p.swing(d.combo, d.move || 0);
+      if (p.h.element) legendSwingFx(this.effects, p.h.element, d.move || 0, p.pos, p.yaw);
       this.audio.play('swing', { minGap: 80 });
     });
     n.on('hits', (d) => {
-      for (const h of d.hits) this.monsters.onHit(h, d.pn === this.pn);
+      for (const h of d.hits) {
+        if (h.guard) this.guardsView.onHit(h);
+        else this.monsters.onHit(h, d.pn === this.pn);
+      }
       if (d.nova) this.effects.nova(d.nova.x, d.nova.z, d.nova.r, this.world.groundHeight(d.nova.x, d.nova.z));
       if (d.pn === this.pn && d.hits.some((h) => h.crit)) this.cam.addShake(0.4);
     });
@@ -685,6 +696,22 @@ class App {
     n.on('mDefeated', (d) => this.monsters.onDefeated(d));
     n.on('mRecover', (d) => this.monsters.onRecover(d));
     n.on('allyPoof', (d) => this.monsters.poof(d));
+    n.on('gAttack', (d) => this.guardsView.onAttack(d));
+    n.on('gStrike', (d) => this.guardsView.onStrike(d));
+    n.on('gDown', (d) => this.guardsView.onDown(d));
+    n.on('gUp', (d) => this.guardsView.onUp(d));
+    n.on('gGone', (d) => this.guardsView.onGone(d));
+    n.on('gShot', (d) => this.guardsView.onShot(d));
+    n.on('guardAlert', (d) => {
+      if (d.stage === 'intruder') {
+        this.ui.theftAlert(`🚨 THIEF! ${d.thief} is trying to steal your monsters — your guards are fighting!`, 9000);
+        this.audio.play('alarm', { minGap: 2000 });
+      } else if (d.stage === 'defeated') {
+        this.ui.theftAlert(`💥 The thief ${d.thief} has defeated your guards!`, 9000);
+        this.audio.play('alarm', { minGap: 500 });
+      } else if (d.stage === 'spotted') this.ui.toast(`💂 ${d.owner}'s guards spotted you!`, 'warn');
+      else if (d.stage === 'beaten') this.ui.toast(`💥 You defeated ${d.owner}'s guards!`, 'good');
+    });
     // (a guest in a friend's room) our progress, to save in our account
     n.on('saveProfile', (p) => {
       if (this.accounts?.kind === 'online') this.accounts.saveProfile(p);
@@ -896,6 +923,7 @@ class App {
       if (p) p.applySnapshot(d.t, row);
     }
     this.monsters.applySnapshot(d.t, d.m);
+    this.guardsView.applySnapshot(d.t, d.g);
   }
 
   onProfile(p) {
@@ -907,8 +935,8 @@ class App {
       const step = TUTORIAL[p.tutorial.step];
       if (step) this.ui.toast(`✅ Next: ${step.title}`, 'good');
     }
-    if (this.me && old && (old.sword !== p.sword || old.cosmetics.equipped !== p.cosmetics.equipped || old.costumes.equipped !== p.costumes.equipped || old.level !== p.level)) {
-      this.me.setInfo({ sword: p.sword, cosmetic: p.cosmetics.equipped, costume: p.costumes.equipped, level: p.level });
+    if (this.me && old && (old.sword !== p.sword || old.cosmetics.equipped !== p.cosmetics.equipped || old.costumes.equipped !== p.costumes.equipped || old.costumes.power !== p.costumes.power || old.level !== p.level)) {
+      this.me.setInfo({ sword: p.sword, cosmetic: p.cosmetics.equipped, costume: p.costumes.equipped, costumePower: p.costumes.power, level: p.level });
     }
     this.ui?.refresh();
   }
@@ -1137,9 +1165,23 @@ class App {
       lock: () => req('lock', {}, '🔒 Security lasers ON!'),
       useItem: (itemId) => app.useItem(itemId),
       equipCosmetic: (id) => req('equipCosmetic', { id }),
-      buyCostume: (id) => req('buyCostume', { id }, () => `${COSTUME_BY_ID[id].icon} You are now a ${COSTUME_BY_ID[id].name}! Press Z for ${COSTUME_BY_ID[id].power.name}.`),
+      buyCostume: (id) => req('buyCostume', { id }, () => {
+        const c = COSTUME_BY_ID[id];
+        if (c.choosePower) {
+          // the Legend Master: choose its power right away
+          setTimeout(() => this.ui.open('legend'), 300);
+          return `${c.icon} You are now a ${c.name}! Choose your power!`;
+        }
+        return `${c.icon} You are now a ${c.name}! Press Z for ${c.power.name}.`;
+      }),
+      choosePower: (id) => req('choosePower', { power: id }, () => {
+        const el = LEGEND_POWERS[id];
+        setTimeout(() => this.ui.close(), 200);
+        return `${el.icon} Your Legend Master now has the power of ${el.name}! Press Z for ${el.power}.`;
+      }),
       equipCostume: (id) => req('equipCostume', { id }),
       buyPower: () => req('buyPower', {}, (r) => `💪 Power level ${r.level}! +${r.bonus} damage on every costume power.`),
+      buyGuards: () => req('buyGuards', {}, (r) => `💂 Guards level ${r.level}: ${r.guards} guards${r.helis ? ` and ${r.helis} helicopter${r.helis > 1 ? 's' : ''}` : ''} protect your base!`),
       // admin ("daniel"): give a stolen monster back / ban a player. Online
       // accounts also get the ban or the return in the database (only the
       // admin's account may write those).
@@ -1253,18 +1295,28 @@ class App {
     this.player.yaw = yaw;
     this.comboCount = now - (this.lastSwing || 0) < CONFIG.combat.comboWindowMs ? (this.comboCount || 0) + 1 : 1;
     this.lastSwing = now;
-    this.me.swing(this.comboCount % 3 === 0);
+    // the Legend Master's sword moves: 1, 2, 3 ... 10, then again
+    this.moveIdx = ((this.moveIdx ?? -1) + 1) % LEGEND_MOVES;
+    this.me.swing(this.comboCount % 3 === 0, this.moveIdx);
+    if (this.me.h.element) {
+      legendSwingFx(this.effects, this.me.h.element, this.moveIdx, this.player.pos, yaw, (k) => this.cam.addShake(k));
+    }
     this.audio.play('swing');
     this.net.send('attack', { yaw });
   }
 
   // Z: the master power of your costume, aimed like a sword swing
   usePower() {
-    const c = COSTUME_BY_ID[this.profile.costumes.equipped];
-    if (!c) {
+    const worn = COSTUME_BY_ID[this.profile.costumes.equipped];
+    if (!worn) {
       this.ui.toast('🕶 Buy a costume at the Costume Shop in the plaza to get a master power (Z)!', 'warn');
       return;
     }
+    if (worn.choosePower && !this.profile.costumes.power) {
+      this.ui.open('legend');
+      return;
+    }
+    const c = costumeWithPower(worn, this.profile.costumes.power);
     const now = performance.now();
     if (now < (this.powerLockUntil || 0)) return;
     this.powerLockUntil = now + 400;
@@ -1287,20 +1339,43 @@ class App {
   // the Z button shows the power's cooldown while you wear a costume
   updatePowerButton() {
     const btn = this.powerBtn || (this.powerBtn = $('power-btn'));
-    const c = COSTUME_BY_ID[this.profile.costumes.equipped];
-    btn.hidden = !c;
-    if (!c) return;
+    const worn = COSTUME_BY_ID[this.profile.costumes.equipped];
+    btn.hidden = !worn;
+    if (!worn) return;
+    const c = costumeWithPower(worn, this.profile.costumes.power);
+    if (worn.choosePower && !this.profile.costumes.power) {
+      setTextOnce(btn.querySelector('span'), ' Choose your power!');
+      btn.classList.remove('locked');
+      return;
+    }
     const left = Math.ceil(((this.powerReadyAt || 0) - performance.now()) / 1000);
     setTextOnce(btn.querySelector('span'), left > 0 ? ` ${left}s` : ` ${c.power.name}`);
     btn.classList.toggle('locked', left > 0);
   }
 
   onPower(d) {
-    const c = COSTUME_BY_ID[d.costume];
+    const c = costumeWithPower(COSTUME_BY_ID[d.costume], d.element);
     const av = d.pn === this.pn ? this.me : this.players.get(d.pn);
     if (!c || !av) return;
     av.h.startPower();
     const pw = c.power;
+    if (c.choosePower) {
+      // Legend Master: charge up, then the power of its element
+      const mine = d.pn === this.pn;
+      const release = legendPowerFx(this.effects, d, c, mine);
+      const near = Math.hypot(this.player.pos.x - d.x, this.player.pos.z - d.z) < 60;
+      this.audio.play('crit');
+      this.effects.later(release, () => {
+        if (mine || near) this.cam.addShake(mine ? 1.4 : 0.7);
+        this.audio.play('slam');
+        if (d.element === 'lightning') this.audio.play('crit', { pitch: 0.6 });
+      });
+      if (mine) {
+        const el = LEGEND_POWERS[d.element];
+        this.ui.regionBanner(`${el?.icon || '👑'} ${pw.name.toUpperCase()}!`, `${fmt(powerDamage(c, this.profile.powerLevel))} damage`);
+      }
+      return;
+    }
     const y = d.y;
     if (pw.shape === 'wave') this.effects.slashWave(d.x, y, d.z, d.yaw, pw.range, pw.arc, pw.color);
     else if (pw.shape === 'ring') {
@@ -1320,7 +1395,7 @@ class App {
 
   // costume arrival after a teleport (smoke for the spy, sparkles for others)
   costumeArrival(av, x, y, z) {
-    const c = COSTUME_BY_ID[av.info.costume];
+    const c = costumeWithPower(COSTUME_BY_ID[av.info.costume], av.info.costumePower);
     if (!c) return;
     av.h.startTeleport();
     const cols = c.id === 'black_spy' ? [0x14141c, 0x2c2c38, c.colors.glow] : [c.colors.glow, c.colors.jacket, 0xffffff];
@@ -1609,6 +1684,7 @@ class App {
     for (const pl of everyone) pl.update(dt, this.t, renderT, this.effects, everyone.filter((o) => o !== pl).map((o) => o.pos));
     const camPos = this.sceneView.camera.position;
     this.monsters.update(dt, renderT, this.t, camPos, this.player.pos);
+    this.guardsView.update(dt, renderT, this.t, camPos);
     const near = [{ x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z }, ...[...this.players.values()].map((pl) => pl.pos)];
     this.basesView.update(dt, this.t, near, camPos);
     this.items.update(dt, this.t);

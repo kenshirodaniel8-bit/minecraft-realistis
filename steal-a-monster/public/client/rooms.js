@@ -34,7 +34,7 @@ const DOWN_MS = 100; // host -> guest batches (10 a second)
 const UP_MS = 60;   // guest -> host batches
 const GUEST_SAVE_MS = 10000; // a guest's progress is sent to them to save at most this often
 const MOVE_MS = 50; // the host applies each guest's latest position this often
-const TRANSACTIONAL = new Set(['recruit', 'buySword', 'buyItem', 'buyUpgrade', 'buyDecor']);
+const TRANSACTIONAL = new Set(['recruit', 'buySword', 'buyItem', 'buyUpgrade', 'buyDecor', 'buyCostume', 'buyPower', 'buyGuards']);
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/L/O/0/1 mix-ups
 
 export function makeRoomCode() {

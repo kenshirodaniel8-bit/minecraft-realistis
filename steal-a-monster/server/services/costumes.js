@@ -7,7 +7,7 @@
 //                 monsters only, for exactly its damage (583 for the Black
 //                 Spy, plus 130 per upgrade level).
 
-import { COSTUME_BY_ID, POWER_UPGRADE, powerDamage } from '#shared/costumes.js';
+import { COSTUME_BY_ID, POWER_UPGRADE, LEGEND_POWERS, powerDamage, costumeWithPower } from '#shared/costumes.js';
 import { SWORD_BY_ID } from '#shared/weapons.js';
 import { isObj, id as isId, finite, fail } from '../validate.js';
 
@@ -38,6 +38,16 @@ export class CostumeShop {
     this.game.broadcast('playerInfo', this.game.playerInfo(s));
     this.game.broadcast('announce', { text: `${prof.name} is now a ${c.name}! ${c.icon}`, kind: 'rare' });
     return s.remember(p.reqId, { ok: true, costume: c.id, sword: c.sword || null, money: prof.money });
+  }
+
+  // Legend Master: choose (or change) its power.
+  handleChoosePower(s, p) {
+    if (!isObj(p) || typeof p.power !== 'string' || !LEGEND_POWERS[p.power]) return fail('bad', 'Unknown power.');
+    if (!s.profile.costumes.owned.includes('legend_master')) return fail('not_owned', 'Buy the Legend Master first.');
+    s.profile.costumes.power = p.power;
+    this.game.markProfile(s);
+    this.game.broadcast('playerInfo', this.game.playerInfo(s));
+    return { ok: true, power: p.power };
   }
 
   handleEquip(s, p) {
@@ -72,8 +82,10 @@ export class CostumeShop {
     if (!isObj(p) || !finite(p.yaw, -100, 100)) return fail('bad');
     const game = this.game;
     const now = game.now();
-    const c = COSTUME_BY_ID[s.profile.costumes.equipped];
-    if (!c) return fail('no_costume', 'Put on a costume from the Costume Shop to use a master power (Z).');
+    const worn = COSTUME_BY_ID[s.profile.costumes.equipped];
+    if (!worn) return fail('no_costume', 'Put on a costume from the Costume Shop to use a master power (Z).');
+    if (worn.choosePower && !s.profile.costumes.power) return fail('no_power', 'Choose the power of your Legend Master first (Costume Shop).');
+    const c = costumeWithPower(worn, s.profile.costumes.power);
     if (!game.combat.canAct(s, now)) return fail('cant_act');
     if (now < (s.powerReadyAt || 0)) return fail('cooldown', `${c.power.name} is ready in ${Math.ceil((s.powerReadyAt - now) / 1000)}s`);
     const pw = c.power;
@@ -109,10 +121,15 @@ export class CostumeShop {
       monsters.damage(m, dmg, s, { power: true });
       hits.push({ id: m.id, dmg, crit: true, fx: 'power', hp: Math.round((100 * m.hp) / m.maxHp) });
     }
+    // base guards in reach are hit too (a thief's best friend)
+    const reach = pw.range || pw.radius || 10;
+    for (const t of game.guards.findInArc(s, p.yaw, reach, pw.shape === 'wave' ? pw.arc : 360, pw.maxTargets || 6)) {
+      hits.push(game.guards.hit(s, t, dmg, true));
+    }
     if (pw.heal) game.combat.heal(s, s.maxHp * pw.heal);
     const r1 = (v) => Math.round(v * 10) / 10;
     game.broadcastNear(s.pos.x, s.pos.z, 140, 'power', {
-      pn: s.pn, costume: c.id, x: r1(s.pos.x), y: r1(s.pos.y), z: r1(s.pos.z), yaw: Math.round(p.yaw * 100) / 100,
+      pn: s.pn, costume: c.id, element: c.element || null, x: r1(s.pos.x), y: r1(s.pos.y), z: r1(s.pos.z), yaw: Math.round(p.yaw * 100) / 100,
       targets: targets.map((m) => ({ id: m.id, x: r1(m.x), y: r1(m.y), z: r1(m.z) })),
     });
     if (hits.length) game.broadcastNear(s.pos.x, s.pos.z, 140, 'hits', { pn: s.pn, hits, power: true });

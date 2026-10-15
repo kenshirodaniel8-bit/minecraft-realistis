@@ -7,6 +7,7 @@ import { isInsideBase } from '#shared/world.js';
 import { isObj, id as isId, int, fail } from '../validate.js';
 import { DECOR_BY_ID, DECOR_SPOTS, DECOR_MAX_OWNED, placedCounts } from '#shared/decor.js';
 import { MAX_COMPANIONS } from './companions.js';
+import { GUARDS, guardLevel } from '#shared/guards.js';
 
 // Collection milestones (different species owned at once).
 export const MILESTONES = [
@@ -61,6 +62,7 @@ export class BaseManager {
       level: p.level,
       slots: p.base.slots,
       laserLevel: p.base.laserLevel,
+      guardLevel: p.base.guardLevel || 0,
       decor: p.base.decor,
       lockedUntil: this.game.security.lockedUntil[index],
       relockAt: this.game.security.relockAt[index],
@@ -158,6 +160,24 @@ export class BaseManager {
     this.afterPlacementChange(s);
     this.game.saveNow(s);
     return { ok: true };
+  }
+
+  // Guards: 420,000,000 for the first two, then upgrades up to level 10.
+  handleBuyGuards(s, p) {
+    const cached = isObj(p) ? s.recall(p.reqId) : undefined;
+    if (cached) return cached;
+    if (!this.isAtOwnBase(s, 8)) return fail('not_at_base', 'Buy guards at your own base.');
+    const level = s.profile.base.guardLevel || 0;
+    if (level >= GUARDS.maxLevel) return fail('max', 'Your guards are already at the top level (10)!');
+    const price = level === 0 ? GUARDS.buyPrice : GUARDS.upgradePrice(level);
+    if (!this.game.economy.debit(s, price, `guards:${level + 1}`)) return fail('money', `You need ${price.toLocaleString('en-US')} Money.`);
+    s.profile.base.guardLevel = level + 1;
+    this.game.markProfile(s);
+    this.game.saveNow(s);
+    this.broadcastBase(s.baseIndex);
+    const L = guardLevel(level + 1);
+    const res = { ok: true, level: level + 1, guards: L.guards, helis: L.helis, money: s.profile.money };
+    return isObj(p) ? s.remember(p.reqId, res) : res;
   }
 
   afterPlacementChange(s) {
