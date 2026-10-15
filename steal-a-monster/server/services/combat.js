@@ -44,7 +44,22 @@ export class Combat {
       const extra = game.monsters.nearestTo(targets[0], sp.range, new Set(targets));
       if (extra) hits.push(this.hitMonster(s, extra, sword, false, sp.share, now, true));
     }
-    if (hits.length) game.broadcastNear(s.pos.x, s.pos.z, 140, 'hits', { pn: s.pn, hits });
+    // Galaxy Sword: every third hit sets off a star nova around the target
+    let nova = null;
+    if (sp && sp.kind === 'nova' && comboHit && targets.length) {
+      const c = targets[0];
+      nova = { x: Math.round(c.x * 10) / 10, z: Math.round(c.z * 10) / 10, r: sp.radius };
+      const done = new Set(targets);
+      for (let i = 0; i < sp.maxTargets; i++) {
+        const m = game.monsters.nearestTo(c, sp.radius, done);
+        if (!m) break;
+        done.add(m);
+        const h = this.hitMonster(s, m, sword, false, sp.share, now, true);
+        h.fx = 'nova';
+        hits.push(h);
+      }
+    }
+    if (hits.length) game.broadcastNear(s.pos.x, s.pos.z, 140, 'hits', { pn: s.pn, hits, nova });
     // swinging at a lucky block opens it too
     if (!hits.length) game.lucky.trySwing(s, p.yaw);
     return { ok: true, hits: hits.length };
@@ -59,16 +74,37 @@ export class Combat {
     const crit = this.game.rng() < critChance;
     if (crit) dmg *= c.critMultiplier;
     if (comboHit) dmg *= 1 + c.comboBonus;
+    // the special effect of this hit (shown by the client)
+    let fx = null;
+    if (sp.kind === 'jackpot' && !chained && this.game.rng() < sp.chance) {
+      dmg *= sp.mult;
+      fx = 'jackpot';
+    }
+    let rainbow = -1;
+    if (sp.kind === 'rainbow' && !chained) {
+      rainbow = s.rainbowStep = ((s.rainbowStep || 0) + 1) % 3;
+      if (rainbow === 2) dmg *= 1 + sp.bonus;
+      fx = ['rainbow_fire', 'rainbow_ice', 'rainbow_star'][rainbow];
+    }
     dmg *= 100 / (100 + m.def * 3);
     dmg = Math.max(1, Math.round(dmg));
     const monsters = this.game.monsters;
     if (sp.kind === 'burn') m.burn = { dps: sword.damage * sp.dps, until: now + sp.durationMs, by: s, acc: 0 };
+    if (rainbow === 0) m.burn = { dps: sword.damage * sp.burnDps, until: now + sp.burnMs, by: s, acc: 0 };
+    if (sp.kind === 'slow' || rainbow === 1) {
+      m.slowUntil = Math.max(m.slowUntil, now + (sp.durationMs || sp.slowMs));
+      if (!fx) fx = 'slow';
+    }
+    if (sp.kind === 'freeze' && !m.species.ai.boss && this.game.rng() < sp.chance) {
+      m.stunnedUntil = Math.max(m.stunnedUntil, now + sp.durationMs);
+      fx = 'freeze';
+    }
     if (sp.kind === 'cleave') monsters.knockback(m, s.pos, sp.knockback);
     if (comboHit && !m.species.ai.boss) m.stunnedUntil = Math.max(m.stunnedUntil, now + 450);
     if (sp.kind === 'lifesteal') this.heal(s, dmg * sp.share);
     if (sp.kind === 'celestial') this.heal(s, dmg * sp.heal);
     monsters.damage(m, dmg, s, { crit });
-    return { id: m.id, dmg, crit, combo: comboHit, chain: chained, hp: Math.round((100 * m.hp) / m.maxHp) };
+    return { id: m.id, dmg, crit, combo: comboHit, chain: chained, fx, hp: Math.round((100 * m.hp) / m.maxHp) };
   }
 
   heal(s, amount) {

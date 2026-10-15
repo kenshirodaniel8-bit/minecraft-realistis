@@ -851,6 +851,7 @@ export class MonsterManager {
       if (m.species.category === 'elite' || m.species.category === 'boss' || m.species.category === 'legendary') flags |= 16;
       if (m.target === s.pn) flags |= 32;
       if (m.dash) flags |= 64;
+      if (m.slowUntil > now) flags |= 128;
       out.push([m.id, m.idx, r1(m.x), r1(m.y), r1(m.z), Math.round(m.yaw * 100) / 100, m.state, Math.round((100 * m.hp) / m.maxHp), m.level, flags, m.state === MS.quirk ? m.quirk : 0]);
     }
     return out;

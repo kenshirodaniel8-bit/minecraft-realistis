@@ -12,7 +12,7 @@ There was no real GPU, phone, Safari or Firefox available.
 ## 1. Automated tests — executed, all passing
 
 ```bash
-npm test          # 56 tests, ~3 s, also runs in CI (.github/workflows/ci.yml)
+npm test          # 60 tests, ~3 s, also runs in CI (.github/workflows/ci.yml)
 ```
 
 They run the real server code: the `Game` class with a controllable clock and an
@@ -29,6 +29,7 @@ Socket.IO server with real socket clients.
 | `gems.test.js` | 4 | Monster Gems drop by rarity (plus the Volcanic bonus) and can't be forged; Gem Geodes pay out once and only in gem regions; gem-priced swords and upgrades take Money and Gems together or nothing; decorations are bought only at your own base, placed/moved/cleared on valid spots, visible to other players, trophies only from milestones |
 | `tower.test.js` | 4 | base capacity 15 → 25 → 35 → 45 (10 pads per floor); the inside stairs connect every floor with steps a player can climb, and every pad has a floor under it; a player walks up the stairs with ordinary server-checked moves, and a thief standing under a floor-2 pad can't steal it; the server refuses moves through a tower wall (also at a faked upper-floor height), while the door works |
 | `population.test.js` | 1 | a region fills to 50 wild monsters while a player is on it, spread over the whole region (not only around the player); nearby regions get a smaller group; the region empties after the player leaves |
+| `swords.test.js` | 4 | the sword list is in tier order and the new swords have prices, unlocks and specials; Bubble slows; Frost freezes only on the server's roll and never a boss; Lucky Clover's jackpot does about triple damage; Rainbow cycles burn, slow and a bonus hit; Galaxy's third hit sets off a nova that hits monsters around the target but not far away |
 | `multiplayer.test.js` | 5 | HTTP serves the game, shared modules, three.js and Socket.IO; two clients get different bases and see each other move; LUCKY LUCKY is identical for both; malformed/forged socket messages are rejected; every message the game handles is reachable over the socket |
 
 The README's "Testing" section maps the 24 required checks to these suites.

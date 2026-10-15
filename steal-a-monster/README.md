@@ -116,7 +116,9 @@ top; tap the hotbar for gadgets. Settings → *Touch controls* can force them on
    discounts, radar range, longer lasers or sword damage). Step on the gold **$**
    pad to collect. While you're offline your base keeps earning at half rate
    (up to 8 hours).
-6. **Upgrade.** Better swords (10 tiers, from Wooden to Celestial — some need a
+6. **Upgrade.** Better swords (16 swords in 11 tiers, from Wooden to Galaxy, many
+   with a special: burn, chain lightning, bubbles that slow, freezing frost, a
+   lucky jackpot, a rainbow combo, a star nova… — some need a
    level or a discovered region), more pads (15 → 25 → 35 → 45: each upgrade adds
    10, opening the next floor) and longer-lasting lasers.
    Levels come from XP and unlock new regions. The top swords and upgrades also

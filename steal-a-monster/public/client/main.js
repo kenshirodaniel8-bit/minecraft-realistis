@@ -376,6 +376,7 @@ class App {
     });
     n.on('hits', (d) => {
       for (const h of d.hits) this.monsters.onHit(h, d.pn === this.pn);
+      if (d.nova) this.effects.nova(d.nova.x, d.nova.z, d.nova.r, this.world.groundHeight(d.nova.x, d.nova.z));
       if (d.pn === this.pn && d.hits.some((h) => h.crit)) this.cam.addShake(0.4);
     });
     n.on('mAttack', (d) => this.monsters.onAttack(d));

@@ -761,6 +761,11 @@ function specialText(sp) {
     case 'lifesteal': return `${Math.round(sp.share * 100)}% lifesteal`;
     case 'cleave': return 'Knockback';
     case 'celestial': return 'Heal + crits';
+    case 'slow': return 'Slows';
+    case 'freeze': return `${Math.round(sp.chance * 100)}% freeze`;
+    case 'jackpot': return `${Math.round(sp.chance * 100)}% triple hit`;
+    case 'rainbow': return 'Burn, slow, bonus';
+    case 'nova': return 'Star nova';
     default: return '';
   }
 }

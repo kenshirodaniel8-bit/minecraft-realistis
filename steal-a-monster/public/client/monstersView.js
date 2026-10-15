@@ -253,9 +253,25 @@ export class MonstersView {
     v.hp = h.hp;
     const top = v.pos.clone();
     top.y += v.rig.height * v.species.size + 0.4;
-    const cls = h.burn ? 'player' : h.crit ? 'crit' : '';
+    const cls = h.burn ? 'player' : h.crit || h.fx === 'jackpot' ? 'crit' : '';
     this.effects.number(h.crit ? `${h.dmg}!` : `${h.dmg}`, top, cls);
-    this.effects.hitSpark(v.pos.x, v.pos.y + v.rig.height * v.species.size * 0.5, v.pos.z, h.crit);
+    const midY = v.pos.y + v.rig.height * v.species.size * 0.5;
+    this.effects.hitSpark(v.pos.x, midY, v.pos.z, h.crit);
+    // special sword effects
+    const FX = {
+      jackpot: { text: 'JACKPOT!', cls: 'crit', color: [0xffd23a, 0xffe97a, 0x5fd35a], n: 22 },
+      freeze: { text: 'FROZEN!', cls: 'dodge', color: [0xbff4ff, 0xffffff, 0x8fdcff], n: 18 },
+      slow: { color: [0x8fe8ff, 0xffffff], n: 8 },
+      rainbow_fire: { color: [0xff5a3a, 0xffb02a], n: 10 },
+      rainbow_ice: { color: [0x8fe8ff, 0xbff4ff], n: 10 },
+      rainbow_star: { text: '✦', cls: 'crit', color: [0xff5aa5, 0xffd93a, 0x5fd35a, 0x3fa6ff, 0xb48cff], n: 20 },
+      nova: { color: [0xb48cff, 0xfff27a], n: 10 },
+    }[h.fx];
+    if (FX) {
+      this.effects.burst(v.pos.x, midY, v.pos.z, FX.n, { color: FX.color, speed: 7, up: 1.2, life: 0.7, size: 0.22, grav: 5 });
+      if (FX.text) this.effects.number(FX.text, top.clone().setY(top.y + 1.2), FX.cls);
+      if (h.fx === 'jackpot') this.effects.coins(v.pos.x, midY, v.pos.z, 10);
+    }
     if (mine) this.audio.play(h.crit ? 'crit' : 'hit', { pitch: 1 + Math.random() * 0.2 });
     if (Math.random() < 0.35) this.audio.play('cry', { pitch: v.species.personality.cry, minGap: 250 });
   }
@@ -369,6 +385,16 @@ export class MonstersView {
         v.flashT -= dt;
         setRigMaterial(v.rig, FLASH_MAT);
         if (v.flashT <= 0) setRigMaterial(v.rig, null);
+      }
+      // burning (flame swords) and slowed (bubble/frost/rainbow) monsters
+      if ((v.flags & 129) && root.visible && dist < 60) {
+        v.fxT = (v.fxT || 0) - dt;
+        if (v.fxT <= 0) {
+          v.fxT = 0.18;
+          const hh = v.rig.height * v.species.size;
+          if (v.flags & 1) this.effects.burst(v.pos.x, v.pos.y + hh * 0.6, v.pos.z, 2, { color: [0xff8a2a, 0xffd23a], speed: 1.5, up: 2.5, life: 0.5, size: 0.18, grav: -2 });
+          if (v.flags & 128) this.effects.burst(v.pos.x, v.pos.y + hh * 0.8, v.pos.z, 2, { color: [0xbff4ff, 0xffffff], speed: 1.2, up: 0.5, life: 0.7, size: 0.15, grav: 2 });
+        }
       }
       // shadow
       const gy = Math.max(this.world.groundHeight(v.pos.x, v.pos.z), 0);

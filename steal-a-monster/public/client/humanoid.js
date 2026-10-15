@@ -80,8 +80,20 @@ export function buildSword(id) {
       const shard = part(new THREE.OctahedronGeometry(1, 0), bladeMat, w * 1.3 * s, L * 0.16, 0.08, 0, 0.5 + L * 0.13 + i * L * 0.2, 0);
       g.add(shard);
     }
+  } else if (id === 'candy') {
+    // red and white stripes with a candy-cane hook at the top
+    const n = 7;
+    for (let i = 0; i < n; i++) g.add(part(BOX, i % 2 ? edgeMat : bladeMat, w * 1.5, (L / n) * 1.02, 0.16, 0, 0.45 + ((i + 0.5) * L) / n, 0));
+    const hook = part(new THREE.TorusGeometry(0.3, w * 0.75, 6, 12, Math.PI), edgeMat, 1, 1, 1, -0.3, 0.45 + L, 0);
+    g.add(hook);
+  } else if (id === 'rainbow') {
+    const cols = [0xff4a5a, 0xff9a2a, 0xffe23a, 0x5fd35a, 0x3fa6ff, 0xa86bff];
+    cols.forEach((c, i) => g.add(part(BOX, mat(c, { emissive: c, ei: 0.35, rough: 0.3 }), w * 1.6, (L / cols.length) * 1.02, 0.1, 0, 0.45 + ((i + 0.5) * L) / cols.length, 0)));
+    const tip = part(new THREE.ConeGeometry(w * 0.8, 0.45, 4), mat(0xffffff, { emissive: 0xffffff, ei: 0.6 }), 1, 1, 0.25, 0, 0.45 + L + 0.2, 0);
+    tip.rotation.y = Math.PI / 4;
+    g.add(tip);
   } else {
-    const blade = part(BOX, bladeMat, w * 1.6, L, 0.08, 0, 0.45 + L / 2, 0);
+    const blade = part(BOX, id === 'bubble' ? mat(c.blade, { opacity: 0.7, rough: 0.1, emissive: c.glow, ei: 0.4 }) : bladeMat, w * 1.6, L, 0.08, 0, 0.45 + L / 2, 0);
     const edge = part(BOX, edgeMat, w * 0.5, L * 0.96, 0.1, 0, 0.45 + L / 2, 0);
     const tip = part(new THREE.ConeGeometry(w * 0.8, 0.45, 4), bladeMat, 1, 1, 0.2, 0, 0.45 + L + 0.2, 0);
     tip.rotation.y = Math.PI / 4;
@@ -92,6 +104,38 @@ export function buildSword(id) {
         fin.rotation.z = (i % 2 ? -1 : 1) * 0.9;
         g.add(fin);
       }
+    }
+    if (id === 'bubble') {
+      const bub = mat(0xe8fbff, { opacity: 0.55, rough: 0.05, emissive: 0x8fe8ff, ei: 0.5 });
+      [[0.22, 0.25, 0.16], [-0.2, 0.45, 0.12], [0.18, 0.68, 0.1], [-0.16, 0.85, 0.14], [0.05, 1.05, 0.2]].forEach(([x, f, r]) => {
+        g.add(part(new THREE.SphereGeometry(1, 10, 8), bub, r, r, r, x, 0.45 + L * f, 0.05));
+      });
+    }
+    if (id === 'frost') {
+      const ice = mat(0xe8ffff, { emissive: 0x9fe8ff, ei: 0.6, rough: 0.1 });
+      for (let i = 0; i < 5; i++) {
+        const side = i % 2 ? 1 : -1;
+        const shard = part(new THREE.OctahedronGeometry(1, 0), ice, 0.12, 0.3, 0.08, side * w * 0.85, 0.75 + i * L * 0.17, 0);
+        shard.rotation.z = side * -0.6;
+        g.add(shard);
+      }
+    }
+    if (id === 'lucky') {
+      // a four-leaf clover on the guard
+      const leaf = mat(0x3fae44, { rough: 0.5, emissive: 0x1a5a1a, ei: 0.4 });
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        g.add(part(new THREE.SphereGeometry(1, 10, 8), leaf, 0.15, 0.15, 0.06, Math.cos(a) * 0.15, 0.38 + Math.sin(a) * 0.15, 0.16));
+      }
+    }
+    if (id === 'galaxy') {
+      const star = mat(0xfff7d8, { emissive: 0xfff27a, ei: 1.4 });
+      [[0.06, 0.15], [-0.07, 0.3], [0.05, 0.47], [-0.04, 0.62], [0.07, 0.78], [-0.05, 0.92]].forEach(([x, f], i) => {
+        const st = part(new THREE.OctahedronGeometry(1, 0), star, 0.07 + (i % 2) * 0.03, 0.07 + (i % 2) * 0.03, 0.05, x, 0.45 + L * f, 0.06);
+        g.add(st);
+      });
+      const ring = part(new THREE.TorusGeometry(0.42, 0.05, 6, 20), mat(c.guard, { emissive: c.guard, ei: 0.6 }), 1, 1, 1, 0, 0.38, 0);
+      g.add(ring);
     }
     if (id === 'thunder') {
       const bolt = part(BOX, mat(0x3a3f8f, { emissive: 0x3a3f8f }), 0.1, L * 0.7, 0.11, 0, 0.45 + L * 0.45, 0);

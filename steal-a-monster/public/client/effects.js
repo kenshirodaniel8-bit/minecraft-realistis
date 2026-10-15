@@ -68,6 +68,17 @@ export class Effects {
     for (let i = 0; i < n; i++) this.spawn(x, y, z, o);
   }
 
+  // Galaxy Sword star nova: a ring of stars racing outwards along the ground
+  nova(x, z, r, y) {
+    const n = 36;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const sp = r / 0.45;
+      this.spawn(x, y + 0.8, z, { vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: 1.5, life: 0.45, size: 0.3, grav: 0, color: [0xb48cff, 0xfff27a, 0xffffff] });
+    }
+    this.burst(x, y + 1.5, z, 16, { color: [0xfff27a, 0xb48cff], speed: 4, up: 2, life: 0.8, size: 0.25, grav: 3 });
+  }
+
   hitSpark(x, y, z, crit) {
     this.burst(x, y, z, crit ? 16 : 9, { color: crit ? [0xffe14a, 0xffffff, 0xff8a2a] : [0xffffff, 0xffe9a0], speed: crit ? 9 : 6, life: 0.4, size: 0.2, grav: 6 });
   }
